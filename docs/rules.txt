@@ -1,0 +1,478 @@
+Here are two comments I got on my recent
+video on jellied eels. Both are
+compliments. Both are pretty detailed,
+but the moment I read one of them, I
+knew without a doubt it was written by
+AI, even though the user did try and
+hide that a bit. To me, it's pretty
+obvious. But can you tell which is
+which? My name is Evan Edinger, and I'm
+not going to tell you the answer to that
+question just yet, because by the end of
+this video, you won't need me to.
+Welcome to a master class in how to tell
+something is written by AI in the year
+2025. a skill I do feel like everybody
+needs to have going forward. Over the
+past few months, I've been collecting
+many examples, emails in my inbox,
+LinkedIn posts, even tweets from world
+leaders, all clearly written by AI. And
+once you know what to look for, you'll
+start to see it everywhere. As of right
+now, I've got about 10 red flags to
+share with you that you'll sadly begin
+to notice everywhere you go, including
+in certain YouTubers' videos posted
+wholesale. I hear chat Jimmy GBT written
+sentences a bit too often these days,
+especially on small faceless YouTube
+channels, which is why I usually avoid
+them. One red flag on its own doesn't
+prove anything, but once you start to
+hear one, the others aren't usually too
+far behind. Let's start you off
+somewhere simple. You recognize this
+guy? Well, of course, Evan, that's a
+hyphen. No, this is a hyphen. That right
+here is an M dash. This bit of
+punctuation has been around since the
+16th century and has been used in many
+works of literature from authors like
+Emily Dickinson to one of my favorites,
+Kurt Vonagget. It's meant to be a line
+with the same width as the letter M and
+separates a sentence like a semicolon.
+From this, you can probably guess what
+an N dash is. Now, the problem large
+language models absolutely love the M
+dash and use it way more frequently than
+most humans do. And as of 2025, no
+matter how many times you ask Chad GBT
+to stop using them, he will always find
+a way. Pop quiz. Which keys on your
+keyboard do you press to type an M dash?
+Yeah, I'm guessing most of you don't
+know, which is why it is a particularly
+blatant red flag when you see it used in
+certain spaces. For the record, on a
+Mac, it's option shift minus sign. It is
+a really useful bit of punctuation,
+though, that even I have begun using in
+some of my YouTube titles, like this
+one, and well, well, quite meta, like
+the one you're watching right now,
+because it just spaces things out really
+well, better than a full stop or period.
+It's got a good flow. chat GPT bringing
+the Mdash back into the mainstream isn't
+such a bad thing, but this is a good
+reminder that this is just one flag.
+Mdash doesn't mean something is AI. So,
+now that you know one big red flag of AI
+writing, let's look at another example I
+found from two seconds of scrolling
+LinkedIn. No exaggeration. Striking the
+perfect pose in photography isn't just
+about looking good dash. It's about
+telling a story, conveying emotion, and
+creating a visually compelling image.
+Let's stop there. I have only read one
+sentence and I already know with near
+100% certainty that this is entirely AI
+generated from one sentence. Now, just
+because this sentence has an M dash
+doesn't mean it was written by AI. Of
+course, luckily for us, this one
+sentence also has three other big red
+flags. Do you notice them? It's not just
+the use of M dashes. It's also the use
+of parallel sentence structures like
+this one. It's not just X, it's Y.
+Subscribing to my YouTube channel isn't
+just about helping me get to a million
+subscribers. It's also about curating
+your feed. This exact sentence structure
+is used so often in AI writing that
+you're going to struggle not to notice
+it going forward. I'm sorry. Also,
+you're welcome. Now that I think about
+it, that cringy LinkedIn post from the
+Dualingo CEO I made a video about 2
+weeks ago also used this method. AI
+isn't just a productivity boost. It
+helps us get closer to our mission.
+Yeah, their mission now seems to be
+pretending to walk back their claims
+while the CEO says AI will replace
+teachers except as child care. So, you
+know, more Bonvillain stuff. This
+LinkedIn sentence also has our third
+flag, a convenient list of three things.
+It's about telling a story, conveying
+emotion, and creating a visually
+compelling image. Well, that's a nice
+little triplet, isn't it? Humans love
+groups of three. They just work. In
+writing, three points feels complete,
+but not overwhelming. In speech, they're
+easy to remember. And in photography,
+you've got, of course, the rule of
+thirds and the rule of odds. Humans
+instinctively prefer most oddnumbered
+groupings. If I'm taking a photo,
+ideally I'd want the viewer to travel
+through the photo to three or five
+points. Like my Jelly Deal's thumbnail
+had three specific things I wanted the
+viewer to see as they traveled around
+the image. My face, the dish, the text,
+and the data to back this case up is
+viewers clicking my thumbnail with three
+points as opposed to four watched more
+of the video. Here's another LinkedIn
+post I found. Chalk full of groups of
+odd numbers, which alone isn't enough,
+but I mean, just look at this thing.
+Sure, there's no M dashes, but we've got
+it's not just X, it's Y. And group of
+five, group of three, and hey, the
+biggest sign of all. It's on LinkedIn. I
+mean,
+even the format of this post is one your
+mind has probably seen so many times at
+this point that your eyes have already
+glazed over. One sentence hook, ethos,
+bullet point list, effect, conclusion.
+It's like AI was handmade from generic
+LinkedIn posts for people who make
+generic LinkedIn posts. Now, it's not
+exactly the case in this post, but a lot
+of times when these groups of three come
+up with line breaks in between, AI loves
+throwing in an emoji at the start of
+each one, like this email I got or this
+extra LinkedIn post. Formatting line
+breaks with emojis was a big thing
+before AI, so I don't count it as a red
+flag on its own, but they're usually
+paired with generic content and well,
+our next red flag. You see, another big
+marker of AI writing is the one you
+probably don't need me to tell you
+about. Even though you've just read
+something, it feels off. The word use
+can sometimes have a really weird,
+subtle use case that you've never seen
+before. That's what I'd like to call the
+uncanny valley of the English language.
+The tone just feels strange, like
+striking the perfect pose in
+photography. Eh, in in photography, I I
+mean, that does make sense, but in that
+context, striking the perfect pose in
+photography,
+it just doesn't feel quite right. I'm
+bundling this with another flag, too,
+which is an overabundance of filler
+words and expressions that aren't
+typically used in a normal conversation.
+AI writers lean on safe vocabulary. I'm
+talking vague positive adjectives and
+jargon like innovative or practical
+solutions. AI just loves using words
+like elevate and delve. Words that most
+humans aren't regularly using, but
+you've probably been seeing a lot
+recently. Sometimes you can come across
+a tweet and feel like it doesn't really
+say anything at all. Like it's empty of
+meaning despite the words on the screen.
+Like this one here from UK Prime
+Minister Kier Dharmmer. See anything
+familiar? Hm. It's time to look forward
+Mdash. To move on from the stale old
+political fights and to find common
+sense, practical solutions that improve
+the lives of British people. Secure
+borders, cheaper bills, more jobs. We
+will close the deal in the national
+interest. Like what the is that
+supposed to mean? So, these are words,
+but they don't mean anything. And not
+just because they're said by the
+political equivalent of off-brand beans
+on toast. Now, I'm not a 100% certain
+that this tweet was written by AI. Sure,
+it does utilize the mdash, a group of
+three, and does say a lot while nothing
+at all with empty language, but that one
+sentence up at the top reads so badly,
+it makes me feel like Chad GBT could
+actually do a better job than our prime
+minister, which is a very sad state of
+affairs, isn't it? Now, I don't want
+this video to become boring, and I
+assume at this point you're really
+starting to pick up on how this all
+works, so I'm going to touch on the next
+three points as a lightning round quite
+quickly. One, exaggerated and empty
+praise. Chat GBT was updated recently to
+really glaze you with every response.
+And that carries through to a lot of AI
+texts. Ask a simple question like, "How
+can I get people to thumb up my new
+video?" And Chat GBT will spend a
+paragraph like, "Wonderful question,
+sir. Now you're really getting to the
+heart of things. You truly are an
+imaginative genius." Here's a snippet
+from an email I received recently. Hi,
+Evanica Travel. That of course is my
+full name. Thanks to my dad, Mr. Travel.
+Rest in peace. Your travel vlogs are
+genuinely captivating. M Dash, I love
+how you bring every new place to life
+with such honest and vivid storytelling.
+The way you share those unexpected
+moments, blah blah blah blah blah. You
+know me, I love sharing those unexpected
+moments. It's praise like this that
+feels so fake and feels so bland. It
+doesn't mean anything. Number two, the
+second point, being able to spot AI
+writing is like being a lighthouse in
+the middle of a dense fog. It's a weird
+analogy, wasn't it? Well, that's another
+big tell of using AI writing. Analogies
+and simileies that are just weird, like
+they're trying too hard to have meaning,
+but falling so flat, like a band-aid
+made of sandpaper. Makes you think, huh?
+And three, AI writing is constantly
+restating itself, clarifying its points
+too many times, and providing
+unnecessary context. Like if I asked
+chat GBT why the sky was blue, the
+response would be the color of the sky
+is a phenomenon that has been
+fascinating people for centuries. It's a
+very useless bit of filler preamble,
+right? To clarify, AI writing repeats
+its points far too many times. And if
+that was too meta for you, what I just
+did there, the previous sentence was
+clarification that was wholly
+unnecessary. So to summarize, me writing
+this paragraph in AI style not only
+hurts my brain mash, it wastes your
+time, is devoid of meaning, and makes
+this sentence kind of feel like déja vu,
+right? But this constant clarification,
+this constant overexlanation, all of
+this stuff does feel like it's truly
+dumbing down society, which to clarify,
+I don't think is a good thing. All
+right, so you should be able to easily
+tell if something was written by AI now.
+But how can you tell if it was written
+by a human? Well, a lot of times in AI
+writing, the words and the stories and
+the anecdotes feel very generic because
+they are. When humans are writing
+something, they usually inject a lot of
+themselves into it. include a little
+story about someone they know or some
+place they've been in the first person.
+One example I was going to show you of a
+human comment is this one here. Yes,
+this video is an excuse for me to show
+nice comments about me. Thank you, Evan.
+Evan, you've really outdone yourself
+with this video. As a northerner, I have
+never appreciated jelly eels.
+Personally, I really disliked them when
+I tried them.
+So, in this comment, we have, "As a
+northerner, personally, I was totally
+fascinated." That information allows
+them to add a bit of themselves to the
+comment to add context. It's a real
+comment. Also, where the comment takes
+place is really important. Seeing
+perfect grammar is not too big a flag
+online compared to everywhere else, but
+if a friend of yours starts dropping
+commas into an iMessage paragraph
+response to you, they might be uh using
+AI to get a little help there. I do
+sometimes get comments from people that
+seem oddly insensed that I go off on
+tangents in my videos as if every video
+needs to be robotically following one
+topic. Like in this very video, I didn't
+need to take that photography tangent
+teaching about the rule of odds. But I
+really love photography and I figured it
+was a relevant enough fact that people
+would be interested in knowing it.
+Tangents at this stage are a pretty good
+sign of human writing as our minds can
+make relevant connections to other
+things we know to make conversations
+that much more interesting. When you
+think of some of your favorite stories
+from films or even YouTube videos,
+there's a good chance the narrative
+isn't direct from A to B, but is a
+satisfying journey to get there. Like
+this very YouTube video you're watching
+right now. How did we start this video
+again? Oh, yeah. If we circle back to
+the original comment I showed in this
+video's intro, like I said, you really
+don't need me to explain how I was
+immediately able to peg this as AI
+because now you can, too. Congrats, you
+did it. It starts off with a bit too
+much impersonal high praise, and hey, I
+appreciate it. I spent a long time on
+that video, but still, it's not just
+about uploading in 4K. It's about making
+every shot count. Now, what's funny
+about this comment is that Matthew here
+did try the bare minimum to cover his
+tracks. You might have noticed there are
+no M dashes here. Well, I jokingly
+called him out in a reply in a way that
+would confuse anyone not in the know. I
+said, "Thanks, but you replaced that M
+dash with a hyphen, didn't you?" Haha.
+It's not just about X. It's about Y is
+quite the tell, as you know. Thankfully,
+Matthew was quite a good sport and
+replied, providing us with the original
+prompt he put into chat GBT to generate
+his comment. I have to take my hat off
+to you, Evan. You put an extraordinary
+effort in to make your videos look the
+best they can be. Just uploading in 4K
+isn't the solution because garbage in,
+garbage out. Viewers, if you are looking
+at this on your phone, stop and watch it
+on your big screen TV instead, as a
+small screen doesn't do it justice.
+There's literally nothing wrong with
+this comment. It's genuinely kind and
+most importantly, original. It's human.
+It's how he thought to express himself.
+And as you can see in his original
+comment, Matthew even used the first
+person. I have to take my hat off to you
+becomes hats off to you. AI writing
+removes you from the equation. Now you
+have become bland. Destroyer of worlds.
+In justosition to the real comment, the
+AI comment feels corporately kind, like
+it's trying to be nice, but insincere
+and generic. Which is why out of all the
+technical red flags we've discussed in
+this video of noticing when something is
+generated by AI, the one that AI is
+going to have the most difficulty
+overcoming is also the most human of
+all. Passing the vibe check. If
+something has fake sounding AI vibes,
+maybe just trust your gut. AIS don't
+have guts yet. Thank God. There's going
+to be a future where they have guts. I
+don't want to live in that future. But
+also, that'd be kind of cool cuz then
+you can gut them like sheep.
+Not so bad. I would say you should be
+much better able to detect AI writing
+now, but your next challenge is to try
+and hear when something was written by
+AI in a video. I'm not planning on
+calling out any particular YouTubers
+here by playing some clips of clearly AI
+written dialogue. So instead, to know
+whether you pass the final test, I'm
+going to again do an ad read where half
+is written by AI and half is written by
+me. The last time I did this, far too
+many of you left me comments saying that
+you got it wrong. I'll label each as A
+or B in the corner, and we'll reveal the
+answer in the outro. I'm really hoping
+you find this quite easy, and you spread
+this information to as many people as
+you can, either in person or by sharing
+this video. All right, here we go. If
+you're online, and I'm going to assume
+you are, your internet provider can see
+everything you do, every site you visit,
+every video you stream, every search you
+probably wish you hadn't made. Well,
+that's where NordVPN comes in. It
+protects your browsing by funneling your
+data through an encrypted tunnel. Your
+ISP can't see a thing. And because
+NordVPN lets you change your virtual
+location, you can unlock a lot more
+content on streaming platforms like
+Netflix. US catalog, easy. Japanese
+anime exclusives, go wild. Plus, get
+this. NordVPN is the fastest VPN on the
+market. So, unlike other VPNs, you won't
+notice it slowing you down. I did
+mention this before, but when I was in
+Vietnam, the Chat GPT app stopped
+working as it isn't available there yet.
+But luckily, with one tap on my phone, I
+changed my browsing location back to the
+UK, and the app started working again.
+Huzzah! Plus, you could secure up to 10
+devices with one account, and they've
+got over 7,000 servers worldwide. So,
+wherever you are, you're covered. And
+there's a 30-day money back guarantee.
+So, if it's not for you, no harm done.
+If you're interested, be sure to sign up
+to nordvpn.com/evan,
+and you can get a huge discount on a
+2-year plan, plus a neat little bonus.
+So, thanks to NordVPN for sponsoring.
+Now, let me wrap this up. All right, we
+made it to the outro. I have a feeling
+you found this one a lot easier than the
+last time I did it. If you guessed B was
+written by AI, then congratulations. You
+were very wrong. B actually included an
+anecdote about my time in Vietnam. A had
+multiple verbal M dashes and groups of
+three. Maybe watch the video again if
+you got this one wrong, but to everyone
+that got it right, yay, congratulations.
+A was written by AI. Now, if you also
+happen to hate cookie pop-ups like I do,
+then you'd probably enjoy this video I
+made filled with all my tips for making
+browsing the internet suck a lot less. I
+just got this comment on it today right
+before filming if you need a nice human
+review. When I clicked on this video, I
+was like, 20-minute video just to talk
+about cookies and now this is one of the
+most useful videos I've watched. Well,
+thank you anonymous. You are legion, I
+guess. Hopefully this video was useful,
+too. I do enjoy not today, Satan.
+Ah, you thought you could get me. I saw
+you. I saw you. I do enjoy sharing niche
+information on my YouTube channel, and I
+do have some rather big videos hitting
+your subscription feed soon. So, thanks
+for watching, and hopefully I'll see you
+in the next one. Goodbye.
