@@ -1,3 +1,21 @@
+---
+
+## Track context
+
+This document is the entry point for **Track B** of a three-track project: **code planning** in Claude.ai. The other tracks are:
+
+- **Track A** — Claude.ai sessions for **book content**. Entry point: `HANDOFF.md` in the book repo at `~/Documents/GitHub/event-sourcing-cqrs-book/`.
+- **Track C** — Claude Code in the terminal for **code execution**. Entry point: `CLAUDE.md` + `docs/PLAN.md` + `docs/rules.txt` in this repo.
+
+When work in one track affects another, the originating session adds a **Cross-track flag** entry to its `docs/sessions/NNNN-<description>.md` log. The next time the affected track is opened, the human (Thomas) mentions the flag at the start of the session.
+
+The .NET 8 → .NET 10 decision was the canonical cross-track example: ADR 0001 in this repo committed to .NET 10, which required the manuscript in the book repo to update Part 4 Tech Stack and the Reference Implementation references in Part 5. Thomas routed the manuscript change to Track A and the ADR status update back to this track when complete.
+
+For a quick-reference routing card see `WHICH_SESSION.md` at the root of the book repo.
+
+---
+
+
 # Session Setup: Next Session
 
 This document is the setup message for the next conversation with Claude on the web. Copy the body of this file (everything below the horizontal rule) and paste it as the first message of a new conversation on claude.ai.
