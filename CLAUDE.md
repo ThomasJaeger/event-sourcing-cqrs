@@ -218,9 +218,10 @@ Verify the abstraction holds. When working on Phases 10 and 11 (KurrentDB and Dy
 
 When starting a session, the relevant context lives in:
 
-1. This file (CLAUDE.md) for repo-wide rules.
-2. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
-3. `docs/ARCHITECTURE.md` (when written) for cross-cutting decisions.
-4. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
+1. `docs/rules.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions).
+2. This file (CLAUDE.md) for repo-wide rules.
+3. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
+4. `docs/ARCHITECTURE.md` (when written) for cross-cutting decisions.
+5. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
 
 Always check the plan before starting work. The plan defines what is in scope for the current phase. The chapter defines the patterns to implement.

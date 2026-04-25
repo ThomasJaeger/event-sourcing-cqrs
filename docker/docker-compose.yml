@@ -1,0 +1,65 @@
+# Local development only.
+#
+# The credentials below are dev-only defaults baked into this compose file.
+# Do not reuse this configuration for any other environment. There is no
+# authentication on KurrentDB (insecure mode) and the PostgreSQL credentials
+# are well-known. Production deployment is out of scope for this repository.
+#
+# /health/live for KurrentDB returns 204 on KurrentDB 26.0.2 and is the
+# liveness probe documented for this image.
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: esrcq-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: esrcq
+      POSTGRES_PASSWORD: esrcq
+      POSTGRES_DB: esrcq
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esrcq -d esrcq"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kurrentdb:
+    image: kurrentplatform/kurrentdb:26.0.2
+    container_name: esrcq-kurrentdb
+    ports:
+      - "2113:2113"
+    environment:
+      KURRENTDB_INSECURE: "true"
+      KURRENTDB_HTTP_PORT: "2113"
+      KURRENTDB_TELEMETRY_OPTOUT: "true"
+    volumes:
+      - kurrentdb-data:/var/lib/kurrentdb
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:2113/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  localstack:
+    image: localstack/localstack:4.0
+    container_name: esrcq-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: dynamodb
+      DEBUG: "0"
+    volumes:
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  kurrentdb-data:
+  localstack-data:
