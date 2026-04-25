@@ -1,0 +1,41 @@
+# Build output
+bin/
+obj/
+out/
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# Docker
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Local secrets
+secrets.json
+appsettings.Development.json
+appsettings.Local.json
