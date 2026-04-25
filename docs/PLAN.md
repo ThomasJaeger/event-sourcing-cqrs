@@ -120,11 +120,11 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | Property-based tests | FsCheck | Chapter 16 |
 | Mutation testing | Stryker.NET | Chapter 16 |
 | Containerization | Docker Compose | Part 4, "Technology Choices" |
-| .NET version | .NET 10 LTS, C# 14 (supported through November 10, 2028) | Updated from manuscript's original .NET 8 |
+| .NET version | .NET 10 LTS, C# 14 (supported through November 10, 2028) | Part 4, "Technology Choices" |
 | License | MIT | Book commitment |
 | Repository host | github.com/ThomasJaeger | Book commitment |
 
-**Note on .NET version.** The manuscript's Part 4 currently says .NET 8 LTS. This needs a small edit during Phase 14 reconciliation to read .NET 10 LTS, with the support-window claim updated to "supported through November 2028." C# 12 references in Part 4 update to C# 14. The change strengthens the book's currency claim because .NET 10 is the current LTS at the time of writing and gives the reference implementation a three-year support window aligned with the book's commercial life.
+The manuscript and the implementation agree on .NET 10 / C# 14 as of April 2026. The Track A pass updated Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters. ADR 0001 in this repo records the original deviation and is now closed at superseded-by-manuscript status.
 
 ---
 
@@ -473,14 +473,15 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 **Goals.**
 - Top-level README excellent. What the project demonstrates, how to run it, how it maps to chapters, how to extend.
 - Chapter-to-code map document: every pattern in the book, where its code lives, in a single navigable index.
-- Architecture decision records (ADRs) for every significant choice: hexagonal layout, three event stores, .NET 10 over .NET 8, hand-rolled vs Marten, in-process bus vs distributed messaging, PostgreSQL read models only, etc.
+- Architecture decision records (ADRs) for every significant choice: hexagonal layout, three event stores, hand-rolled vs Marten, in-process bus vs distributed messaging, PostgreSQL read models only, etc.
 - Manuscript reconciliation: walk through every chapter that references the reference implementation. Confirm references match what was actually built. Update manuscript where reality diverged. Update sample chapters if needed.
-- Specifically: Part 4 manuscript edit changing .NET 8 / C# 12 to .NET 10 / C# 14, with the support-window claim updated to "supported through November 2028."
 - Build log finalized.
 - Code cleanup: TODO comments resolved or tracked.
 - Final test run, full coverage report.
 - Tag v1.0.0 release on GitHub.
 - Update proposal package's supplementary materials description with the GitHub URL and a brief summary of what is in the repo.
+
+**Note on prior reconciliation work.** The .NET 10 / C# 14 manuscript update was completed in Track A in April 2026, ahead of Phase 14. ADR 0001 in this repo records the decision and its closure. Phase 14 reconciliation focuses on whatever divergences accumulate during Phases 2-13.
 
 **Out of scope.**
 - Marketing copy in the README. Keep it factual and useful.
@@ -548,7 +549,7 @@ The reference implementation is done when:
 3. `docker compose up` followed by browser navigation produces a working UI within five minutes of clone.
 4. The README maps every chapter to its code.
 5. The chapter-to-code map document covers every pattern in the book.
-6. The manuscript and the code agree, including the .NET 10 / C# 14 update in Part 4.
+6. The manuscript and the code agree.
 7. ADRs document the major architectural choices.
 8. v1.0.0 is tagged on GitHub.
 9. All three event store adapters pass the same test suite.
