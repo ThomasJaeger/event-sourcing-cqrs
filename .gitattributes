@@ -1,0 +1,20 @@
+# Force LF line endings on every text file, regardless of the developer
+# machine's core.autocrlf setting. Reproducible SHA-256 checksums for the
+# embedded migration files require stable bytes across Windows and
+# Linux/macOS checkouts; making the rule global keeps every text file
+# consistent rather than fixing only the SQL instance of the problem.
+* text=auto eol=lf
+
+# Carve out binary files so Git never tries to normalize them.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.dll   binary
+*.exe   binary
+*.so    binary
+*.dylib binary
