@@ -67,3 +67,13 @@ Source: planning conversation for this session. Captured here with discovery con
 **Session 0004 (OutboxProcessor).** Drains the outbox to the in-process bus, with backoff via `next_attempt_at`, error capture in `last_error`, and move-to-quarantine for poison messages. **Reminder, from this session's schema design:** `outbox_quarantine.attempt_count` is NOT NULL with no default. The quarantine path must read the live outbox row's `attempt_count` and copy it into the quarantine INSERT. Trivial in code, easy to forget without this note.
 
 **Embedded-startup migration call.** Once a host's `Program.cs` exists (likely Workers or Api in a later phase), it should call `MigrationRunner.RunPendingAsync` before binding ports, so `docker compose up` brings the host up and migrates the database in one step. The CLI shipped in this session is the operations path; the embedded call is the developer-experience path.
+
+## Performance baseline for Weeks 3-4
+
+The cold-vs-warm cache timings recorded at the end of Session 0002 are the regression baseline for Sessions 0003 and 0004. Cold-cache wall time for `dotnet test EventSourcingCqrs.slnx` was ~6.4s; warm-cache ~6.1s. `Domain.Tests` runs in 94ms either way. `Infrastructure.Tests` reports 4.77s cold, 2.0s warm. The five Postgres `MigrationRunner` tests combined run in 389ms regardless of cache, with container startup (~3.5s cold, ~1.5s warm) dominating the `Infrastructure.Tests` cost.
+
+The expectation for Sessions 0003 and 0004: container startup stays a one-time cost as long as new Postgres tests share `PostgresFixture` via `IClassFixture`. Individual test additions should land in the tens-to-low-hundreds of milliseconds warm. Cold-cache CI wall time should grow roughly linearly with test count rather than re-paying the 3.5s container startup per test class. If a future session shows the cold-cache number jumping by multiples of 3.5s for no obvious reason, the first thing to reach for is cross-class fixture sharing via xUnit's `[CollectionDefinition]` and `[Collection]` attributes.
+
+## What is deferred and why
+
+**xUnit v3 cancellation-token convention sweep.** The current convention across `Infrastructure.Tests` is to pass `CancellationToken.None` explicitly to all async calls, matching the existing pattern from Session 0001. When Stryker.NET #3117 unblocks the upgrade to xUnit v3 (currently the blocker per ADR 0003), the convention should switch to `TestContext.Current.CancellationToken` across the test suite in one mechanical sweep. Tracked here so the discrepancy does not get rediscovered when v3 lands.
