@@ -22,7 +22,7 @@ This document is the setup message for the next conversation with Claude on the 
 
 This file lives in the repository as a running record of session boundaries. Each session that produces meaningful work should leave behind an updated copy of this file describing where the build was when that session ended and what the next session is expected to start on. Over the six-month build, this folder becomes a history of how the implementation actually progressed.
 
-Save this version as `docs/sessions/0001-phase1-housekeeping-complete.md` after the next session begins, and create a new `session_setup.md` for the session after that.
+Save this version as `docs/sessions/0002-weeks3-4-postgres-adapter.md` after the next session begins, and create a new `session_setup.md` for the session after that.
 
 ---
 
@@ -48,7 +48,7 @@ I attended a presentation by Greg Young while at AWS. That is the extent of my c
 
 ## The reference implementation
 
-Public repo at github.com/ThomasJaeger/event-sourcing-cqrs. MIT licensed.
+Public repo at github.com/ThomasJaeger/event-sourcing-cqrs. MIT licensed. The Phase 1 foundation work item is complete: seven commits added in the previous Claude Code session, CI green on each push.
 
 Built on .NET 10 LTS, C# 14. The book commits to three event-store implementations as first-class peers behind a common abstraction:
 
@@ -58,11 +58,11 @@ Built on .NET 10 LTS, C# 14. The book commits to three event-store implementatio
 
 Switching between them is a configuration change, not a code change.
 
-Five aggregates across four bounded contexts. Sales: Order. Fulfillment: Inventory, Shipment. Billing: Payment. Customer Support: read-only context.
+Five aggregates across four bounded contexts. Sales: Order. Fulfillment: Inventory, Shipment. Billing: Payment. Customer Support: read-only context. The Order aggregate is built and tested as of the previous session. The other three ship in Phase 4.
 
-Two process managers, both event-sourced themselves. OrderFulfillmentProcessManager covers the four-branch saga from Chapter 10 with all compensation paths. ReturnProcessManager is the smaller second example.
+Two process managers, both event-sourced themselves. OrderFulfillmentProcessManager covers the four-branch saga from Chapter 10 with all compensation paths. ReturnProcessManager is the smaller second example. Both ship in Phase 5.
 
-Four projections. OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection. Read models live in PostgreSQL with a mix of relational tables and JSONB columns.
+Four projections. OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection. Read models live in PostgreSQL with a mix of relational tables and JSONB columns. Ship in Weeks 5-6 of the foundation plan.
 
 Blazor Server UI plus ASP.NET Core minimal API exposing the same operations as JSON. Tailwind for styling. SignalR for live dashboards.
 
@@ -72,77 +72,86 @@ Test stack: xUnit v2, FluentAssertions v7, FsCheck for property-based tests, Str
 
 ## The build plan
 
-Path 1 of three I considered. Path 1 means the implementation matches the book's full Part 4 commitments rather than scoping down. Twenty-eight weeks total at 14 hours per week, organized into 14 phases of two weeks each.
+`docs/PLAN.md` in the repo describes the 14-phase pacing across 28 weeks. That document remains the long-arc plan and the eventual book reconciliation reference.
 
-The full plan lives in `docs/PLAN.md` in the repo. The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules live in `docs/rules.txt` and apply to anything Claude produces (chat prose, code comments, ADRs, commit messages, PR descriptions).
+The reconciled six-week foundation plan (master setup, May 8, 2026) governs the current work window from May through mid-June and reorders early work to land a runnable Order workflow as quickly as possible:
 
-Phases:
+- Weeks 1-2: in-memory foundation (shipped in the previous session)
+- Weeks 3-4: PostgreSQL adapter and outbox (this session's planning target)
+- Weeks 5-6: first projection and the read side
 
-1. Foundations (in progress)
-2. PostgreSQL event store and outbox
-3. Sales context (Order aggregate)
-4. Other contexts (Inventory, Shipment, Payment)
-5. Process managers
-6. Projections
-7. Web and API
-8. Live dashboards and SignalR
-9. AdminConsole
-10. KurrentDB adapter
-11. DynamoDB adapter
-12. Versioning and snapshots
-13. Migration tooling (Chapter 18 standalone example)
-14. Documentation, reconciliation, polish
+PLAN.md's phase numbering does not match the six-week plan's week numbering. Where the two disagree, the six-week plan is in effect through mid-June. PLAN.md reconciliation happens in Phase 14 or sooner if the divergence grows.
+
+The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules live in `docs/rules.txt` and apply to anything Claude produces (chat prose, code comments, ADRs, commit messages, PR descriptions).
 
 ## Where the build stands now
 
-Phase 1 housekeeping is committed and pushed. The repo is live and visible at github.com/ThomasJaeger/event-sourcing-cqrs.
+Phase 1, Weeks 1-2 is complete. Seven commits added in the previous Claude Code session:
+
+- `923d315` Add Domain and Application projects
+- `02ca212` Add CI workflow
+- `a6f585f` Add Domain.Abstractions ports and types
+- `c8d9e60` Add SharedKernel, in-memory event store, and test scaffolding
+- `342dbcb` Add Sales bounded context with Order aggregate and tests
+- `10d479e` Add Infrastructure.Tests with event-store and repository coverage
+- `42d327e` Add event-storming mapping and Phase 1 session log
+
+CI green on every push. 27 tests passing (22 in Domain.Tests, 5 in Infrastructure.Tests).
 
 What is in place:
 
-- Solution structure following the layout in `CLAUDE.md`. All 38 directories created.
-- 36 `.gitkeep` files keeping the empty directories visible from a fresh clone.
-- `Directory.Build.props` at repo root with `<TargetFramework>net10.0</TargetFramework>`, `<LangVersion>14</LangVersion>`, `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`, nullable enabled, implicit usings enabled, latest analysis level, IsPackable false.
-- `Directory.Packages.props` at repo root with Central Package Management enabled. Four packages pinned: Microsoft.NET.Test.Sdk 18.5.0, xunit 2.9.3, xunit.runner.visualstudio 3.1.5, FluentAssertions 7.2.2. CentralPackageTransitivePinningEnabled deliberately omitted for now.
-- `global.json` pinning the SDK to 10.0.0 with `rollForward: latestFeature`. (Note: this was created during initial machine setup, not by Claude Code.)
-- `EventSourcingCqrs.slnx` (XML solution format) with two projects added.
-- `src/Domain.Abstractions/Domain.Abstractions.csproj` (empty SDK project, no dependencies).
-- `tests/Domain.Tests/Domain.Tests.csproj` (xUnit v2 + FluentAssertions v7, references Domain.Abstractions).
-- `docker/docker-compose.yml` with three services: postgres:16.6-alpine, kurrentplatform/kurrentdb:26.0.2, localstack/localstack:4.0. All have verified healthchecks. KurrentDB `/health/live` endpoint was empirically verified to return 204.
-- Three ADRs in `docs/adr/`:
-  - `0001-net10-over-net8.md`: documents the .NET 10 choice over the manuscript's stated .NET 8, including the manuscript edit owed in Phase 14.
-  - `0002-fluentassertions-v7-over-v8.md`: documents the v7 pinning, the Xceed Software license context, the $14.95 to $130 per developer per year pricing range, AwesomeAssertions as the priority migration candidate.
-  - `0003-xunit-v2-over-v3.md`: documents Stryker issue #3117 and the upgrade trigger.
-- `CLAUDE.md` updated to reference `docs/rules.txt` as item 1 in the reading order.
-- Build verified: `dotnet restore` clean, `dotnet build` produces zero warnings and zero errors.
-- `.gitignore` and `LICENSE` from initial setup.
+- **Domain.Abstractions (9 types).** `IDomainEvent` (marker), `ConcurrencyException` (StreamId, ExpectedVersion, ActualVersion), `DomainException`, `StreamNames` (ForAggregate generic and string-keyed, CategoryFor, ForPartition, SummaryFor, manuscript-verbatim templates), `EventMetadata` (EventId, CorrelationId, CausationId, ActorId, Source, SchemaVersion, OccurredUtc; ForCausedEvent instance method; ForCommand factory deferred), `EventEnvelope` (positional record in SQL-schema column order: StreamId, StreamVersion, EventId, EventType, EventVersion, Payload, Metadata, OccurredUtc), `AggregateRoot` (abstract base, Id protected-set, Version private-set, Raise / Apply / ApplyHistoric / DequeueUncommittedEvents), `IEventStore` (AppendAsync, ReadStreamAsync with `fromVersion = 0` default), `IEventStoreRepository<TAggregate>` (`where TAggregate : AggregateRoot, new()`, LoadAsync, SaveAsync).
+- **Domain.** SharedKernel value objects: `Money` with currency-less `Zero` identity and + / - operators, `Address` as a four-field record. Sales bounded context with the `Order` aggregate, seven Order events (`OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderCancelled`, `OrderShipped`), `OrderLine` entity, `OrderStatus` enum. Order has seven command methods (Draft, AddLine, RemoveLine, SetShippingAddress, Place, Cancel, Ship) with full invariant coverage including manuscript-derived guards plus three gap-fills (AddLine throws on duplicate LineId, SetShippingAddress requires Draft, Ship requires Placed).
+- **Infrastructure/EventStore.InMemory.** `InMemoryEventStore` using `Dictionary<Guid, List<EventEnvelope>>`; AppendAsync throws `ConcurrencyException` on stale expectedVersion; ReadStreamAsync with fromVersion slicing. `EventStoreRepository<TAggregate>` is store-agnostic but lives next to the in-memory store for now; it builds envelopes with placeholder metadata until the Application command pipeline arrives in Phase 2.
+- **Tests.** Domain.Tests with TestKit (`AggregateTest<TAggregate>` manuscript-verbatim except for one added `.RespectingRuntimeTypes()` call in `Then`; `ThenThrowsAssertion` with `Which` property). OrderTests with 22 cases covering Order's full lifecycle and invariants. Infrastructure.Tests with 3 store tests (round-trip, stale-version `ConcurrencyException`, fromVersion tail) and 2 repository tests (round-trip, no-op on empty).
+- **Docs.** `docs/event-storming-mapping.md` captures the sticky-note legend for the Order aggregate (Events orange, Commands blue, Aggregate lilac, Actors yellow). Format ready for the four remaining aggregates and two process managers to append. `docs/sessions/0001-phase1-foundation.md` captures six cross-track flags with discovery context.
+- **CI.** `.github/workflows/ci.yml` runs on push and pull_request. .NET 10 SDK, restore + build + test, concurrency-controlled (cancel-in-progress on the same ref), permissions tightened to `contents: read`.
 
-What is not yet in place. The substantive Phase 1 deliverables remain:
+## What is not yet in place
 
-1. `migrations/0001_initial_event_store.sql`. The PostgreSQL schema for the event store table and outbox table. Must support optimistic concurrency on (StreamId, Version) via unique constraint, atomic write of events plus outbox in one transaction, global ordering for replay, event metadata columns (EventId, AggregateId, Version, OccurredAt, CorrelationId, CausationId, Actor) separate from payload.
+- **PostgreSQL adapter.** Next work item.
+- **`migrations/0001_initial_event_store.sql`.** Next work item. Discussed in the prior planning session but not produced.
+- **Outbox table and OutboxProcessor.** Part of the next work item.
+- **Integration tests with Testcontainers.** Part of the next work item.
+- **Application layer.** Empty project shell ready. Commands, queries, middleware, ICommandContext arrive in Phase 2.
+- **KurrentDB and DynamoDB adapters.** Phases 10 and 11 of PLAN.md.
+- **Snapshot infrastructure (ISnapshotStore, snapshot store implementations).** Phase 12.
+- **Projection infrastructure (IProjectionCheckpoint, OrderListProjection, etc.).** Weeks 5-6 of the foundation plan.
 
-2. `.github/workflows/ci.yml`. The CI workflow running on every push and pull request. Must build with .NET 10 SDK, run all tests, produce green status against the docker-compose services for integration tests.
+## What is deferred and why
 
-3. The Domain.Abstractions ports themselves, plus common types. Specifically: `IAggregateRoot`, `IDomainEvent`, `IEventStore`, `IRepository<T>`, `ISnapshotStore`, `IProjectionCheckpoint`, plus value types `EventId`, `StreamId`, `Version`, `EventEnvelope`, `EventMetadata`. These are the abstractions the three event-store adapters must implement in Phases 10 and 11. The adapter compatibility test of Phase 11 is the moment these abstractions are validated. Getting them right matters more than getting them quickly.
+Six items surfaced during the previous session that will become decisions later. They are captured in detail in `docs/sessions/0001-phase1-foundation.md`. Condensed for this session:
+
+1. **ISnapshotStore and IProjectionCheckpoint ports deferred** to Phase 12 and Weeks 5-6 respectively. PLAN.md Phase 1 lists both as Phase 1 deliverables; the reconciled six-week plan delays them until there is a concrete consumer. PLAN.md reconciliation owed in Phase 14.
+2. **EventMetadata.ForCommand factory deferred** to Phase 2 with the Application command pipeline. The factory needs ICommand and ICommandContext, both Phase 2 types.
+3. **Ch 16 OrderPlaced example has wrong arity** (three args, missing Money Total). Ch 9 four-arg version is authoritative. Track A update owed.
+4. **In-memory event store is teaching scaffolding plus dual-purpose Application.Tests fixture, not a fourth peer.** PLAN.md Phase 14 reconciliation owed.
+5. **EventStoreRepository fills metadata with `Guid.Empty` placeholders and `"Domain"` source.** Real metadata flows in Phase 2 when ICommandContext arrives. PostgreSQL schema decisions in this session should anticipate the eventual metadata richness.
+6. **Ch 16 AggregateTest<T>.Then helper is missing `.RespectingRuntimeTypes()`.** Track A: add the call to the printed helper, or switch the example to a manual per-index loop comparison to remove FA-version coupling.
+
+Flag 5 is the one this session's PostgreSQL schema decisions should keep in mind. The metadata columns in `migrations/0001_initial_event_store.sql` need to accommodate real correlation/causation/actor values that Phase 2 will populate, even though Weeks 3-4 ships only placeholders.
 
 ## What I want today
 
-The next work item is the PostgreSQL migration (`migrations/0001_initial_event_store.sql`). I want to talk through the approach with you here on claude.ai before I send instructions to Claude Code on my local machine.
+This session's planning target is the PostgreSQL adapter and outbox for Weeks 3-4. Specifically, four questions I want to think through with you before sending instructions to Claude Code:
 
-Specifically, I want to discuss:
+1. **Schema design for the events table.** Chapter 8 is the source of truth, but I want to verify the SQL the manuscript shows against PostgreSQL 16 capabilities and any improvements we should adopt now. What columns, what types, what indexes, what constraints. The unique constraint on `(StreamId, Version)` is non-negotiable; the rest is open. The column order should match `EventEnvelope`'s field order so the adapter mapping reads directly.
 
-1. The schema design. What columns the events table needs, what indexes, what constraints. Chapter 8 of the manuscript is the source of truth, but I want to think through the trade-offs out loud rather than letting Claude Code propose blindly.
+2. **Outbox table shape.** Same database per the book. Columns, dispatch model, how the OutboxProcessor in this work item consumes it, how subscriber failures are handled without losing events. The book's commitment is atomic write of events plus outbox in one transaction.
 
-2. The outbox table. Whether it lives in the same database (it does, per the book), what columns it needs, how the OutboxProcessor in Phase 2 will consume it.
+3. **Migration tool decision.** Three real options: FluentMigrator, DbUp, or hand-rolled SQL files run by Npgsql. EF Core migrations is a fourth option but conflicts with the book's "no ORM for the event store" rule, though the migration runner is a separate concern from the event store itself. My current lean is hand-rolled, because it stays closest to the book's voice and reads as a direct demonstration. Push back if you see a reason to prefer one of the others.
 
-3. The migration tool. Whether we use a dedicated migration tool (FluentMigrator, DbUp, EF Core migrations) or hand-rolled SQL files run by Npgsql. The book leans toward "no ORM for the event store" but the migration runner is a separate concern from the event store itself.
+4. **Schema migration strategy.** PG 16 syntax exclusive (`gen_random_uuid()`, JSONB, generated columns where useful) or portable SQL. Forward-only or reversible. My current lean: PG 16 exclusive, forward-only. The book commits to PG 16; portability across older versions is not a goal.
 
-4. The schema migration strategy. Whether we pin to PostgreSQL 16 syntax exclusively or write portable SQL. Whether migrations are forward-only or reversible.
+After we agree on the four positions, draft the instruction I will send to Claude Code. Format it the way the prior PostgreSQL instruction would have been formatted: clear scope, reference to Chapter 8, ask Claude Code to propose the schema before writing any file.
 
-After we agree on the approach here, I will go to Claude Code and send a clear instruction that reflects what we decided.
+Once the migration lands, the pattern repeats for the PostgreSQL adapter implementation (`EventStore.Postgres` project, IEventStore implementation against Npgsql, Testcontainers integration tests) and the OutboxProcessor.
 
 ## Decisions and constraints already made
 
-These are settled and should not be revisited in this session unless something fundamental breaks.
+These are settled. Do not revisit in this session unless something fundamental breaks.
+
+From the pre-Phase 1 baseline:
 
 - .NET 10 LTS, C# 14, pinned via `global.json` with `rollForward: latestFeature`.
 - xUnit v2 across all test projects (Stryker.NET issue #3117 blocks v3 for mutation testing).
@@ -150,22 +159,36 @@ These are settled and should not be revisited in this session unless something f
 - AwesomeAssertions, Shouldly, Verify, plain xUnit Assert noted as alternatives if FluentAssertions migration trigger fires.
 - Hand-rolled PostgreSQL event store with raw SQL via Npgsql. No ORM for the event store.
 - KurrentDB and DynamoDB as peer adapters in Phases 10 and 11. Marten not implemented as a peer; only mentioned in the manuscript as an alternative readers could swap in.
-- PostgreSQL for read models, with mix of relational tables and JSONB. No Redis or Elasticsearch in v1.
+- PostgreSQL for read models, with a mix of relational tables and JSONB. No Redis or Elasticsearch in v1.
 - In-process event bus driven by the outbox. No RabbitMQ or Kafka.
-- Single-tenant beyond a tenant ID column. Multi-tenancy patterns are discussed in Chapter 13 but not exercised in v1.
+- Single-tenant beyond a tenant ID column. Multi-tenancy patterns discussed in Chapter 13 but not exercised in v1.
 - Hexagonal architecture with the layout in `CLAUDE.md`.
 - Blazor Server with Tailwind for styling. ASP.NET Core minimal APIs for JSON.
 - xUnit v2, FluentAssertions v7, FsCheck, Stryker.NET, Testcontainers, LocalStack as the test stack.
 
+Locked in during the previous Claude Code session (Weeks 1-2):
+
+- **`IEventStoreRepository<TAggregate>`, not `IRepository<T>`.** Chapter 8's repository shape.
+- **`AggregateRoot` as abstract base class in Domain.Abstractions, not `IAggregateRoot` interface.** The repository constrains on `where TAggregate : AggregateRoot, new()`, so the base class must live alongside the interface in Domain.Abstractions.
+- **`IEventStore.ReadStreamAsync` has `fromVersion = 0` default.** Supports snapshot-aware loading in Phase 12 without adding a separate method to the interface.
+- **`ConcurrencyException` carries `StreamId`, `ExpectedVersion`, `ActualVersion`.** Caller builds precise diagnostics from the exception alone.
+- **`EventEnvelope` is the C# boundary type, not a wire format.** Payload typed as `IDomainEvent`, Metadata typed as `EventMetadata`. The IEventStore adapter handles serialization on append and deserialization on read. The in-memory store skips serialization entirely. The PostgreSQL adapter in the next work item carries the serialize-on-write, deserialize-on-read responsibility.
+- **In-memory event store is teaching scaffolding plus an Application.Tests fixture.** Not a fourth peer. PLAN.md commits to three peers.
+- **Six-week reconciled foundation plan governs through mid-June.** PLAN.md's 14-phase pacing is the long-arc reference; the six-week plan is in force for the current work window.
+- **`Money` has a currency-less `Zero` identity.** `Money.Zero + somethingInUSD == somethingInUSD`. Empty-order `Total` can compute without forcing a default currency on the Order aggregate.
+- **`DomainException` for business-rule violations.** Sealed, single message constructor, lives in Domain.Abstractions alongside `ConcurrencyException`.
+- **Test naming convention: snake_case sentence form** (e.g., `AddLine_throws_when_status_is_Placed`). Matches CLAUDE.md "test method names read as sentences with underscores" and the 22 existing tests.
+- **`AggregateTest<T>.Then` uses FluentAssertions' `BeEquivalentTo` with `WithStrictOrdering().RespectingRuntimeTypes()`.** The runtime-types option is required because the marker `IDomainEvent` has no members at the declared-type level. Track A flag captured.
+
 ## My working pattern with Claude Code
 
-I review every proposed command and file before approval. I do not use auto-approve options. I want the friction. Phase 1 has been clean so far because of this pattern, including catching a real bug in a multi-line `mkdir` command that would have created only part of the directory tree.
+I review every proposed command and file before approval. I do not use auto-approve options. I want the friction. Phase 1 has been clean because of this pattern, including catching real bugs in multi-step commands and surfacing manuscript discrepancies before they propagate into the implementation.
 
 When I start a new Claude Code session, the first message has the same shape:
 
 > Please re-read CLAUDE.md, docs/PLAN.md, and docs/rules.txt. Then summarize back to me: (1) the work items already complete based on what is in the repo, and (2) the work items still remaining for the current phase. After I confirm the summary is right, we will start on the next item.
 
-I will follow that pattern again when I start the next Claude Code session for the migration work.
+I will follow that pattern again when I start the next Claude Code session for the PostgreSQL migration work.
 
 ## Writing rules to apply throughout this conversation
 
@@ -183,10 +206,10 @@ These come from `docs/rules.txt` in the repo:
 
 ## How I want this session to flow
 
-We discuss the four migration questions above. You give me your read on each, including any trade-offs I have not surfaced. I push back where I disagree. We arrive at a position I am confident in.
+We discuss the four PostgreSQL/outbox questions above. You give me your read on each, including any trade-offs I have not surfaced. I push back where I disagree. We arrive at a position I am confident in.
 
 Once we agree, you draft the instruction I will send to Claude Code. The instruction should set the scope clearly, reference the relevant manuscript chapter (Chapter 8), and ask Claude Code to propose the schema before writing any file.
 
-After the migration is done, we will repeat the pattern for the CI workflow and then for the Domain.Abstractions ports. Each gets its own session. By the end of Phase 1, three more `docs/sessions/` files will exist, documenting the path through this phase.
+After the migration is done, we repeat the pattern for the PostgreSQL adapter implementation, then for the OutboxProcessor. Each gets its own session. By the end of Weeks 3-4, three more `docs/sessions/` files will exist, documenting the path through the PostgreSQL work.
 
-Let's start with question 1: the schema design for the events table. What columns, what types, what indexes, what constraints. What does Chapter 8 mandate and what is open to choice.
+Let's start with question 1: the schema design for the events table. What columns, what types, what indexes, what constraints. What does Chapter 8 mandate and what is open to choice. Verify the SQL the manuscript shows against PostgreSQL 16 capabilities and any improvements we should adopt now. Keep an eye on the EventEnvelope column order so the adapter mapping is direct.
