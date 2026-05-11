@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
 
-namespace EventStore.Postgres;
+namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 
 public sealed class MigrationRunner
 {

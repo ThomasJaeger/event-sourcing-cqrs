@@ -1,4 +1,4 @@
-namespace EventStore.Postgres;
+namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 
 public sealed class MigrationChecksumMismatchException : Exception
 {
