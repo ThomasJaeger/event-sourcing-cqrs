@@ -22,7 +22,7 @@ This document is the setup message for the next conversation with Claude on the 
 
 This file lives in the repository as a running record of session boundaries. Each session that produces meaningful work should leave behind an updated copy of this file describing where the build was when that session ended and what the next session is expected to start on. Over the six-month build, this folder becomes a history of how the implementation actually progressed.
 
-Save this version as `docs/sessions/0002-weeks3-4-postgres-adapter.md` after the next session begins, and create a new `session_setup.md` for the session after that.
+Save this version as `docs/sessions/0003-weeks3-4-postgres-adapter-impl.md` after the next session begins, and create a new `session_setup.md` for the session after that.
 
 ---
 
@@ -48,7 +48,7 @@ I attended a presentation by Greg Young while at AWS. That is the extent of my c
 
 ## The reference implementation
 
-Public repo at github.com/ThomasJaeger/event-sourcing-cqrs. MIT licensed. The Phase 1 foundation work item is complete: seven commits added in the previous Claude Code session, CI green on each push.
+Public repo at github.com/ThomasJaeger/event-sourcing-cqrs. MIT licensed. Phase 1 (Weeks 1-2 in-memory foundation) and the first of three sessions in Phase 2 (Weeks 3-4 PostgreSQL adapter) are complete. CI green on every push.
 
 Built on .NET 10 LTS, C# 14. The book commits to three event-store implementations as first-class peers behind a common abstraction:
 
@@ -58,7 +58,7 @@ Built on .NET 10 LTS, C# 14. The book commits to three event-store implementatio
 
 Switching between them is a configuration change, not a code change.
 
-Five aggregates across four bounded contexts. Sales: Order. Fulfillment: Inventory, Shipment. Billing: Payment. Customer Support: read-only context. The Order aggregate is built and tested as of the previous session. The other three ship in Phase 4.
+Five aggregates across four bounded contexts. Sales: Order. Fulfillment: Inventory, Shipment. Billing: Payment. Customer Support: read-only context. The Order aggregate is built and tested as of Session 0001. The other three ship in Phase 4.
 
 Two process managers, both event-sourced themselves. OrderFulfillmentProcessManager covers the four-branch saga from Chapter 10 with all compensation paths. ReturnProcessManager is the smaller second example. Both ship in Phase 5.
 
@@ -76,8 +76,11 @@ Test stack: xUnit v2, FluentAssertions v7, FsCheck for property-based tests, Str
 
 The reconciled six-week foundation plan (master setup, May 8, 2026) governs the current work window from May through mid-June and reorders early work to land a runnable Order workflow as quickly as possible:
 
-- Weeks 1-2: in-memory foundation (shipped in the previous session)
-- Weeks 3-4: PostgreSQL adapter and outbox (this session's planning target)
+- Weeks 1-2: in-memory foundation (Session 0001, shipped)
+- Weeks 3-4: PostgreSQL adapter and outbox, three sessions
+  - Session 0002 (shipped): initial migration plus `MigrationRunner` plus CLI
+  - Session 0003 (this session's planning target): PostgreSQL `IEventStore` adapter
+  - Session 0004: `OutboxProcessor`
 - Weeks 5-6: first projection and the read side
 
 PLAN.md's phase numbering does not match the six-week plan's week numbering. Where the two disagree, the six-week plan is in effect through mid-June. PLAN.md reconciliation happens in Phase 14 or sooner if the divergence grows.
@@ -86,66 +89,63 @@ The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules 
 
 ## Where the build stands now
 
-Phase 1, Weeks 1-2 is complete. Seven commits added in the previous Claude Code session:
+Session 0002 (Weeks 3-4, Session 1 of 3) is complete. Four commits added on top of the Phase 1 baseline, CI green on each push:
 
-- `923d315` Add Domain and Application projects
-- `02ca212` Add CI workflow
-- `a6f585f` Add Domain.Abstractions ports and types
-- `c8d9e60` Add SharedKernel, in-memory event store, and test scaffolding
-- `342dbcb` Add Sales bounded context with Order aggregate and tests
-- `10d479e` Add Infrastructure.Tests with event-store and repository coverage
-- `42d327e` Add event-storming mapping and Phase 1 session log
+- `b329c40` Add MigrationRunner and initial event store schema (Phase 2, Weeks 3-4)
+- `417778c` Align EventStore.Postgres namespaces with EventSourcingCqrs.Infrastructure convention
+- `58f0c70` Add Testcontainers-backed MigrationRunner tests (Phase 2, Weeks 3-4)
+- `bde800c` Append performance baseline and v3 cancellation-token deferral to 0002 session log
 
-CI green on every push. 27 tests passing (22 in Domain.Tests, 5 in Infrastructure.Tests).
+32 tests passing (22 in Domain.Tests, 10 in Infrastructure.Tests including five new Postgres `MigrationRunner` tests via Testcontainers PostgreSQL 16.6).
 
-What is in place:
+What is in place after Session 0002:
 
-- **Domain.Abstractions (9 types).** `IDomainEvent` (marker), `ConcurrencyException` (StreamId, ExpectedVersion, ActualVersion), `DomainException`, `StreamNames` (ForAggregate generic and string-keyed, CategoryFor, ForPartition, SummaryFor, manuscript-verbatim templates), `EventMetadata` (EventId, CorrelationId, CausationId, ActorId, Source, SchemaVersion, OccurredUtc; ForCausedEvent instance method; ForCommand factory deferred), `EventEnvelope` (positional record in SQL-schema column order: StreamId, StreamVersion, EventId, EventType, EventVersion, Payload, Metadata, OccurredUtc), `AggregateRoot` (abstract base, Id protected-set, Version private-set, Raise / Apply / ApplyHistoric / DequeueUncommittedEvents), `IEventStore` (AppendAsync, ReadStreamAsync with `fromVersion = 0` default), `IEventStoreRepository<TAggregate>` (`where TAggregate : AggregateRoot, new()`, LoadAsync, SaveAsync).
-- **Domain.** SharedKernel value objects: `Money` with currency-less `Zero` identity and + / - operators, `Address` as a four-field record. Sales bounded context with the `Order` aggregate, seven Order events (`OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderCancelled`, `OrderShipped`), `OrderLine` entity, `OrderStatus` enum. Order has seven command methods (Draft, AddLine, RemoveLine, SetShippingAddress, Place, Cancel, Ship) with full invariant coverage including manuscript-derived guards plus three gap-fills (AddLine throws on duplicate LineId, SetShippingAddress requires Draft, Ship requires Placed).
-- **Infrastructure/EventStore.InMemory.** `InMemoryEventStore` using `Dictionary<Guid, List<EventEnvelope>>`; AppendAsync throws `ConcurrencyException` on stale expectedVersion; ReadStreamAsync with fromVersion slicing. `EventStoreRepository<TAggregate>` is store-agnostic but lives next to the in-memory store for now; it builds envelopes with placeholder metadata until the Application command pipeline arrives in Phase 2.
-- **Tests.** Domain.Tests with TestKit (`AggregateTest<TAggregate>` manuscript-verbatim except for one added `.RespectingRuntimeTypes()` call in `Then`; `ThenThrowsAssertion` with `Which` property). OrderTests with 22 cases covering Order's full lifecycle and invariants. Infrastructure.Tests with 3 store tests (round-trip, stale-version `ConcurrencyException`, fromVersion tail) and 2 repository tests (round-trip, no-op on empty).
-- **Docs.** `docs/event-storming-mapping.md` captures the sticky-note legend for the Order aggregate (Events orange, Commands blue, Aggregate lilac, Actors yellow). Format ready for the four remaining aggregates and two process managers to append. `docs/sessions/0001-phase1-foundation.md` captures six cross-track flags with discovery context.
-- **CI.** `.github/workflows/ci.yml` runs on push and pull_request. .NET 10 SDK, restore + build + test, concurrency-controlled (cancel-in-progress on the same ref), permissions tightened to `contents: read`.
+- **`migrations/0001_initial_event_store.sql`.** Creates the `event_store` schema and four tables: `events`, `outbox`, `outbox_quarantine`, `schema_migrations`. PostgreSQL 16 syntax exclusive: BIGINT IDENTITY columns, STORED generated columns for `correlation_id` (events and outbox) and `causation_id` (events only), JSONB for payload and metadata. Constraint and index names follow `pk_<table>`, `uq_<table>_<column-or-tuple>`, `ix_<table>_<column-or-purpose>` with the `event_store.` schema prefix carrying the disambiguation context. Partial index `ix_outbox_pending ON event_store.outbox (outbox_id) WHERE sent_utc IS NULL` orders pending rows in FIFO sequence for the OutboxProcessor.
+- **`EventStore.Postgres` project shell.** `MigrationRunner` with one public method (`RunPendingAsync`), `MigrationRunnerOptions`, `MigrationChecksumMismatchException`. Embedded resources expose `/migrations/*.sql` under the `EventStore.Postgres.Migrations.` resource prefix. `pg_advisory_lock` key `0x4553_5243_515F_4D52L` (ASCII `ESRCQ_MR`) guards the runner across all per-migration transactions. SHA-256 checksums over raw embedded bytes detect post-application edits. Dry-run mode prints the pending list without acquiring the lock or running DDL but still throws on a checksum mismatch.
+- **`EventStore.Postgres.Cli` console project.** Single `Program.cs` parsing `migrate` and optional `--dry-run`, reading `EVENT_STORE_CONNECTION_STRING`, invoking the runner. Exit codes 0 success, 1 runner failure, 64 usage, 78 missing env var. The CLI is the operations path; an embedded-startup call from a host's `Program.cs` lands in Session 0004 or later.
+- **`.gitattributes`.** `* text=auto eol=lf` with binary carve-outs. SHA-256 checksums on embedded migration files require stable bytes across Windows and Linux/macOS checkouts; making the rule global keeps every text file consistent.
+- **Tests.** `PostgresFixture` (IClassFixture, shared `PostgreSqlContainer` at `postgres:16.6-alpine`, per-test database via `CREATE DATABASE test_<guid>`). Five Postgres `MigrationRunner` tests cover first-run application, idempotent re-run, concurrent runners serialized by `pg_advisory_lock` (gate-and-poll-pg_locks pattern), checksum mismatch on a tampered row, and dry-run on an empty database. Constraints asserted against `pg_constraint`, standalone indexes against `pg_indexes`, partial predicate via `pg_indexes.indexdef`.
+- **Session log.** `docs/sessions/0002-weeks3-4-postgres-adapter.md` captures the schema decisions, runner decisions, ten Track A flags, the performance baseline for Sessions 0003 and 0004, and the xUnit v3 cancellation-token sweep deferral. `docs/sessions/0002-weeks3-4-postgres-adapter-setup.md` archives this session's planning input under the new two-file convention (`-setup` suffix for planning input, no suffix for session log).
 
 ## What is not yet in place
 
-- **PostgreSQL adapter.** Next work item.
-- **`migrations/0001_initial_event_store.sql`.** Next work item. Discussed in the prior planning session but not produced.
-- **Outbox table and OutboxProcessor.** Part of the next work item.
-- **Integration tests with Testcontainers.** Part of the next work item.
-- **Application layer.** Empty project shell ready. Commands, queries, middleware, ICommandContext arrive in Phase 2.
+- **PostgreSQL `IEventStore` adapter implementation.** Next work item (Session 0003). The `EventStore.Postgres` project ships the migration runner today; the adapter that implements `IEventStore` against Npgsql is the next addition: `AppendAsync(streamId, expectedVersion, events, ct)` and `ReadStreamAsync(streamId, fromVersion, ct)`, atomic events-plus-outbox write in one `NpgsqlTransaction`, optimistic concurrency mapped to the `uq_events_stream_version` unique constraint, JSON serialization on append and deserialization on read.
+- **`OutboxProcessor`.** Session 0004. Drains `event_store.outbox` to the in-process event bus in FIFO `outbox_id` order, with backoff via `next_attempt_at`, error capture in `last_error`, and move-to-quarantine for poison messages. Reminder from Session 0002: `outbox_quarantine.attempt_count` is NOT NULL with no default; the quarantine path must read the live outbox row's `attempt_count` and copy it into the quarantine INSERT.
+- **Application layer.** Empty project shell ready. Commands, queries, middleware, `ICommandContext` arrive in Phase 2 with the command pipeline. Real correlation/causation/actor metadata flows from there into `EventStoreRepository`'s envelope construction.
 - **KurrentDB and DynamoDB adapters.** Phases 10 and 11 of PLAN.md.
-- **Snapshot infrastructure (ISnapshotStore, snapshot store implementations).** Phase 12.
-- **Projection infrastructure (IProjectionCheckpoint, OrderListProjection, etc.).** Weeks 5-6 of the foundation plan.
+- **Snapshot infrastructure (`ISnapshotStore`, snapshot store implementations).** Phase 12.
+- **Projection infrastructure (`IProjectionCheckpoint`, OrderListProjection, etc.).** Weeks 5-6 of the foundation plan.
 
 ## What is deferred and why
 
-Six items surfaced during the previous session that will become decisions later. They are captured in detail in `docs/sessions/0001-phase1-foundation.md`. Condensed for this session:
+Items surfaced during prior sessions that will become decisions later. Full discovery context lives in the cited session logs. Condensed for this session:
 
-1. **ISnapshotStore and IProjectionCheckpoint ports deferred** to Phase 12 and Weeks 5-6 respectively. PLAN.md Phase 1 lists both as Phase 1 deliverables; the reconciled six-week plan delays them until there is a concrete consumer. PLAN.md reconciliation owed in Phase 14.
-2. **EventMetadata.ForCommand factory deferred** to Phase 2 with the Application command pipeline. The factory needs ICommand and ICommandContext, both Phase 2 types.
+1. **`ISnapshotStore` and `IProjectionCheckpoint` ports deferred** to Phase 12 and Weeks 5-6 respectively (Session 0001). PLAN.md Phase 1 lists both as Phase 1 deliverables; the reconciled six-week plan delays them until there is a concrete consumer. PLAN.md reconciliation owed in Phase 14.
+2. **`EventMetadata.ForCommand` factory deferred** to Phase 2 with the Application command pipeline (Session 0001). The factory needs `ICommand` and `ICommandContext`, both Phase 2 types.
 3. **Ch 16 OrderPlaced example has wrong arity** (three args, missing Money Total). Ch 9 four-arg version is authoritative. Track A update owed.
 4. **In-memory event store is teaching scaffolding plus dual-purpose Application.Tests fixture, not a fourth peer.** PLAN.md Phase 14 reconciliation owed.
-5. **EventStoreRepository fills metadata with `Guid.Empty` placeholders and `"Domain"` source.** Real metadata flows in Phase 2 when ICommandContext arrives. PostgreSQL schema decisions in this session should anticipate the eventual metadata richness.
-6. **Ch 16 AggregateTest<T>.Then helper is missing `.RespectingRuntimeTypes()`.** Track A: add the call to the printed helper, or switch the example to a manual per-index loop comparison to remove FA-version coupling.
+5. **`EventStoreRepository` fills metadata with `Guid.Empty` placeholders and `"Domain"` source.** Real metadata flows in Phase 2 when `ICommandContext` arrives. The PostgreSQL adapter in Session 0003 should accept whatever metadata the repository hands it; the placeholders go away one layer up, not in the adapter.
+6. **Ch 16 `AggregateTest<T>.Then` helper is missing `.RespectingRuntimeTypes()`.** Track A: add the call to the printed helper, or switch the example to a manual per-index loop comparison to remove FA-version coupling.
+7. **xUnit v3 cancellation-token convention sweep** (Session 0002). The current convention across `Infrastructure.Tests` is to pass `CancellationToken.None` explicitly to all async calls. When Stryker.NET issue #3117 unblocks the upgrade to xUnit v3 (currently the blocker per ADR 0003), the convention switches to `TestContext.Current.CancellationToken` across the test suite in one mechanical sweep.
+8. **GlobalPosition placement in the C# type system** (Session 0002). The schema column `global_position` exists on `event_store.events`. The C# binding decision (whether GlobalPosition lives on `EventEnvelope`, on a separate `StoredEvent` wrapper, or in `EventMetadata`) is deferred to Weeks 5-6 when the projection-facing API gets built and a concrete consumer surfaces. Lean: add GlobalPosition to `EventEnvelope`. The adapter in Session 0003 reads and ignores `global_position` for now; the column is populated by the IDENTITY default at INSERT and not surfaced to the caller.
 
-Flag 5 is the one this session's PostgreSQL schema decisions should keep in mind. The metadata columns in `migrations/0001_initial_event_store.sql` need to accommodate real correlation/causation/actor values that Phase 2 will populate, even though Weeks 3-4 ships only placeholders.
+Flag 5 is the one this session's adapter decisions should keep in mind. The adapter does not generate metadata; it serializes whatever `EventEnvelope.Metadata` contains. The Phase 2 command pipeline replaces the placeholders without any adapter change.
 
 ## What I want today
 
-This session's planning target is the PostgreSQL adapter and outbox for Weeks 3-4. Specifically, four questions I want to think through with you before sending instructions to Claude Code:
+This session's planning target is the PostgreSQL `IEventStore` adapter implementation for Weeks 3-4 Session 0003. Four open questions to think through before drafting instructions for Claude Code:
 
-1. **Schema design for the events table.** Chapter 8 is the source of truth, but I want to verify the SQL the manuscript shows against PostgreSQL 16 capabilities and any improvements we should adopt now. What columns, what types, what indexes, what constraints. The unique constraint on `(StreamId, Version)` is non-negotiable; the rest is open. The column order should match `EventEnvelope`'s field order so the adapter mapping reads directly.
+1. **Serializer choice: System.Text.Json vs Newtonsoft.Json.** STJ is the modern default in .NET 10 and the book's voice points toward built-in over external where the built-in suffices. Newtonsoft has richer polymorphism handling, especially for type-name discriminators on `IDomainEvent`. The adapter's serialize-on-write and deserialize-on-read path needs to handle: closed record types for events, the `EventMetadata` record, and round-trip stability so the SHA-256-like equality of payloads holds after a write-read cycle. My current lean: System.Text.Json with a small `JsonSerializerOptions` configured once at adapter construction, plus a type-name resolver for the polymorphism. Push back if you see a reason to prefer Newtonsoft.
 
-2. **Outbox table shape.** Same database per the book. Columns, dispatch model, how the OutboxProcessor in this work item consumes it, how subscriber failures are handled without losing events. The book's commitment is atomic write of events plus outbox in one transaction.
+2. **Type-name resolution strategy.** Three options: fully-qualified CLR name (`Namespace.TypeName, Assembly`), short logical name (`OrderPlaced`), or an explicit registry mapping logical names to CLR types. Fully-qualified is brittle across refactors; the manuscript's promise that "events outlive code" argues against it. Short logical with an explicit registry is the production-grade answer, and Chapter 11 sets up the upcasting pipeline that already assumes logical naming. The question is what the registry looks like in v1: a hand-maintained `Dictionary<string, Type>` registered in the adapter's options, an attribute-driven scan, or something more elaborate. Open.
 
-3. **Migration tool decision.** Three real options: FluentMigrator, DbUp, or hand-rolled SQL files run by Npgsql. EF Core migrations is a fourth option but conflicts with the book's "no ORM for the event store" rule, though the migration runner is a separate concern from the event store itself. My current lean is hand-rolled, because it stays closest to the book's voice and reads as a direct demonstration. Push back if you see a reason to prefer one of the others.
+3. **Atomic events-plus-outbox transaction shape.** Mostly settled: a single `NpgsqlTransaction` wraps the events INSERT and the outbox INSERTs, with the outbox rows derived from the same `EventEnvelope` list passed to `AppendAsync`. The open question is where the call sits: inside the adapter's `AppendAsync` (one method, one transaction, the adapter knows about the outbox) or one layer up in an `Outbox`-aware decorator around `IEventStore`. The book's commitment is the atomic write; the architectural question is whether the adapter or a decorator owns it. My current lean: inside the adapter. The atomicity is the whole point and a decorator would have to reach into the adapter's transaction handling to preserve it, which leaks worse than the adapter knowing about the outbox table.
 
-4. **Schema migration strategy.** PG 16 syntax exclusive (`gen_random_uuid()`, JSONB, generated columns where useful) or portable SQL. Forward-only or reversible. My current lean: PG 16 exclusive, forward-only. The book commits to PG 16; portability across older versions is not a goal.
+4. **Unique-violation-to-ConcurrencyException mapping.** PostgreSQL raises `SQLSTATE 23505` on the `(stream_id, stream_version)` UNIQUE constraint when a concurrent appender lands at the same version. The adapter catches `PostgresException` where `SqlState == "23505"` and `ConstraintName == "uq_events_stream_version"` and throws `ConcurrencyException` with `StreamId`, `ExpectedVersion`, and `ActualVersion` populated. `ActualVersion` requires a follow-up read of `MAX(stream_version)` on the stream because the violation alone does not surface the current head. The question is whether the follow-up read happens inside the catch block (eager, one round-trip cost per concurrency exception, exception always carries the current head) or in a property getter on the exception (lazy, no cost on the throw path, exception holders pay the read when they ask). My current lean: eager in the catch. Concurrency exceptions are not so common that the one extra round-trip matters at the call site, and the eager shape keeps the exception self-contained and reproducible.
 
-After we agree on the four positions, draft the instruction I will send to Claude Code. Format it the way the prior PostgreSQL instruction would have been formatted: clear scope, reference to Chapter 8, ask Claude Code to propose the schema before writing any file.
+After we agree on the four positions, draft the instruction I will send to Claude Code. Format it the way the prior Session 0002 instruction was formatted: clear scope, reference to Chapter 8, ask Claude Code to propose the adapter shape before writing any file.
 
-Once the migration lands, the pattern repeats for the PostgreSQL adapter implementation (`EventStore.Postgres` project, IEventStore implementation against Npgsql, Testcontainers integration tests) and the OutboxProcessor.
+Once the adapter lands, the pattern repeats for the `OutboxProcessor` in Session 0004.
 
 ## Decisions and constraints already made
 
@@ -166,29 +166,43 @@ From the pre-Phase 1 baseline:
 - Blazor Server with Tailwind for styling. ASP.NET Core minimal APIs for JSON.
 - xUnit v2, FluentAssertions v7, FsCheck, Stryker.NET, Testcontainers, LocalStack as the test stack.
 
-Locked in during the previous Claude Code session (Weeks 1-2):
+Locked in during Session 0001 (Weeks 1-2):
 
 - **`IEventStoreRepository<TAggregate>`, not `IRepository<T>`.** Chapter 8's repository shape.
 - **`AggregateRoot` as abstract base class in Domain.Abstractions, not `IAggregateRoot` interface.** The repository constrains on `where TAggregate : AggregateRoot, new()`, so the base class must live alongside the interface in Domain.Abstractions.
 - **`IEventStore.ReadStreamAsync` has `fromVersion = 0` default.** Supports snapshot-aware loading in Phase 12 without adding a separate method to the interface.
 - **`ConcurrencyException` carries `StreamId`, `ExpectedVersion`, `ActualVersion`.** Caller builds precise diagnostics from the exception alone.
-- **`EventEnvelope` is the C# boundary type, not a wire format.** Payload typed as `IDomainEvent`, Metadata typed as `EventMetadata`. The IEventStore adapter handles serialization on append and deserialization on read. The in-memory store skips serialization entirely. The PostgreSQL adapter in the next work item carries the serialize-on-write, deserialize-on-read responsibility.
+- **`EventEnvelope` is the C# boundary type, not a wire format.** Payload typed as `IDomainEvent`, Metadata typed as `EventMetadata`. The `IEventStore` adapter handles serialization on append and deserialization on read. The in-memory store skips serialization entirely. The PostgreSQL adapter in Session 0003 carries the serialize-on-write, deserialize-on-read responsibility.
 - **In-memory event store is teaching scaffolding plus an Application.Tests fixture.** Not a fourth peer. PLAN.md commits to three peers.
 - **Six-week reconciled foundation plan governs through mid-June.** PLAN.md's 14-phase pacing is the long-arc reference; the six-week plan is in force for the current work window.
 - **`Money` has a currency-less `Zero` identity.** `Money.Zero + somethingInUSD == somethingInUSD`. Empty-order `Total` can compute without forcing a default currency on the Order aggregate.
 - **`DomainException` for business-rule violations.** Sealed, single message constructor, lives in Domain.Abstractions alongside `ConcurrencyException`.
-- **Test naming convention: snake_case sentence form** (e.g., `AddLine_throws_when_status_is_Placed`). Matches CLAUDE.md "test method names read as sentences with underscores" and the 22 existing tests.
+- **Test naming convention: snake_case sentence form** (e.g., `AddLine_throws_when_status_is_Placed`). Matches CLAUDE.md "test method names read as sentences with underscores" and the existing tests.
 - **`AggregateTest<T>.Then` uses FluentAssertions' `BeEquivalentTo` with `WithStrictOrdering().RespectingRuntimeTypes()`.** The runtime-types option is required because the marker `IDomainEvent` has no members at the declared-type level. Track A flag captured.
+
+Locked in during Session 0002 (Weeks 3-4, Session 1 of 3):
+
+- **Schema with `global_position BIGINT GENERATED ALWAYS AS IDENTITY` as PK on `event_store.events`.** Plus `(stream_id, stream_version)` UNIQUE for optimistic concurrency, `event_id` UNIQUE for idempotency. `stream_id UUID`, `stream_version INT`, `event_id UUID`, `event_type TEXT`, `event_version SMALLINT`, `payload JSONB`, `metadata JSONB`, `occurred_utc TIMESTAMPTZ`. Single non-constraint index `ix_events_correlation_id` on the generated correlation column.
+- **STORED generated columns for `correlation_id` and `causation_id` on events; `correlation_id` only on outbox.** Causation tracing is a stream-level concern, not a dispatch-level concern. Cast `(metadata->>'key')::uuid` fails loudly on malformed metadata; that is the contract.
+- **Outbox shape.** Separate `event_store.outbox` and `event_store.outbox_quarantine` tables. Partial index `ix_outbox_pending ON event_store.outbox (outbox_id) WHERE sent_utc IS NULL` orders pending rows in FIFO sequence. Outbox has `event_type`, `last_error`, `next_attempt_at`, and a nullable `destination` column for future routing. No FK from quarantine to outbox; quarantine `outbox_id` is a historical reference only.
+- **Migration mechanics.** Hand-rolled forward-only SQL files in `/migrations/*.sql`, applied by an Npgsql-based `MigrationRunner` in `EventStore.Postgres`. `pg_advisory_lock`-guarded across the whole batch (key `0x4553_5243_515F_4D52L`), transactional per migration, SHA-256 checksum over raw embedded bytes verified on each run. Dry-run mode prints the pending list without lock or DDL but still throws on checksum mismatch. Embedded resources via `LogicalName="EventStore.Postgres.Migrations.%(FileName)%(Extension)"`. CLI via `EventStore.Postgres.Cli` console project, `EVENT_STORE_CONNECTION_STRING`, exit codes 0/1/64/78.
+- **GlobalPosition will eventually live on `EventEnvelope`** (lean from Session 0002 planning). Finalization deferred to Weeks 5-6 when the projection-facing API exposes a concrete consumer.
+- **Code-first vs manuscript routing rule.** When the implementation and manuscript disagree, the implementation choice wins and a Track A flag is logged in the session log. Three cases require itemizing the impact rather than only logging the flag:
+  - The chapter is the pedagogical anchor for the pattern.
+  - The change is a public-API commitment readers can spot from outside the code.
+  - The divergence ripples across multiple chapters.
+  Otherwise the flag entry in the session log is the full record.
+- **Ten Track A flags from Session 0002 are pending batched routing to Track A**, deferred until the end of Weeks 3-4. Captured with full discovery context in `docs/sessions/0002-weeks3-4-postgres-adapter.md`. None of the ten meet a carve-out condition; the batched route is the right shape.
 
 ## My working pattern with Claude Code
 
-I review every proposed command and file before approval. I do not use auto-approve options. I want the friction. Phase 1 has been clean because of this pattern, including catching real bugs in multi-step commands and surfacing manuscript discrepancies before they propagate into the implementation.
+I review every proposed command and file before approval. I do not use auto-approve options. I want the friction. The previous sessions have been clean because of this pattern, including catching real bugs in multi-step commands and surfacing manuscript discrepancies before they propagate into the implementation.
 
 When I start a new Claude Code session, the first message has the same shape:
 
 > Please re-read CLAUDE.md, docs/PLAN.md, and docs/rules.txt. Then summarize back to me: (1) the work items already complete based on what is in the repo, and (2) the work items still remaining for the current phase. After I confirm the summary is right, we will start on the next item.
 
-I will follow that pattern again when I start the next Claude Code session for the PostgreSQL migration work.
+I will follow that pattern again when I start the next Claude Code session for the PostgreSQL adapter implementation.
 
 ## Writing rules to apply throughout this conversation
 
@@ -206,10 +220,10 @@ These come from `docs/rules.txt` in the repo:
 
 ## How I want this session to flow
 
-We discuss the four PostgreSQL/outbox questions above. You give me your read on each, including any trade-offs I have not surfaced. I push back where I disagree. We arrive at a position I am confident in.
+We discuss the four adapter questions above. You give me your read on each, including any trade-offs I have not surfaced. I push back where I disagree. We arrive at a position I am confident in.
 
-Once we agree, you draft the instruction I will send to Claude Code. The instruction should set the scope clearly, reference the relevant manuscript chapter (Chapter 8), and ask Claude Code to propose the schema before writing any file.
+Once we agree, you draft the instruction I will send to Claude Code. The instruction should set the scope clearly, reference the relevant manuscript chapter (Chapter 8), and ask Claude Code to propose the adapter shape before writing any file.
 
-After the migration is done, we repeat the pattern for the PostgreSQL adapter implementation, then for the OutboxProcessor. Each gets its own session. By the end of Weeks 3-4, three more `docs/sessions/` files will exist, documenting the path through the PostgreSQL work.
+After the adapter is done, we repeat the pattern for the `OutboxProcessor` in Session 0004. By the end of Weeks 3-4, two more `docs/sessions/` files will exist documenting the path through the rest of the PostgreSQL work, plus their `-setup.md` companions under the new two-file convention.
 
-Let's start with question 1: the schema design for the events table. What columns, what types, what indexes, what constraints. What does Chapter 8 mandate and what is open to choice. Verify the SQL the manuscript shows against PostgreSQL 16 capabilities and any improvements we should adopt now. Keep an eye on the EventEnvelope column order so the adapter mapping is direct.
+Let's start with question 1: serializer choice. System.Text.Json vs Newtonsoft.Json for the EventStore.Postgres adapter's serialize-on-write, deserialize-on-read path. What does Chapter 8 mandate and what is open. Surface trade-offs I have not. My current lean is System.Text.Json.
