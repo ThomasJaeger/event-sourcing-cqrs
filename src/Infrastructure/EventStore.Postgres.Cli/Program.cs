@@ -1,4 +1,4 @@
-using EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 
 const string usage = "Usage: EventStore.Postgres.Cli migrate [--dry-run]";
 
