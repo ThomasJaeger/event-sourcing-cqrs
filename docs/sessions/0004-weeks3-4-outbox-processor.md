@@ -5,7 +5,14 @@ Phase: 2 (Weeks 3-4) per PLAN.md; Session 3 of 3 in the reconciled six-week plan
 
 ## Status
 
-Design record. Written in Track B ahead of code. Track C has not yet executed this session. When Track C ships, this document is updated in place with deliverables shipped, test counts, deviations, and cross-track flag resolutions, following the Session 0003 single-file convention.
+Shipped 2026-05-12. Track C executed against the design record in four commits.
+
+1. `be8ef46` — IMessageDispatcher, OutboxMessage, IEventHandler contracts in Domain.Abstractions
+2. `86ae4c4` — OutboxRetryPolicy with 16 xUnit cases across 2 test methods
+3. `e5b361d` — OutboxProcessor with backoff, quarantine, and shared dispatcher (8 integration tests)
+4. `18b4df7` — AddPostgresEventStore composition-root extension (1 DI-resolution test)
+
+Sections below describe both the design as agreed in Track B and the implementation as shipped. Where execution refined a design decision, the section text reflects what shipped; the "Deviations from the design record" section catalogues each refinement with its reason.
 
 ## Scope
 
@@ -27,7 +34,7 @@ The pending-row query honors the Session 0002 schema additions (`next_attempt_at
 
 ```sql
 WHERE sent_utc IS NULL
-  AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+  AND (next_attempt_at IS NULL OR next_attempt_at <= @now)
 ORDER BY outbox_id
 LIMIT @batch_size
 ```
@@ -42,7 +49,7 @@ The existing `ix_outbox_pending` partial index covers the predicate and the FIFO
 SELECT outbox_id, event_id, event_type, payload, metadata, attempt_count
 FROM event_store.outbox
 WHERE sent_utc IS NULL
-  AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+  AND (next_attempt_at IS NULL OR next_attempt_at <= @now)
 ORDER BY outbox_id
 LIMIT @batch_size
 FOR UPDATE SKIP LOCKED;
@@ -63,6 +70,8 @@ delay_seconds = min(2 ^ (attempt_count - 1), 300)
 next_attempt_at = utcNow + random(0, delay_seconds)
 ```
 
+The cap activates at attempt 10 (2^9 = 512 > 300) and is forward-defensive against a future `MaxAttempts` increase. Under v1's `MaxAttempts = 10` the processor quarantines before the policy is invoked at the cap boundary, so the curve the policy actually exercises in production runs attempts 1..9 with raw delays of 1, 2, 4, 8, 16, 32, 64, 128, 256 seconds.
+
 Worst-case time from first failure to quarantine is ~8.5 minutes, average ~4. Transient blips clear in the early attempts; a broker-down outage gets a handful of patient retries before an operator-visible quarantine.
 
 Full jitter (not equal jitter, not no jitter) handles the thundering-herd case where a subscriber recovers and the entire in-flight batch falls on the same exponential ladder. AWS Architecture Blog's "Exponential Backoff and Jitter" is the standard reference.
@@ -78,15 +87,17 @@ WITH moved AS (
   DELETE FROM event_store.outbox
   WHERE outbox_id = @outbox_id
   RETURNING outbox_id, event_id, event_type, payload, metadata,
-            created_utc, attempt_count, last_error
+            occurred_utc, attempt_count, last_error
 )
 INSERT INTO event_store.outbox_quarantine
   (outbox_id, event_id, event_type, payload, metadata,
-   created_utc, attempt_count, last_error, quarantined_utc)
+   occurred_utc, attempt_count, final_error, quarantined_at)
 SELECT outbox_id, event_id, event_type, payload, metadata,
-       created_utc, attempt_count, last_error, now()
+       occurred_utc, attempt_count, last_error, @now
 FROM moved;
 ```
+
+The live `outbox.last_error` column is renamed to `final_error` on the way into `outbox_quarantine` because the row is no longer in retry. `@now` is bound from the injected `TimeProvider` so FakeTimeProvider drives quarantine timestamps deterministically; the schema's `quarantined_at DEFAULT now()` is the fallback when no parameter is supplied.
 
 One round trip, atomic. The Session 0002 reminder — `outbox_quarantine.attempt_count` is NOT NULL with no default, easy to forget to carry — is structurally answered here. `attempt_count` is never constructed by C# code; it's carried by SQL out of `DELETE ... RETURNING`. The footgun is closed at the schema-plus-query level rather than at the "remember to" level.
 
@@ -112,14 +123,14 @@ Shutdown: the `BackgroundService` stopping token flows through every async call.
 
 ### Q6: `IMessageDispatcher` and `IEventHandler<TEvent>`
 
-`IMessageDispatcher` lives in `Domain.Abstractions`. Payload is a typed envelope. Returns `Task`, throws on failure. One implementation in this session.
+`IMessageDispatcher` lives in `Domain.Abstractions`. Payload is a typed envelope. Returns `Task`, throws on failure. One implementation in this session, in a new `src/Infrastructure/Outbox/` project. The design record initially left the implementation's project location implicit; the resolved placement keeps the engine-agnostic dispatcher in a project both the PostgreSQL and the future SQL Server adapter can share without violating ADR 0004 (the ADR governs engine-specific outbox mechanics — SQL, connection acquisition, retry policy, the processor itself — not consumer-side handler resolution).
 
 ```csharp
 namespace EventSourcingCqrs.Domain.Abstractions;
 
 public interface IMessageDispatcher
 {
-    Task DispatchAsync(OutboxMessage message, CancellationToken cancellationToken);
+    Task DispatchAsync(OutboxMessage message, CancellationToken ct);
 }
 
 public sealed record OutboxMessage(
@@ -130,9 +141,10 @@ public sealed record OutboxMessage(
     EventMetadata Metadata,
     int AttemptCount);
 
-public interface IEventHandler<in TEvent> where TEvent : IDomainEvent
+public interface IEventHandler<in TEvent>
+    where TEvent : IDomainEvent
 {
-    Task HandleAsync(TEvent domainEvent, CancellationToken cancellationToken);
+    Task HandleAsync(TEvent domainEvent, CancellationToken ct);
 }
 ```
 
@@ -142,23 +154,31 @@ public interface IEventHandler<in TEvent> where TEvent : IDomainEvent
 
 `Task`-returning, throws on failure, symmetric with `IEventStore.AppendAsync`. The processor's try/catch from Q3/Q4 pivots on exceptions. A `DispatchResult` enum with a "permanent failure, quarantine immediately" variant is a legitimate future feature, but v1 has no use case for it. Defer.
 
-`InProcessMessageDispatcher` resolves zero-to-many `IEventHandler<TEvent>` from DI by reflection, invokes them in registration order, swallows nothing. Reflection cost is small; the alternative (source-generated dispatch tables) optimizes a path that isn't hot. If profiling later proves it matters, the contract doesn't change.
+`InProcessMessageDispatcher` resolves zero-to-many `IEventHandler<TEvent>` from DI by reflection, invokes them in registration order, swallows nothing. Reflection cost is small; the alternative (source-generated dispatch tables) optimizes a path that isn't hot. The shipped implementation caches the resolved `MethodInfo` per event type in a `ConcurrentDictionary` so the per-dispatch reflection cost is one cache lookup plus the closed-generic interface call, not a fresh `GetMethod` traversal per message. If profiling later proves it matters, the contract doesn't change.
 
 ```csharp
 public sealed class InProcessMessageDispatcher : IMessageDispatcher
 {
+    private static readonly ConcurrentDictionary<Type, MethodInfo> HandleMethodCache = new();
     private readonly IServiceProvider _services;
 
     public InProcessMessageDispatcher(IServiceProvider services)
-        => _services = services;
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        _services = services;
+    }
 
     public async Task DispatchAsync(OutboxMessage message, CancellationToken ct)
     {
-        var handlerType = typeof(IEventHandler<>).MakeGenericType(message.Event.GetType());
-        var handlers = _services.GetServices(handlerType);
-        foreach (var handler in handlers)
+        ArgumentNullException.ThrowIfNull(message);
+        var eventType = message.Event.GetType();
+        var handlerType = typeof(IEventHandler<>).MakeGenericType(eventType);
+        var method = HandleMethodCache.GetOrAdd(
+            eventType,
+            _ => handlerType.GetMethod(nameof(IEventHandler<IDomainEvent>.HandleAsync))!);
+
+        foreach (var handler in _services.GetServices(handlerType))
         {
-            var method = handlerType.GetMethod(nameof(IEventHandler<IDomainEvent>.HandleAsync))!;
             await (Task)method.Invoke(handler, new object[] { message.Event, ct })!;
         }
     }
@@ -169,27 +189,27 @@ In Session 0004 the resolved handler list is always empty — no projections exi
 
 ### Q7: Test plan
 
-Eight integration tests against `PostgresFixture` in `Postgres/OutboxProcessorTests.cs`, two unit tests in `Outbox/OutboxRetryPolicyTests.cs`, one DI-resolution test in `ServiceCollectionExtensionsTests.cs`. Eleven total. No `Thread.Sleep` anywhere.
+Eight integration tests against `PostgresFixture` in `Postgres/OutboxProcessorTests.cs`, two unit tests in `Postgres/OutboxRetryPolicyTests.cs` (adapter-local per Q3), one DI-resolution test in `Postgres/ServiceCollectionExtensionsTests.cs`. Eleven methods total. No `Thread.Sleep` anywhere.
 
-Integration tests (call `ProcessBatchAsync` directly; do not exercise the `BackgroundService` lifecycle):
+Integration tests (call `ProcessBatchAsync` directly; do not exercise the `BackgroundService` lifecycle). Test method names use snake-case-sentence style per the repo convention (`Cancelling_a_shipped_order_throws`), not the PascalCase the design record initially used:
 
-1. `DrainsPendingRow_MarksSent` — happy path; row becomes sent, dispatcher called once with deserialized event.
-2. `EmptyOutbox_ReturnsZero_DoesNotCallDispatcher` — empty short-circuit.
-3. `FailedDispatch_IncrementsAttemptCount_SchedulesNextAttempt_PersistsLastError` — failure UPDATE.
-4. `RowWithFutureNextAttemptAt_IsSkipped` — `next_attempt_at` filter against `FakeTimeProvider`.
-5. `ExceedsMaxAttempts_QuarantinesRow_PreservesAttemptCount` — atomic CTE move; `attempt_count = 10` carried in quarantine row.
-6. `SuccessAfterPriorFailure_PersistsSentDespiteAttemptCount` — success doesn't reset history.
-7. `DispatchesInFifoOrder_WithinBatch` — `ORDER BY outbox_id`.
-8. `ConcurrentProcessors_SkipLocked_NoDoubleDispatch` — `FOR UPDATE SKIP LOCKED` defense-in-depth.
+1. `Drains_pending_row_marks_sent` — happy path; row becomes sent, dispatcher called once with deserialized event.
+2. `Empty_outbox_returns_zero_and_does_not_call_dispatcher` — empty short-circuit.
+3. `Failed_dispatch_increments_attempt_count_schedules_next_attempt_persists_last_error` — failure UPDATE.
+4. `Row_with_future_next_attempt_at_is_skipped` — `next_attempt_at` filter against `FakeTimeProvider`.
+5. `Exceeds_max_attempts_quarantines_row_preserves_attempt_count` — atomic CTE move; `attempt_count = 3` carried in quarantine row under the test's `MaxAttempts = 3`.
+6. `Success_after_prior_failure_persists_sent_despite_attempt_count` — success doesn't reset history.
+7. `Dispatches_in_fifo_order_within_batch` — `ORDER BY outbox_id`.
+8. `Concurrent_processors_skip_locked_no_double_dispatch` — `FOR UPDATE SKIP LOCKED` defense-in-depth, deterministically interleaved via `TaskCompletionSource` gates rather than wall-clock sleeps.
 
 Unit tests for `OutboxRetryPolicy`:
 
-9. `ComputeNextAttempt_FollowsExponentialBackoffWithCap` — schedule table 1..15, 300s cap holds from attempt 9.
-10. `ComputeNextAttempt_AtMaxAttempts_ReturnsQuarantineSentinel` — boundary check that drives the processor's quarantine branch.
+9. `ComputeNextAttempt_follows_exponential_backoff_with_cap` — `[Theory]` with 15 `[InlineData]` rows covering attempts 1..15; jitter pinned to 1.0 so the asserted delays equal the raw curve.
+10. `ComputeNextAttempt_zero_jitter_returns_now` — pins the lower bound of the full-jitter window where Test 9 pins the upper bound. (The original `ComputeNextAttempt_AtMaxAttempts_ReturnsQuarantineSentinel` shape was based on a misreading of the policy's responsibility: the processor branches on the `attempt_count + 1 >= MaxAttempts` check before invoking the policy, so the policy never sees max-attempts as a special input and has no quarantine sentinel to return.)
 
 Composition root test:
 
-11. `AddPostgresEventStore_RegistersExpectedServices` — extension resolves `IEventStore`, `IMessageDispatcher`, `OutboxProcessor` (as `IHostedService`), `INpgsqlConnectionFactory`, `EventTypeRegistry`. No Postgres dependency; uses `ServiceProvider` only.
+11. `AddPostgresEventStore_resolves_registered_services` — extension resolves `IEventStore`, `IMessageDispatcher`, `OutboxProcessor` (as `IHostedService`), `INpgsqlConnectionFactory`, `EventTypeRegistry`, `JsonSerializerOptions`, `OutboxRetryPolicy`. No Postgres dependency; uses `ServiceProvider` only.
 
 Deterministic time and jitter wiring via `OutboxProcessorOptions`:
 
@@ -221,13 +241,28 @@ public static class ServiceCollectionExtensions
         Action<PostgresEventStoreOptions> configure)
     {
         services.Configure(configure);
+        services.AddOptions<OutboxProcessorOptions>();
+
+        services.TryAddSingleton<NpgsqlDataSource>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<PostgresEventStoreOptions>>().Value;
+            return NpgsqlDataSource.Create(opts.ConnectionString);
+        });
+        services.TryAddSingleton(_ => new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+        });
 
         services.AddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
         services.AddSingleton<EventTypeRegistry>();
-
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
-        services.Configure<OutboxProcessorOptions>(_ => { });
+        services.AddSingleton<OutboxRetryPolicy>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<OutboxProcessorOptions>>().Value;
+            return new OutboxRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
+        });
         services.AddSingleton<IMessageDispatcher, InProcessMessageDispatcher>();
         services.AddHostedService<OutboxProcessor>();
 
@@ -241,9 +276,17 @@ public sealed class PostgresEventStoreOptions
 }
 ```
 
+Three refinements over the design record's original sketch.
+
+First, `NpgsqlDataSource` and `JsonSerializerOptions` register via `TryAddSingleton` so a host that pre-registers either one wins. The default `NpgsqlDataSource` is built from `PostgresEventStoreOptions.ConnectionString` via `NpgsqlDataSource.Create` (the modern Npgsql connection-pooling primitive); the sketch's older `new NpgsqlConnection(connStr)` path is superseded. A host that needs custom data-source wiring (logging integration, custom type mappings, multiplexing) registers its own `NpgsqlDataSource` before calling the extension.
+
+Second, `OutboxRetryPolicy` registers via a factory delegate that reads `OutboxProcessorOptions.BaseSeconds`/`CapSeconds` at first resolution. The options class's curve properties are therefore live, not decorative; the host can configure them before calling the extension. The singleton is constructed once, so a `services.Configure<OutboxProcessorOptions>` call after `AddPostgresEventStore` has no effect on the already-built policy.
+
+Third, `AddOptions<OutboxProcessorOptions>()` replaces the design record's `Configure<>(_ => { })` placeholder. Same effect, no no-op lambda.
+
 The extension lives in `EventStore.Postgres`, not a sibling DI-only project. ADR 0004 (self-contained adapters) governs. The SQL Server adapter session will need a parallel `AddSqlServerEventStore` in `EventStore.SqlServer`. The host calls one or the other; switching backends is a one-line change.
 
-Lifetimes are all singleton. `INpgsqlConnectionFactory` wraps a connection string; `IEventStore` opens connections per call; `IMessageDispatcher` resolves handlers from `IServiceProvider` per dispatch without caching; `OutboxProcessor` is `IHostedService`, singleton by registration semantics. The per-batch scope lives inside a method, not in DI. Scoped lifetimes arrive with the Application command pipeline in Phase 2; the write-side event store doesn't need them.
+Lifetimes are all singleton. `INpgsqlConnectionFactory` wraps an `NpgsqlDataSource`; `IEventStore` opens connections per call through the factory; `IMessageDispatcher` resolves handlers from `IServiceProvider` per dispatch and caches the resolved `MethodInfo` per event type in a static `ConcurrentDictionary`; `OutboxProcessor` is `IHostedService`, singleton by registration semantics. The per-batch scope lives inside a method, not in DI. Scoped lifetimes arrive with the Application command pipeline in Phase 2; the write-side event store doesn't need them.
 
 `INpgsqlConnectionFactory` is PostgreSQL-specific and lives in `Infrastructure.EventStore.Postgres`, not `Domain.Abstractions`. The Npgsql-typed `NpgsqlConnection` return is the reason: lifting the interface to Domain would force a return type of `DbConnection` and lose the typed Npgsql API. Per ADR 0004 the SQL Server adapter declares its own `ISqlConnectionFactory` separately. Adapter-specific factories on the adapter-specific side; tests substitute against the adapter-specific interface.
 
@@ -267,16 +310,48 @@ Lifetimes are all singleton. `INpgsqlConnectionFactory` wraps a connection strin
 
 8. **Chapter 8's processor takes `IDbConnectionFactory`, `IMessageDispatcher`, and `ILogger` via constructor injection but never shows composition-root wiring or names the DI extension method.** The reference implementation ships `AddPostgresEventStore`, with `INpgsqlConnectionFactory` (PostgreSQL-specific, not in Domain.Abstractions) and options-pattern configuration. The book could acknowledge this in a "Wiring it up" half-page near the end of the Publication of Events section, showing host-side registration without prescribing a DI framework. Same flag applies to the SQL Server adapter (`AddSqlServerEventStore`, `ISqlConnectionFactory`).
 
-## Test count expectation
+## Test count
+
+The design record projected 11 new tests counting methods. Three numbers are useful when reconciling that projection against test-runner output: the design's projection, the count of test methods actually written, and the xUnit-reported case count (which expands `[Theory]` rows). Legend: **planned methods** = Track B design projection; **methods** = test methods Track C wrote; **xUnit cases** = test-runner total including `[Theory]` row expansion.
 
 | Checkpoint | Domain.Tests | Infrastructure.Tests | Total |
 | --- | --- | --- | --- |
 | Session 0003 baseline (end of 0003) | 22 | 30 | 52 |
-| After Session 0004 (planned) | 22 | 41 | 63 |
+| Session 0004 planned methods | 22 | 41 | 63 |
+| Session 0004 actual methods | 22 | 41 | 63 |
+| Session 0004 actual xUnit cases | 22 | 55 | 77 |
 
-Eleven new tests: 8 `OutboxProcessor` integration tests, 2 `OutboxRetryPolicy` unit tests, 1 `ServiceCollectionExtensions` DI-resolution test. All Infrastructure-side since `OutboxRetryPolicy` lives in `EventStore.Postgres` per the per-adapter principle.
+Method-level breakdown for Session 0004 (11 total, all Infrastructure-side per the per-adapter principle):
 
-Cold-cache wall time expected to grow by the eight integration tests at low-hundreds-of-milliseconds each, sharing `PostgresFixture` via `IClassFixture` per Session 0002's amortization guarantee. If cold-cache jumps by 3.5s, that's the trigger Session 0003 flagged: introduce `[CollectionDefinition]` cross-class fixture sharing.
+- `OutboxRetryPolicyTests`: 2 methods (1 `[Theory]` with 15 `[InlineData]` rows = 15 cases, 1 `[Fact]` = 1 case → 16 cases)
+- `OutboxProcessorTests`: 8 methods, 8 cases
+- `ServiceCollectionExtensionsTests`: 1 method, 1 case
+
+`Infrastructure.Tests` warm-cache wall time stayed at ~3s against the Session 0003 baseline. The Session 0003 trigger condition for introducing `[CollectionDefinition]` cross-class fixture sharing (cold-cache jumps of 3.5s "for no obvious reason") was not exercised; container reuse via `IClassFixture<PostgresFixture>` continues to absorb the new test class's overhead.
+
+## Deviations from the design record
+
+None of these changed a design decision. Each is a refinement caught during execution that the design record was silent on or mildly wrong about.
+
+**`InProcessMessageDispatcher` project placement.** Q6 originally left the implementation's project implicit. The shipped class lives in a new `src/Infrastructure/Outbox/` project so the future SQL Server adapter session shares the engine-agnostic dispatcher without project-referencing `EventStore.Postgres` or duplicating the class. ADR 0004 governs engine-specific outbox mechanics, not consumer-side handler resolution.
+
+**Q4 CTE column names.** The design record's CTE example used `created_utc`, `last_error` in the INSERT column list, and `quarantined_utc`. The migration-0001 schema uses `occurred_utc`, `final_error`, and `quarantined_at`. The implementation honors the schema; this section's CTE has been updated in place.
+
+**Q3 cap-vs-MaxAttempts clarification.** The cap activates at attempt 10 (2^9 = 512 > 300) and is forward-defensive against a future `MaxAttempts` increase. Under v1's `MaxAttempts = 10` the policy never sees the cap branch in normal operation because the processor quarantines first. Q3 now states this explicitly.
+
+**Q7 test name swap.** `ComputeNextAttempt_AtMaxAttempts_ReturnsQuarantineSentinel` was based on a misreading of the policy's responsibility — the processor checks the max-attempts boundary before invoking the policy, so the policy has no quarantine branch to test. Replaced with `ComputeNextAttempt_zero_jitter_returns_now`, which pins the lower bound of the full-jitter window where the curve test pins the upper. All Q7 test names also moved from PascalCase to the repo's snake-case-sentence convention.
+
+**Q8 refinements.** Three. The composition-root sketch's `new NpgsqlConnection(connStr)` path is superseded by `NpgsqlDataSource.Create(opts.ConnectionString)` inside a `TryAddSingleton`, so a host that pre-registers its own data source wins. `JsonSerializerOptions` also registers via `TryAddSingleton` for the same reason. `OutboxRetryPolicy` registers via a factory delegate that reads `OutboxProcessorOptions.BaseSeconds`/`CapSeconds` at first resolution, so the curve properties on the options class are live rather than decorative.
+
+**Cancellation-token parameter name.** Contracts use `CancellationToken ct` rather than the design record's verbatim `CancellationToken cancellationToken`. The repo's existing `IEventStore` and `IEventStoreRepository` both use `ct`; matching the local convention beats faithfulness to the sketch.
+
+**Static parameter-binding helpers duplicated in `OutboxProcessor`.** `AddBigInt`, `AddInteger`, `AddText`, `AddTimestampTz` are copied from `PostgresEventStore` into `OutboxProcessor` rather than promoted to an `internal static` shared file. Twenty lines of duplication is cheaper than a Session 0003 refactor whose scope wasn't approved; a future cleanup commit can consolidate if the SQL Server adapter session amplifies the duplication.
+
+**One additional NuGet package not flagged in the Commit 4 proposal.** `Microsoft.Extensions.DependencyInjection` (the implementation package, version 10.0.0) was added to `Directory.Packages.props` and referenced from `Infrastructure.Tests` for `BuildServiceProvider()`. The proposal had only listed the abstractions package. Caught at first build of `ServiceCollectionExtensionsTests`.
+
+## Internal notes
+
+**`DateTimeOffset` introduced for time-policy work; `EventMetadata.OccurredUtc` remains `DateTime`.** `OutboxRetryPolicy.ComputeNextAttempt` takes and returns `DateTimeOffset` because `TimeProvider.GetUtcNow()` natively produces `DateTimeOffset`. `EventMetadata.OccurredUtc` stays `DateTime` (with `Kind = Utc`) because that's the existing repo convention and Chapter 8 doesn't commit either way. The processor converts at the SQL-parameter-binding boundary (`nextAttempt.UtcDateTime`). Not a flag against the book; a forward-looking note for whichever session decides whether the rest of the repo should normalize on `DateTimeOffset`.
 
 ## Notes for next sessions
 
@@ -288,4 +363,6 @@ Cold-cache wall time expected to grow by the eight integration tests at low-hund
 
 **Composition-root extension exists but no host consumes it yet.** The `AddPostgresEventStore` extension ships in Session 0004 with its DI-resolution test, but no `Program.cs` calls it. First real consumer is whichever host lands first — Workers for the OutboxProcessor as a `BackgroundService`, or possibly Api/Web if the foundation plan shifts. The embedded migration-runner call flagged in Session 0002 (`MigrationRunner.RunPendingAsync` before binding ports) lands in that same host-introduction session.
 
-**`OutboxRetryPolicy` constants are hardcoded in this session.** `BaseSeconds = 1`, `CapSeconds = 300`, formula `2 ^ (attempt - 1)`. If operational experience after Phase 6 suggests different values, the policy is a small enough class to make it configurable via `OutboxProcessorOptions` cleanly; not premature to make it configurable now if Track C wants to. Either way works for v1.
+**`OutboxRetryPolicy` curve is host-tunable as shipped.** `BaseSeconds = 1` and `CapSeconds = 300` are the policy's `public const int` defaults; `OutboxProcessorOptions` exposes both as `init`-able properties whose defaults reference the policy constants. The DI factory delegate constructs the policy from the options at first resolution, so a host that wants a different curve calls `services.Configure<OutboxProcessorOptions>` before `AddPostgresEventStore`. `MaxAttempts` is on the options too; it controls the processor's quarantine-branch decision rather than the curve.
+
+**PLAN.md folder layout describes `Infrastructure/Outbox/` in its pre-ADR-0004 sense.** PLAN.md says the folder hosts "OutboxProcessor (PostgreSQL-resident outbox)". Per ADR 0004 the per-adapter `OutboxProcessor` lives in `EventStore.Postgres`, and Session 0004 repurposed `Infrastructure/Outbox/` for the engine-agnostic `InProcessMessageDispatcher`. Phase 14 reconciliation should update PLAN.md to describe the project's actual post-Session-0004 role; not blocking earlier work.
