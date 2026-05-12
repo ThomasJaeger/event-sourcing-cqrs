@@ -20,7 +20,7 @@ public sealed class InMemoryEventStore : IEventStore
 
         if (stream.Count != expectedVersion)
         {
-            throw new ConcurrencyException(streamId, expectedVersion, stream.Count);
+            throw new ConcurrencyException(streamId, expectedVersion);
         }
 
         stream.AddRange(events);
