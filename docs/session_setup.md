@@ -40,11 +40,11 @@ I am preparing to submit a proposal to Pearson/Addison-Wesley for the Vaughn Ver
 
 Thomas Jaeger. Principal Architect with four decades in software since 1991. I run Legacy to Modern LLC, a one-year-old consultancy focused on modernizing legacy systems into event-sourced cloud-native architectures. The consultancy has its first paying customer; I work it part-time alongside a day job and want to take it full-time once the book gives the practice enough credibility to drive consistent inbound leads.
 
-Earlier in my career I was a Senior Cloud Application Architect at AWS where I introduced DDD, CQRS, and Event Sourcing to engineering teams at Apple, Capital One, Intuit, Verizon, Adobe, Expedia/VRBO, and the Broadridge-UBS Wealth Management Platform. I led Verizon's first executive-level Event Storming workshops and have facilitated dozens of similar sessions since.
+Earlier in my career I was a Senior Cloud Application Architect at a major cloud provider, where I introduced DDD, CQRS, and Event Sourcing to enterprise engineering teams across financial services, retail, telecom, and media. I led executive-level Event Storming workshops there and have facilitated dozens of similar sessions since.
 
 I work in C# and .NET. I produce the YouTube channel *Creating Great Software* (1,200 subscribers, top video on Hexagonal Architecture at 25,000 views), write at thomasjaeger.wordpress.com, and share code at github.com/ThomasJaeger.
 
-I attended a presentation by Greg Young while at AWS. That is the extent of my contact with the Event Sourcing community's headline figures so far.
+I attended a presentation by Greg Young while at the cloud provider. That is the extent of my contact with the Event Sourcing community's headline figures so far.
 
 ## The reference implementation
 
