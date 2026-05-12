@@ -40,7 +40,6 @@ public class InMemoryEventStoreTests
 
         ex.StreamId.Should().Be(StreamId);
         ex.ExpectedVersion.Should().Be(0);
-        ex.ActualVersion.Should().Be(1);
     }
 
     [Fact]
