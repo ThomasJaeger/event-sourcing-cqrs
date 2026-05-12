@@ -6,6 +6,7 @@
     <Project Path="src/Infrastructure/EventStore.InMemory/EventStore.InMemory.csproj" />
     <Project Path="src/Infrastructure/EventStore.Postgres/EventStore.Postgres.csproj" />
     <Project Path="src/Infrastructure/EventStore.Postgres.Cli/EventStore.Postgres.Cli.csproj" />
+    <Project Path="src/Infrastructure/Outbox/Outbox.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Domain.Tests/Domain.Tests.csproj" />

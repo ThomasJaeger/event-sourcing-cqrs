@@ -16,19 +16,19 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 // unique violations, NVARCHAR(MAX) for JSON, filtered indexes).
 public sealed class PostgresEventStore : IEventStore
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly INpgsqlConnectionFactory _factory;
     private readonly EventTypeRegistry _registry;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public PostgresEventStore(
-        NpgsqlDataSource dataSource,
+        INpgsqlConnectionFactory factory,
         EventTypeRegistry registry,
         JsonSerializerOptions jsonOptions)
     {
-        ArgumentNullException.ThrowIfNull(dataSource);
+        ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
-        _dataSource = dataSource;
+        _factory = factory;
         _registry = registry;
         _jsonOptions = jsonOptions;
     }
@@ -45,7 +45,7 @@ public sealed class PostgresEventStore : IEventStore
             return;
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(ct);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
         try
@@ -110,7 +110,7 @@ public sealed class PostgresEventStore : IEventStore
         int fromVersion = 0,
         CancellationToken ct = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(ct);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT stream_version, event_id, event_type, event_version, " +

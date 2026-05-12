@@ -9,11 +9,15 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Domain\Domain.csproj" />
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.InMemory\EventStore.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />
   </ItemGroup>
 </Project>
