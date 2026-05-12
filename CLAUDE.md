@@ -17,15 +17,16 @@ The code should be readable as a study text, not just runnable. Long methods are
 ## Stack and constraints
 
 * .NET 10 LTS, C# 14. Pinned to .NET 10 via `global.json` at the repo root.
-* Three event-store implementations as first-class peers behind a common abstraction:
+* Four event-store implementations as first-class peers behind a common abstraction:
   - PostgreSQL 16 (hand-rolled, the relational path)
+  - SQL Server 2022 (hand-rolled, the relational path on the Microsoft stack)
   - KurrentDB (the specialized path)
   - DynamoDB (the managed-cloud path, via LocalStack for local dev and tests)
 * PostgreSQL 16 for read models, with a mix of relational tables and JSONB columns.
 * Blazor Server for the UI, ASP.NET Core minimal APIs for the JSON API.
 * Tailwind for styling.
 * SignalR for live dashboard updates.
-* xUnit, FluentAssertions, FsCheck (property-based tests), Stryker.NET (mutation tests), Testcontainers (PostgreSQL and KurrentDB), LocalStack (DynamoDB).
+* xUnit, FluentAssertions, FsCheck (property-based tests), Stryker.NET (mutation tests), Testcontainers (PostgreSQL, SQL Server, and KurrentDB), LocalStack (DynamoDB).
 * Docker Compose to run the whole system locally with one command.
 
 ## Architectural rules
@@ -68,9 +69,10 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 
 ### Event store abstraction
 
-* `IEventStore` defined in Domain.Abstractions. Three implementations: `EventStore.Postgres`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
+* `IEventStore` defined in Domain.Abstractions. Four implementations: `EventStore.Postgres`, `EventStore.SqlServer`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
 * Switching between them is a configuration change, not a code change. The abstraction is real, not aspirational.
 * PostgreSQL adapter: hand-rolled SQL via Npgsql. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
+* SQL Server adapter: hand-rolled SQL via Microsoft.Data.SqlClient. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
 * KurrentDB adapter: gRPC client. Native catch-up subscriptions used for projections instead of polling.
 * DynamoDB adapter: composite key (partition = AggregateType#AggregateId, sort = Version), conditional writes with `attribute_not_exists(Version)`. DynamoDB Streams feeds projections.
 * No ORM for the event store. Read models may use Entity Framework Core if it helps; the event store does not.
@@ -82,7 +84,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Projections do not call back into the write side.
 * Each projection has its own checkpoint. Projections never share state.
 * Four projections in v1: OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection. Mix of relational and JSONB read models.
-* Trigger mechanism is per event store: polling and LISTEN/NOTIFY for PostgreSQL, native subscriptions for KurrentDB, DynamoDB Streams for DynamoDB.
+* Trigger mechanism is per event store: polling and LISTEN/NOTIFY for PostgreSQL, polling for SQL Server, native subscriptions for KurrentDB, DynamoDB Streams for DynamoDB.
 
 ### Process managers
 
@@ -100,7 +102,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Process manager tests feed events and assert on commands emitted plus internal state.
 * Property-based tests via FsCheck for invariants and serialization roundtrips.
 * Replay tests against historical event streams.
-* Integration tests use Testcontainers (PostgreSQL, KurrentDB) and LocalStack (DynamoDB). No mocking of these stores.
+* Integration tests use Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB). No mocking of these stores.
 * Mutation testing via Stryker.NET on the Domain project.
 * Chaos and failure injection tests for projections and the outbox.
 
@@ -130,6 +132,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
     /Infrastructure
   /Infrastructure
     /EventStore.Postgres
+    /EventStore.SqlServer
     /EventStore.Kurrent
     /EventStore.DynamoDb
     /ReadModels.Postgres
@@ -166,7 +169,7 @@ The folder structure maps to chapters. Domain shows Chapters 7 and 9. Applicatio
 * Projections end in `Projection`: `OrderListProjection`, `InventoryDashboardProjection`.
 * Read models end in `ReadModel`: `OrderListReadModel`, `OrderDetailReadModel`.
 * Repositories end in `Repository`: `OrderRepository`, `InventoryRepository`.
-* Adapters are named for what they adapt: `EventStore.Postgres`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
+* Adapters are named for what they adapt: `EventStore.Postgres`, `EventStore.SqlServer`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
 * Test classes are named for the type under test, suffixed `Tests`.
 * Test method names read as sentences with underscores: `Cancelling_a_shipped_order_throws`.
 
@@ -180,7 +183,7 @@ Do not add CQRS-shaped CRUD. A command that just sets fields and emits a `Fields
 
 Do not add features outside the book's scope. The book defines what ships. If a feature is not discussed in any chapter, it does not belong in v1.
 
-Do not add a fourth event-store adapter. The book commits to three peers (PostgreSQL, KurrentDB, DynamoDB). Marten is referenced as an alternative the reader could swap in but is not implemented as a peer in v1.
+Four first-class peers: PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB. Marten remains a discussed alternative for PostgreSQL, not a shipped peer. No other peers without explicit decision.
 
 Do not implement Redis, Elasticsearch, or S3 read models. Chapter 13 discusses these as options. The reference implementation uses PostgreSQL for read models.
 
@@ -212,7 +215,7 @@ Use C# 14 features where they make the code clearer (extension members, partial 
 
 When in doubt, generate the simplest version that demonstrates the pattern, and ask whether to elaborate.
 
-Verify the abstraction holds. When working on Phases 10 and 11 (KurrentDB and DynamoDB adapters), if `IEventStore` does not fit cleanly, surface it. Better to fix the abstraction than to leak adapter-specific concepts upward.
+Verify the abstraction holds. When working on Phase 2's SQL Server adapter and Phases 10-11's KurrentDB and DynamoDB adapters, if `IEventStore` does not fit cleanly, surface it. The SQL Server adapter is the first real stress test of the abstraction because it forces a second engine before the more-different KurrentDB and DynamoDB adapters arrive. Better to fix the abstraction than to leak adapter-specific concepts upward.
 
 ## Reading order for new context
 

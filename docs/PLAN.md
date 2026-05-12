@@ -2,7 +2,7 @@
 
 This document defines the scope, sequence, and weekly targets for building the reference implementation that accompanies *Event Sourcing & CQRS* by Thomas Jaeger.
 
-This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Three event stores as first-class peers (PostgreSQL hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
+This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
 
 Realistic timeline: 24-28 weeks at 14 hours per week, solo, with Claude Code on the Max plan. Roughly six months from start to submission.
 
@@ -14,8 +14,9 @@ This document is a living plan. Update it weekly with what was actually built, w
 
 ### What ships in v1
 
-**Event stores.** Three implementations as peers behind a common abstraction:
+**Event stores.** Four implementations as peers behind a common abstraction:
 - Hand-rolled PostgreSQL (the relational path)
+- Hand-rolled SQL Server (the relational path on the Microsoft stack)
 - KurrentDB via gRPC client (the specialized path)
 - DynamoDB with conditional writes on the version attribute (the managed-cloud path)
 
@@ -23,6 +24,7 @@ Configuration switches between them with no domain-code changes.
 
 **Projection trigger mechanisms.** One per event store, demonstrating the trade-offs:
 - Polling and LISTEN/NOTIFY for PostgreSQL
+- Polling for SQL Server
 - Native catch-up subscriptions for KurrentDB
 - DynamoDB Streams plus Lambda-equivalent for DynamoDB (LocalStack for local dev and integration tests)
 
@@ -65,7 +67,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 4. Property-based tests for invariants (FsCheck)
 5. Property-based tests for serialization roundtrips
 6. Replay tests against historical event streams
-7. Integration tests with Testcontainers (PostgreSQL, KurrentDB) and LocalStack (DynamoDB)
+7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
 8. Contract tests between layers
 9. Mutation testing on the domain (Stryker.NET)
 10. Performance smoke tests
@@ -81,13 +83,13 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 - Outbox-on-legacy pattern
 - Strangler pattern showing legacy and event-sourced code coexisting
 
-**Infrastructure.** Docker Compose setup that brings up PostgreSQL, KurrentDB, LocalStack, and the application processes with one command. CI pipeline running the full test suite on every push.
+**Infrastructure.** Docker Compose setup that brings up PostgreSQL, SQL Server, KurrentDB, LocalStack, and the application processes with one command. CI pipeline running the full test suite on every push.
 
 **Documentation.** README that maps every chapter to its code. Architecture decision records (ADRs) for major choices. Cross-reference map between book chapters and code files at the front of each Part 4 chapter.
 
 ### Out of scope for v1
 
-Marten as a fourth event-store adapter. Marten is discussed in Chapter 8 as an alternative the reader could swap in, but is not implemented as a peer.
+Marten as another event-store adapter for PostgreSQL. Marten is discussed in Chapter 8 as an alternative the reader could swap in for PostgreSQL, but is not implemented as a peer.
 
 Redis, Elasticsearch, and S3 read models. Chapter 13 discusses these. The reference implementation uses PostgreSQL for read models, demonstrating the mixed pattern (DynamoDB or PostgreSQL event store paired with PostgreSQL read models).
 
@@ -111,7 +113,7 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | --- | --- | --- |
 | Domain | Order management retailer with four bounded contexts | Part 4, "The Domain" |
 | Architecture style | Hexagonal (ports and adapters) | Part 4, "Solution Structure" |
-| Event stores | PostgreSQL (hand-rolled), KurrentDB, DynamoDB as peers | Part 4, "Technology Choices" |
+| Event stores | PostgreSQL (hand-rolled), SQL Server (hand-rolled), KurrentDB, DynamoDB as peers | Part 4, "Technology Choices" |
 | Read store | PostgreSQL with relational tables and JSONB | Part 4, "Technology Choices" |
 | UI framework | Blazor Server | Part 4, "Web and API" |
 | API framework | ASP.NET Core minimal APIs | Part 4, "Web and API" |
@@ -156,6 +158,7 @@ The solution layout reflects the manuscript's Part 4 description.
     /Infrastructure     // checkpointing, batched catch-up, failure handling
   /Infrastructure
     /EventStore.Postgres
+    /EventStore.SqlServer
     /EventStore.Kurrent
     /EventStore.DynamoDb
     /ReadModels.Postgres
@@ -196,10 +199,10 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 **Goals.**
 - Solution structure created matching the layout above.
 - `global.json` pinning the SDK to .NET 10 (with `rollForward: latestFeature`).
-- Docker Compose file with PostgreSQL, KurrentDB, and LocalStack services running locally.
-- Connection from .NET to all three services working with smoke tests.
+- Docker Compose file with PostgreSQL, SQL Server, KurrentDB, and LocalStack services running locally.
+- Connection from .NET to all four services working with smoke tests.
 - `migrations/` folder with the first event store schema migration for PostgreSQL.
-- CI pipeline: build plus test on every push, against all three services. CI uses .NET 10 SDK.
+- CI pipeline: build plus test on every push, against all four services. CI uses .NET 10 SDK.
 - Domain.Abstractions populated with the core ports: `IAggregateRoot`, `IDomainEvent`, `IEventStore`, `IRepository<T>`, `ISnapshotStore`, `IProjectionCheckpoint`.
 - Common types defined: `EventId`, `StreamId`, `Version`, `EventEnvelope`, `EventMetadata` (CorrelationId, CausationId, OccurredAt, Actor).
 
@@ -210,31 +213,35 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Done when.**
 - `dotnet --version` inside the repo reports 10.0.x.
-- `docker compose up` brings up all three services healthy.
+- `docker compose up` brings up all four services healthy.
 - `dotnet test` runs and passes.
 - CI is green on a pull request.
 - The Domain.Abstractions interfaces are stable enough that the upcoming PostgreSQL adapter will fit them without redesign.
 
-### Phase 2, Weeks 3-4: PostgreSQL event store and outbox
+### Phase 2, Weeks 3-5: PostgreSQL and SQL Server event stores and outboxes
 
 **Goals.**
 - `EventStore.Postgres` adapter implementing `IEventStore` with `AppendAsync(streamId, expectedVersion, events)` and `ReadStreamAsync(streamId, fromVersion)` and `ReadAllFromCheckpointAsync(checkpoint)`.
-- Optimistic concurrency via unique constraint on (StreamId, Version). Concurrent writes throw `ConcurrencyException` with stream and expected/actual version detail.
-- JSON serialization for event payloads with type-name resolution.
-- Outbox table created. `OutboxProcessor` drains the outbox to an in-process event bus.
-- Atomic write: events table and outbox table updated in the same transaction.
-- Integration tests with Testcontainers cover: append, read, concurrent appends, outbox drain, outbox idempotency under simulated failures.
+- `EventStore.SqlServer` adapter implementing the same `IEventStore` operations against SQL Server, as a parallel hand-rolled relational implementation. Sequenced as a separate session after the PostgreSQL adapter is green; per ADR 0004 the adapter is self-contained and does not share a relational layer with the PostgreSQL adapter.
+- Optimistic concurrency via unique constraint on (StreamId, Version) in both adapters. Concurrent writes throw `ConcurrencyException` with stream and expected/actual version detail. Engine-specific unique-violation codes (SQLState 23505 for PostgreSQL, error 2627 for SQL Server) are translated inside each adapter.
+- JSON serialization for event payloads with type-name resolution. Storage type differs per engine (JSONB for PostgreSQL, NVARCHAR(MAX) for SQL Server).
+- Outbox table created in each adapter. `OutboxProcessor` drains the outbox to an in-process event bus.
+- Atomic write: events table and outbox table updated in the same transaction inside each adapter.
+- Integration tests with Testcontainers cover, for each adapter independently: append, read, concurrent appends, outbox drain, outbox idempotency under simulated failures.
 
 **Out of scope.**
 - Snapshots. Phase 12.
 - Schema versioning of events. Phase 12.
 - KurrentDB and DynamoDB adapters. Phases 10 and 11.
+- Engine-native projection trigger mechanisms for SQL Server (Service Broker, Change Tracking). The SQL Server projection trigger is polling in v1; engine-native alternatives are deferred to a later session if they are added at all.
 
 **Done when.**
-- Tests demonstrate that concurrent writes to the same stream version produce a clear `ConcurrencyException`.
-- Tests demonstrate read-after-write consistency.
-- Tests demonstrate that subscriber failures do not lose events from the outbox.
-- A simple harness can write events and observe them flow through the outbox.
+- Both adapters pass the same suite of integration tests.
+- Tests demonstrate that concurrent writes to the same stream version produce a clear `ConcurrencyException` in both adapters.
+- Tests demonstrate read-after-write consistency in both adapters.
+- Tests demonstrate that subscriber failures do not lose events from the outbox in both adapters.
+- A simple harness can write events and observe them flow through the outbox in both adapters.
+- Switching the configured event store from PostgreSQL to SQL Server in a test run requires no domain-code changes.
 
 ### Phase 3, Weeks 5-6: Sales context (Order aggregate)
 
@@ -473,7 +480,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 **Goals.**
 - Top-level README excellent. What the project demonstrates, how to run it, how it maps to chapters, how to extend.
 - Chapter-to-code map document: every pattern in the book, where its code lives, in a single navigable index.
-- Architecture decision records (ADRs) for every significant choice: hexagonal layout, three event stores, hand-rolled vs Marten, in-process bus vs distributed messaging, PostgreSQL read models only, etc.
+- Architecture decision records (ADRs) for every significant choice: hexagonal layout, four event stores, hand-rolled vs Marten, in-process bus vs distributed messaging, PostgreSQL read models only, etc.
 - Manuscript reconciliation: walk through every chapter that references the reference implementation. Confirm references match what was actually built. Update manuscript where reality diverged. Update sample chapters if needed.
 - Build log finalized.
 - Code cleanup: TODO comments resolved or tracked.
@@ -528,7 +535,9 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 ## Risks and watchpoints
 
-**Phases 10 and 11 are the highest-risk.** Adding KurrentDB and DynamoDB adapters after the PostgreSQL adapter is mature is the moment when the abstraction in Domain.Abstractions is tested. If the abstraction was wrong, this is when it surfaces, and fixing it requires touching everything that depends on it. Pace these phases carefully and resist the temptation to skip them or simplify the test suite for them.
+**Phase 2's SQL Server adapter is the first abstraction stress test.** Adding a second relational adapter alongside the PostgreSQL adapter forces `IEventStore` to handle two engines before the more-different KurrentDB and DynamoDB adapters arrive in Phases 10 and 11. If the abstraction has leaked PostgreSQL-specific concepts, this is where it shows up first. Treat any awkwardness in the SQL Server adapter as a signal about the abstraction, not the adapter.
+
+**Phases 10 and 11 are the highest-risk.** Adding KurrentDB and DynamoDB adapters after the relational adapters are mature is the moment when the abstraction in Domain.Abstractions is tested against fundamentally different storage models. If the abstraction was wrong, this is when it surfaces, and fixing it requires touching everything that depends on it. Pace these phases carefully and resist the temptation to skip them or simplify the test suite for them.
 
 **Process managers are the second-highest risk.** Chapter 10 covers a lot of ground. Compensation branches, idempotency, timeouts, distributed coordination, observability. Phase 5's two weeks may run long. If it does, take the third week. Better to ship a correct OrderFulfillmentProcessManager than a buggy one that the book has to apologize for.
 
@@ -552,7 +561,7 @@ The reference implementation is done when:
 6. The manuscript and the code agree.
 7. ADRs document the major architectural choices.
 8. v1.0.0 is tagged on GitHub.
-9. All three event store adapters pass the same test suite.
+9. All four event store adapters pass the same test suite.
 10. The proposal package's supplementary materials description references the actual GitHub URL.
 
 When all ten are true, the proposal goes to Pearson.
