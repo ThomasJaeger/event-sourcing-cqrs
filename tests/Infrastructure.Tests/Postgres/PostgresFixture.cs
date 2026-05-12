@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -35,5 +36,18 @@ public sealed class PostgresFixture : IAsyncLifetime
             Database = dbName,
         };
         return builder.ConnectionString;
+    }
+
+    // Convenience for adapter tests that need a freshly-created database
+    // with 0001_initial_event_store.sql already applied. Migration-runner
+    // tests stay on the bare CreateDatabaseAsync path because they exercise
+    // the application itself.
+    public async Task<string> CreateMigratedDatabaseAsync()
+    {
+        var connectionString = await CreateDatabaseAsync();
+        await new MigrationRunner().RunPendingAsync(
+            new MigrationRunnerOptions { ConnectionString = connectionString },
+            CancellationToken.None);
+        return connectionString;
     }
 }
