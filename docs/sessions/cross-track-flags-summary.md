@@ -125,3 +125,15 @@ When this index is the input to a planning session in Claude.ai:
 - Forward-reference flags (F-0003-22, F-0003-23, F-0003-24, F-0003-12, F-0003-13, F-0003-14) stay deferred; the planning session can confirm the deferrals are still correct given the current PLAN.md state but should not attempt to act on them prematurely.
 - Voice rules from `HANDOFF.md` apply throughout. Em-dashes are forbidden in prose. Filler intensifiers are forbidden. Bold lead-ins are encouraged for parallel subsections. First-person opinions are encouraged. The reconciliation prose must match the established voice of the chapter being edited.
 - The Track A planning session's job is to draft the reconciled prose with voice rules enforced inline. The Track C execution session in the book repo inserts the drafted prose into the right `content/content_*.js` location via the existing build helpers (`h1`, `h2`, `h3`, `p`, `prose`, `code`, `figure`) and runs the two-pass build to verify.
+
+## Post-reconciliation: Claude Project files refresh
+
+The Claude Project (Track B context) currently holds chapter extracts (`ch8_extract.md`, `ch11_extract.md`, possibly others) captured from the pre-reconciliation manuscript. These extracts remain valid *during* the reconciliation work — they describe the state Track A is reconciling *from*. They go stale the moment Track A's reconciliation commits land in the book repo.
+
+After the reconciliation pass ships:
+
+1. Re-extract Chapter 8 (and Chapter 11 if any of its open flags were addressed in the same pass) from the freshly-built manuscript. Use the `pdftotext` + page-range pattern from the book repo's `HANDOFF.md`.
+2. Replace the Project files with the fresh extracts, same filenames so existing session prompts referencing them keep working.
+3. Update this index's flag statuses from `open` to `resolved` with the manuscript commit hash that closed each flag.
+
+The refresh is small but necessary. Future Track B sessions reading stale extracts will propose work already done, which is the failure mode `HANDOFF.md`'s "CRITICAL: Verify Before Trusting" header warns about.
