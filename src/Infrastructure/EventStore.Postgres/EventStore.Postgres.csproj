@@ -5,4 +5,7 @@
   <ItemGroup>
     <PackageReference Include="Npgsql" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
+  </ItemGroup>
 </Project>
