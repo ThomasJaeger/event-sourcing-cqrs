@@ -165,6 +165,7 @@ From the pre-Phase 1 baseline:
 - Hexagonal architecture with the layout in `CLAUDE.md`.
 - Blazor Server with Tailwind for styling. ASP.NET Core minimal APIs for JSON.
 - xUnit v2, FluentAssertions v7, FsCheck, Stryker.NET, Testcontainers, LocalStack as the test stack.
+- **Client-name confidentiality.** Never reference consulting clients, employers, or engagements by name in any repository artifact or chat output. Generalize to "a real-world adopter" or similar. Applies across Tracks A/B/C and retroactively. Software products (PostgreSQL, SQL Server, KurrentDB, DynamoDB, Marten) and libraries (Npgsql, Microsoft.Data.SqlClient) are not client names.
 
 Locked in during Session 0001 (Weeks 1-2):
 

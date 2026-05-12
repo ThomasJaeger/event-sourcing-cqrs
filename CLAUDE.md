@@ -173,6 +173,14 @@ The folder structure maps to chapters. Domain shows Chapters 7 and 9. Applicatio
 * Test classes are named for the type under test, suffixed `Tests`.
 * Test method names read as sentences with underscores: `Cancelling_a_shipped_order_throws`.
 
+## Confidentiality and client references
+
+Never reference consulting clients, employers, or engagements by name anywhere in this repository or in chat output. The rule covers code, comments, ADRs, commit messages, PR descriptions, session logs, and documentation. When the reasoning behind a decision draws on a specific client or engagement, generalize the reference. Phrases like "a planned implementation for a real-world adopter" or "a future enterprise consumer" carry the reasoning without the name.
+
+The rule applies to all three tracks: book content (Track A), code planning (Track B), and code execution (Track C). It applies retroactively. If you notice a client name in any draft or artifact, flag it for correction before commit.
+
+Software product names (PostgreSQL, SQL Server, KurrentDB, DynamoDB, Marten) and library names (Npgsql, Microsoft.Data.SqlClient) are not client names and are fine to use.
+
 ## What Claude Code should not do
 
 Do not introduce dependencies without asking. Every new NuGet package is a decision that affects the book.
