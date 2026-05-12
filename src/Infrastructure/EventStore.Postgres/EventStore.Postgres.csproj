@@ -7,8 +7,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
+    <ProjectReference Include="..\Outbox\Outbox.csproj" />
   </ItemGroup>
 </Project>
