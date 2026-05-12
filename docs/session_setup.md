@@ -5,7 +5,7 @@
 This document is the entry point for **Track B** of a three-track project: **code planning** in Claude.ai. The other tracks are:
 
 - **Track A** — Claude.ai sessions for **book content**. Entry point: `HANDOFF.md` in the book repo at `~/Documents/GitHub/event-sourcing-cqrs-book/`.
-- **Track C** — Claude Code in the terminal for **code execution**. Entry point: `CLAUDE.md` + `docs/PLAN.md` + `docs/rules.txt` in this repo.
+- **Track C** — Claude Code in the terminal for **code execution**. Entry point: `CLAUDE.md` + `docs/PLAN.md` + `docs/ai-writing-style-source.txt` in this repo.
 
 When work in one track affects another, the originating session adds a **Cross-track flag** entry to its `docs/sessions/NNNN-<description>.md` log. The next time the affected track is opened, the human (Thomas) mentions the flag at the start of the session.
 
@@ -85,7 +85,7 @@ The reconciled six-week foundation plan (master setup, May 8, 2026) governs the 
 
 PLAN.md's phase numbering does not match the six-week plan's week numbering. Where the two disagree, the six-week plan is in effect through mid-June. PLAN.md reconciliation happens in Phase 14 or sooner if the divergence grows.
 
-The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules live in `docs/rules.txt` and apply to anything Claude produces (chat prose, code comments, ADRs, commit messages, PR descriptions).
+The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules live in `docs/ai-writing-style-source.txt` and apply to anything Claude produces (chat prose, code comments, ADRs, commit messages, PR descriptions).
 
 ## Where the build stands now
 
@@ -201,13 +201,13 @@ I review every proposed command and file before approval. I do not use auto-appr
 
 When I start a new Claude Code session, the first message has the same shape:
 
-> Please re-read CLAUDE.md, docs/PLAN.md, and docs/rules.txt. Then summarize back to me: (1) the work items already complete based on what is in the repo, and (2) the work items still remaining for the current phase. After I confirm the summary is right, we will start on the next item.
+> Please re-read CLAUDE.md, docs/PLAN.md, and docs/ai-writing-style-source.txt. Then summarize back to me: (1) the work items already complete based on what is in the repo, and (2) the work items still remaining for the current phase. After I confirm the summary is right, we will start on the next item.
 
 I will follow that pattern again when I start the next Claude Code session for the PostgreSQL adapter implementation.
 
 ## Writing rules to apply throughout this conversation
 
-These come from `docs/rules.txt` in the repo:
+These come from `docs/ai-writing-style-source.txt` in the repo:
 
 - No em-dashes. Use commas, parentheses, or full stops.
 - No "not just X, it's Y" parallel constructions.

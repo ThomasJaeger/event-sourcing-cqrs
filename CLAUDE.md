@@ -230,7 +230,7 @@ Verify the abstraction holds. When working on Phase 2's SQL Server adapter and P
 When starting a session, the relevant context lives in:
 
 1. `CLAUDE_CODE_PREAMBLE.md` for the working pattern Claude Code should follow in every session (propose before writing, stop and ask before deviating, log cross-track flags, commit per logical unit).
-2. `docs/rules.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions).
+2. `docs/ai-writing-style-source.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript); the working bullet form of the rules lives in `docs/session_setup.md`.
 3. This file (CLAUDE.md) for repo-wide rules.
 4. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
 5. `docs/ARCHITECTURE.md` (when written) for cross-cutting decisions.

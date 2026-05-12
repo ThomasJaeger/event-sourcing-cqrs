@@ -1,12 +1,12 @@
 # Claude Code Preamble
 
-This file captures the working pattern for Claude Code sessions in this repository. Read it once at session start, alongside CLAUDE.md, docs/PLAN.md, and docs/rules.txt.
+This file captures the working pattern for Claude Code sessions in this repository. Read it once at session start, alongside CLAUDE.md, docs/PLAN.md, and docs/ai-writing-style-source.txt.
 
 ## Standard opening
 
 Every session starts with the standard opening from the human:
 
-> Please re-read CLAUDE.md, docs/PLAN.md, and docs/rules.txt. Then summarize back to me: (1) work items already complete based on what is in the repo, (2) work items remaining for the current phase. After I confirm, we will start on the next item.
+> Please re-read CLAUDE.md, docs/PLAN.md, and docs/ai-writing-style-source.txt. Then summarize back to me: (1) work items already complete based on what is in the repo, (2) work items remaining for the current phase. After I confirm, we will start on the next item.
 
 Respond by reading the files, listing what is complete based on git state and the repo's actual contents, and listing what remains for the current phase per PLAN.md (or the active reconciled plan, if one supersedes PLAN.md).
 
@@ -25,4 +25,4 @@ End a session deliberately when work pauses. Start a fresh session when work res
 
 ## When in doubt
 
-The four canonical documents (this file, CLAUDE.md, docs/PLAN.md, docs/rules.txt) are the source of truth for working patterns and scope. If a request from the human conflicts with these documents, surface the conflict before acting.
+The four canonical documents (this file, CLAUDE.md, docs/PLAN.md, docs/ai-writing-style-source.txt) are the source of truth for working patterns and scope. If a request from the human conflicts with these documents, surface the conflict before acting.

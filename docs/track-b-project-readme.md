@@ -6,7 +6,7 @@ The Project exists to support the three-track workflow described in `docs/sessio
 
 ## Why the Project exists
 
-Without the Project, every Track B claude.ai session opens with no context. The conversation re-uploads `CLAUDE.md`, `docs/PLAN.md`, `docs/rules.txt`, the cumulative session logs, and any prior decisions worth carrying forward. Over a six-month build of twelve to fifteen sessions, the re-upload overhead compounds.
+Without the Project, every Track B claude.ai session opens with no context. The conversation re-uploads `CLAUDE.md`, `docs/PLAN.md`, `docs/ai-writing-style-source.txt`, the cumulative session logs, and any prior decisions worth carrying forward. Over a six-month build of twelve to fifteen sessions, the re-upload overhead compounds.
 
 With the Project, those files are standing context. New conversations start with the cumulative state of the build already loaded, and the per-session entry point (`docs/session_setup.md`) becomes a short scoping message rather than a full re-context.
 
@@ -18,7 +18,7 @@ Files uploaded to the Project (all paths relative to the reference-implementatio
 
 - `CLAUDE.md` — repo-wide rules for Claude Code, referenced by every track
 - `docs/PLAN.md` — the 14-phase long-arc plan
-- `docs/rules.txt` — writing rules applied throughout every Track B conversation
+- `docs/ai-writing-style-source.txt` — writing rules applied throughout every Track B conversation
 - `docs/session_setup.md` — the current session's entry point, rotated per session
 - `docs/sessions/*.md` — accumulated session logs and `-setup.md` companion files
 - `docs/event-storming-mapping.md` — the sticky-note legend for the Order aggregate, extended over time
@@ -36,7 +36,7 @@ Files deliberately not in the Project:
 
 The Project's custom instructions field carries this paragraph, which primes every new conversation:
 
-> This Project is Track B for the *Event Sourcing & CQRS* book's reference implementation. Track B is the code-planning track that runs in claude.ai. Each conversation works from `docs/session_setup.md` for the current session's scope and ends with a Claude Code instruction that Track C executes against the public repo. Track A (book content) and Track C (Claude Code in the terminal) are separate; cross-track work is captured as flags in `docs/sessions/NNNN-<description>.md` and routed by the human at session boundaries. Writing rules in `docs/rules.txt` apply throughout. The code-first vs manuscript routing rule applies: when implementation and manuscript disagree, implementation wins and a Track A flag is logged.
+> This Project is Track B for the *Event Sourcing & CQRS* book's reference implementation. Track B is the code-planning track that runs in claude.ai. Each conversation works from `docs/session_setup.md` for the current session's scope and ends with a Claude Code instruction that Track C executes against the public repo. Track A (book content) and Track C (Claude Code in the terminal) are separate; cross-track work is captured as flags in `docs/sessions/NNNN-<description>.md` and routed by the human at session boundaries. Writing rules in `docs/ai-writing-style-source.txt` apply throughout. The code-first vs manuscript routing rule applies: when implementation and manuscript disagree, implementation wins and a Track A flag is logged.
 
 Edit the instructions if the workflow shifts. The Project remembers the current text; refresh discipline below doesn't touch this field.
 
@@ -46,7 +46,7 @@ Two paths, pick whichever sticks. Both keep the Project's files aligned with the
 
 **Per-session refresh.** At the end of each Track B session, before closing the conversation: upload the new `docs/sessions/NNNN-*.md` log and `-setup.md` files that landed during the session, upload the next session's `docs/session_setup.md` (which replaces the current one), and remove the now-stale prior `session_setup.md` from the Project so only the current entry point is present.
 
-**Lazy refresh.** Update Project files only when the underlying file actually changes. The session logs accumulate without re-upload until close-of-session; manuscript TOC, CLAUDE.md, PLAN.md, and rules.txt get refreshed when edited, not on a schedule.
+**Lazy refresh.** Update Project files only when the underlying file actually changes. The session logs accumulate without re-upload until close-of-session; manuscript TOC, CLAUDE.md, PLAN.md, and ai-writing-style-source.txt get refreshed when edited, not on a schedule.
 
 The per-session pattern is tighter and protects against drift. The lazy pattern is lower-friction and works when the repo files don't change much between sessions. The choice is the human's; the Project doesn't care.
 
