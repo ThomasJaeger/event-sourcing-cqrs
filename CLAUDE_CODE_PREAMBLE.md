@@ -14,7 +14,7 @@ Respond by reading the files, listing what is complete based on git state and th
 
 - **Propose before writing.** For any file creation or significant edit, describe what you plan to write before writing it. Wait for confirmation.
 - **Stop and ask before deviating.** If the agreed plan turns out to be incorrect, flawed, or incomplete during execution, stop and surface the issue. Do not silently adjust scope.
-- **Log cross-track flags as you go.** When a code-level discovery affects the manuscript (Track A) or the planning narrative (Track B), capture it in the session log under "Cross-track flags" with enough discovery context that the affected track can act on it without re-deriving.
+- **Log cross-track flags as you go.** When a code-level discovery affects the manuscript (Track A) or the planning narrative (Track B), capture it in the session log under "Cross-track flags" with enough discovery context that the affected track can act on it without re-deriving. The consolidated index across all session logs lives in the book repo at `~/Documents/GitHub/event-sourcing-cqrs-book/docs/sessions/cross-track-flags-summary.md`; this repo carries no copy.
 - **Commit per logical unit, not per phase.** Multiple commits in a session is the norm. Match the existing commit-message convention.
 - **Build green between steps.** Run `dotnet build` after each substantive change. Surface failures immediately.
 - **CI green per push.** If a push lands red CI, the next action is fixing CI, not advancing the work item.
