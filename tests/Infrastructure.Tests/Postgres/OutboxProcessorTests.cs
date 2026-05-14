@@ -33,7 +33,7 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         var processor = BuildProcessor(dataSource, dispatcher, time);
         var eventId = Guid.NewGuid();
         var payload = new TestPayload(Guid.NewGuid(), 12.5m);
-        var outboxId = await SeedOutboxRowAsync(dataSource, eventId, payload);
+        var outboxId = await SeedOutboxRowAsync(dataSource, eventId, payload, globalPosition: 99);
 
         var processed = await processor.ProcessBatchAsync(CancellationToken.None);
 
@@ -42,6 +42,7 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         dispatcher.Received[0].EventId.Should().Be(eventId);
         dispatcher.Received[0].OutboxId.Should().Be(outboxId);
         dispatcher.Received[0].Event.Should().BeEquivalentTo(payload);
+        dispatcher.Received[0].GlobalPosition.Should().Be(99);
         var row = await ReadRowAsync(dataSource, outboxId);
         row.SentUtc.Should().Be(BaseTime.UtcDateTime);
         row.AttemptCount.Should().Be(0);
@@ -241,12 +242,17 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
             NullLogger<OutboxProcessor>.Instance);
     }
 
+    // global_position is NOT NULL on event_store.outbox as of migration 0002.
+    // These tests seed outbox rows directly without a matching events row, so
+    // the helper supplies the column itself; the value defaults to 1 because
+    // most tests do not assert on it.
     private static async Task<long> SeedOutboxRowAsync(
         NpgsqlDataSource dataSource,
         Guid eventId,
         IDomainEvent payload,
         int attemptCount = 0,
-        DateTime? nextAttemptAt = null)
+        DateTime? nextAttemptAt = null,
+        long globalPosition = 1)
     {
         var when = BaseTime.UtcDateTime;
         var json = CreateJsonOptions();
@@ -265,8 +271,10 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "INSERT INTO event_store.outbox " +
-            "(event_id, event_type, payload, metadata, occurred_utc, attempt_count, next_attempt_at) " +
-            "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, @attempt_count, @next_attempt_at) " +
+            "(event_id, event_type, payload, metadata, occurred_utc, attempt_count, " +
+            "next_attempt_at, global_position) " +
+            "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, @attempt_count, " +
+            "@next_attempt_at, @global_position) " +
             "RETURNING outbox_id";
         cmd.Parameters.AddWithValue("event_id", NpgsqlDbType.Uuid, eventId);
         cmd.Parameters.AddWithValue("event_type", NpgsqlDbType.Text, payload.GetType().Name);
@@ -276,6 +284,7 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         cmd.Parameters.AddWithValue("attempt_count", NpgsqlDbType.Integer, attemptCount);
         cmd.Parameters.AddWithValue("next_attempt_at", NpgsqlDbType.TimestampTz,
             (object?)nextAttemptAt ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("global_position", NpgsqlDbType.Bigint, globalPosition);
         return (long)(await cmd.ExecuteScalarAsync())!;
     }
 

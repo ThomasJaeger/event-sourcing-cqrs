@@ -50,6 +50,14 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var outboxEventId = await ScalarAsync<Guid>(
             connStr, "SELECT event_id FROM event_store.outbox");
         outboxEventId.Should().Be(envelope.EventId);
+
+        // The outbox row carries the events row's IDENTITY-assigned
+        // global_position, threaded through the same transaction via RETURNING.
+        var eventGlobalPosition = await ScalarAsync<long>(
+            connStr, "SELECT global_position FROM event_store.events");
+        var outboxGlobalPosition = await ScalarAsync<long>(
+            connStr, "SELECT global_position FROM event_store.outbox");
+        outboxGlobalPosition.Should().Be(eventGlobalPosition);
     }
 
     [Fact]

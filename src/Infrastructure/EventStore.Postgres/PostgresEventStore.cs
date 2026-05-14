@@ -59,6 +59,9 @@ public sealed class PostgresEventStore : IEventStore
                     envelope.Payload, envelope.Payload.GetType(), _jsonOptions);
                 var metadataJson = JsonSerializer.Serialize(envelope.Metadata, _jsonOptions);
 
+                // RETURNING hands back the IDENTITY-assigned global_position so
+                // the matching outbox row can carry it without a later read-back.
+                long globalPosition;
                 await using (var insertEvent = connection.CreateCommand())
                 {
                     insertEvent.Transaction = transaction;
@@ -67,7 +70,8 @@ public sealed class PostgresEventStore : IEventStore
                         "(stream_id, stream_version, event_id, event_type, event_version, " +
                         "payload, metadata, occurred_utc) " +
                         "VALUES (@stream_id, @stream_version, @event_id, @event_type, " +
-                        "@event_version, @payload, @metadata, @occurred_utc)";
+                        "@event_version, @payload, @metadata, @occurred_utc) " +
+                        "RETURNING global_position";
                     AddUuid(insertEvent, "stream_id", envelope.StreamId);
                     AddInteger(insertEvent, "stream_version", envelope.StreamVersion);
                     AddUuid(insertEvent, "event_id", envelope.EventId);
@@ -76,23 +80,27 @@ public sealed class PostgresEventStore : IEventStore
                     AddJsonb(insertEvent, "payload", payloadJson);
                     AddJsonb(insertEvent, "metadata", metadataJson);
                     AddTimestampTz(insertEvent, "occurred_utc", envelope.OccurredUtc);
-                    await insertEvent.ExecuteNonQueryAsync(ct);
+                    globalPosition = (long)(await insertEvent.ExecuteScalarAsync(ct))!;
                 }
 
                 // sent_utc, last_error, next_attempt_at default to NULL; attempt_count
                 // defaults to 0. Only the NOT NULL columns appear in this INSERT.
+                // global_position is threaded from the events RETURNING above so the
+                // outbox row is self-describing and the OutboxProcessor never joins back.
                 await using (var insertOutbox = connection.CreateCommand())
                 {
                     insertOutbox.Transaction = transaction;
                     insertOutbox.CommandText =
                         "INSERT INTO event_store.outbox " +
-                        "(event_id, event_type, payload, metadata, occurred_utc) " +
-                        "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc)";
+                        "(event_id, event_type, payload, metadata, occurred_utc, global_position) " +
+                        "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, " +
+                        "@global_position)";
                     AddUuid(insertOutbox, "event_id", envelope.EventId);
                     AddText(insertOutbox, "event_type", eventTypeName);
                     AddJsonb(insertOutbox, "payload", payloadJson);
                     AddJsonb(insertOutbox, "metadata", metadataJson);
                     AddTimestampTz(insertOutbox, "occurred_utc", envelope.OccurredUtc);
+                    AddBigInt(insertOutbox, "global_position", globalPosition);
                     await insertOutbox.ExecuteNonQueryAsync(ct);
                 }
             }

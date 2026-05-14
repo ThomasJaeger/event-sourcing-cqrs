@@ -6,4 +6,5 @@ public sealed record OutboxMessage(
     string EventType,
     IDomainEvent Event,
     EventMetadata Metadata,
+    long GlobalPosition,
     int AttemptCount);
