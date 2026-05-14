@@ -10,8 +10,9 @@ In progress. Track C executing the commit slice from `docs/sessions/0005-weeks5-
 1. `9361f27` — EventEnvelope.GlobalPosition and IEventStore.ReadAllAsync; PostgresEventStore and InMemoryEventStore read paths (6 new xUnit cases)
 2. `5989ebe` — EventContext, IEventHandler widening, OutboxMessage.GlobalPosition, migration 0002, outbox global_position sourcing (2 new xUnit cases)
 3. `1cc073e` — ICheckpointStore, ReadModels.Postgres project, PostgresCheckpointStore, migration 0003, Projections.Tests project (4 new xUnit cases)
+4. `066158e` — IProjection, Projections project, OrderListProjection, IOrderListStore, PostgresOrderListStore, migration 0004 (14 new xUnit cases)
 
-Commits 4-6 pending.
+Commits 5-6 pending.
 
 ## Scope
 
@@ -43,9 +44,21 @@ The setup document is the design record. A deviation here is a divergence from t
 
 **Commit 3: the PostgresMigrationRunnerTests name reshape carries forward to commit 4.** `First_run_applies_initial_migration_to_empty_database` asserts three migrations as of this commit; the name has been loose since commit 2's second migration. Keeping it loose through commits 2 and 3 was deliberate. Commit 4 absorbs the standalone migration commit's role and brings the fourth migration (`0004`), which is the third count bump and the point where the diff justifies renaming the test to something like `applies_all_migrations_in_order`.
 
+**Commit 4: setup-doc commits 4 and 5 materialized as one commit.** Commit 3's log already noted the standalone migration commit dissolving; commit 4 is where it lands. Commit 4 delivers `IProjection`, the `Projections` project, `OrderListRow`, `IOrderListStore` plus `IOrderListUnitOfWork`, `OrderListProjection`, `PostgresOrderListStore` plus `PostgresOrderListUnitOfWork`, and `migrations/0004_add_order_list_read_model.sql` — setup-doc commit 5's content plus the `order_list` half of the old commit-4 migration. The `PostgresMigrationRunnerTests` rename to `First_run_applies_all_migrations_in_order_to_empty_database` landed here, the fourth migration being the count bump that justifies the diff.
+
+**Commit 4: the projection write path uses a unit of work, refining "open a transaction on the read-model connection."** The setup document and the commit-4 prompt framed the handler as opening a transaction on the read-model connection directly. That would couple `Projections` to `ReadModels.Postgres` (the connection factory is infrastructure) and leave `HandleAsync` un-unit-testable. Instead `IOrderListStore.BeginAsync` returns an `IOrderListUnitOfWork` whose `CommitAsync(projectionName, position, ct)` advances the checkpoint and commits in one transaction. The projection takes only `IOrderListStore`; it never sees a connection, a `DbTransaction`, or `ICheckpointStore`. `PostgresOrderListUnitOfWork` owns the `NpgsqlConnection` and `NpgsqlTransaction` and calls `ICheckpointStore.AdvanceAsync` on that transaction inside `CommitAsync`. This keeps `Projections` infrastructure-free and makes the in-memory `IOrderListStore` double trivial (nothing leaky to fake). Confirmed with the human before execution.
+
+**Commit 4: the projection handles three events, OrderPlaced / OrderShipped / OrderCancelled.** The setup document named only `OrderPlaced` (decision 10). The shipped Order events are `OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderShipped`, `OrderCancelled`; the commit-4 prompt's guessed set (`OrderPaymentAuthorized`, `OrderInventoryReserved`, `OrderCompleted`) does not exist in the code. The list view is placed orders: `OrderPlaced` inserts a row, `OrderShipped` and `OrderCancelled` update its status, and the four cart-phase events are not list-relevant so the projection has no handler for them. `OrderPlaced` carries the final `Total` in its payload, so the projection never accumulates line totals.
+
 ## Internal notes
 
 **`NpgsqlConnectionFactory` takes an `NpgsqlDataSource`, not `PostgresEventStoreOptions`.** The Session 0005 commit-3 prompt framed the read-model connection factory as "reading `ReadModelOptions.ConnectionString`." It does not, and neither does the event-store factory it mirrors. `NpgsqlConnectionFactory` takes an `NpgsqlDataSource`; the options class is read by the DI extension (`AddPostgresEventStore`) to build that data source. `NpgsqlReadModelConnectionFactory` mirrors this exactly: it takes an `NpgsqlDataSource`, and `ReadModelOptions` (deferred to commit 6) is read by `AddReadModels`. Recorded so a future reader does not reconstruct the wrong wiring from the prompt's framing.
+
+**Setup-doc decision 10 named the field `OrderPlaced.OccurredUtc`; the shipped event field is `OrderPlaced.PlacedUtc`.** The intent holds: `placed_utc` sources from the event's own business-time field, `last_updated_utc` from `EventContext.Metadata.OccurredUtc`. Recorded so a future reader does not chase a field name that was never in the code.
+
+**`ix_order_list_status` became the compound `ix_order_list_status_placed_utc`.** Setup-doc decision 12 named a bare index on the `status` column. A bare index on a column with three or four distinct values is rarely chosen by the planner; the compound `(status, placed_utc DESC)` supports the "orders with status X, most recent first" query and does not bake in a partial predicate that would pin the index to one UI's notion of an active order. The name reflects the compound shape.
+
+**`PostgresOrderListUnitOfWork` binds timestamp parameters inline, without a `Kind`-validating helper.** `PostgresEventStore` and `OutboxProcessor` each carry an `AddTimestampTz` helper that throws on a non-UTC `DateTime`; `PostgresCheckpointStore` (commit 3) set the `ReadModels.Postgres` precedent of plain inline `AddWithValue`. Commit 4 follows the inline precedent: the timestamps reaching the order-list write are downstream of the event store, which already validates `Kind` on write, and Npgsql's own error on a non-UTC `DateTime` written to `timestamptz` is clear enough. Adding a third copy of the helper would amplify a duplication the Session 0004 log already tracks for a future consolidation.
 
 ## Test count
 
@@ -57,6 +70,7 @@ Legend per the Session 0004 convention: **planned methods** = setup-doc projecti
 | Commit 1 actual xUnit cases | 22 | 61 | 0 | 83 |
 | Commit 2 actual xUnit cases | 22 | 63 | 0 | 85 |
 | Commit 3 actual xUnit cases | 22 | 63 | 4 | 89 |
+| Commit 4 actual xUnit cases | 22 | 63 | 18 | 103 |
 
 Commit 1 method-level: 5 new `PostgresEventStore_ReadAllAsync_Tests` methods, 1 new `InMemoryEventStoreTests` method, plus `GlobalPosition` assertions added to two existing read tests without adding methods.
 
@@ -64,8 +78,16 @@ Commit 2 method-level: 2 new `InProcessMessageDispatcherTests` methods. The `Out
 
 Commit 3 method-level: 4 new `PostgresCheckpointStoreTests` methods in the new `Projections.Tests` project. The `PostgresMigrationRunnerTests` updates for migration `0003` are assertion-level, no method-count change, so `Infrastructure.Tests` stays at 63.
 
-`Infrastructure.Tests` warm-cache wall time stayed at ~3s; container reuse via `IClassFixture<PostgresFixture>` absorbed the new test class.
+Commit 4 method-level: 8 new `OrderListProjectionTests` methods (against the in-memory store double) and 6 new `PostgresOrderListStoreTests` methods, both in `Projections.Tests`. The setup document projected 8 and 5; the sixth `PostgresOrderListStoreTests` method covers `TruncateAsync`, which the commit-5 rebuild test depends on and which is otherwise untested code. The `PostgresMigrationRunnerTests` updates for migration `0004` are assertion-level plus the `First_run` rename, no method-count change.
+
+`Infrastructure.Tests` warm-cache wall time stayed at ~3s; container reuse via `IClassFixture<PostgresFixture>` absorbed the new test classes.
 
 ## Cross-track flags (Track A)
 
-Carried from the setup document's pre-recorded flag candidates; final IDs assigned at session-log close. No execution-discovered flags yet beyond what the setup document anticipated.
+Carried from the setup document's pre-recorded flag candidates; final IDs assigned at session-log close. Commit 4 discovered three flags against Chapter 13's depiction of the order-list projection:
+
+1. **The projection write path is a unit of work with an explicit `CommitAsync`.** Chapter 13's deep-dive `OrderDetailProjection` makes two separate calls, `_store.UpsertAsync(view, ct)` then `_checkpoints.AdvanceAsync(nameof(...), meta.GlobalPosition, ct)`, with no visible transaction binding and the atomicity claim left to in-prose assertion. The reference implementation's `IOrderListUnitOfWork.CommitAsync(projectionName, position, ct)` makes the atomicity structural: the checkpoint advance and the row write commit on one transaction or roll back together. Co-resolves with the setup document's pre-recorded F-0005 candidates 1 and 2 (the `IEventHandler` signature and the `ICheckpointStore` shape).
+
+2. **The handler set is `OrderPlaced` / `OrderShipped` / `OrderCancelled`.** Chapter 13's early `OrderListProjection` also handles three events, but a different three: `OrderPlaced` + `OrderLineAdded` + `OrderCancelled`. That set assumes the `OrderPlaced` row exists before any `OrderLineAdded` arrives and accumulates the total incrementally, which is a race in an interleaved stream. The reference implementation's `OrderPlaced` carries the final `Total` in payload, so the projection handles only the three lifecycle transitions visible in a list of placed orders and skips the cart-phase line events entirely. The chapter's early code needs normalization against the shipped event shape.
+
+3. **`Money` on the read model is two columns, `total_amount NUMERIC(18, 4)` and `total_currency TEXT`.** Pre-recorded as a flag candidate per the commit-4 planning conversation: if Chapter 13's deep-dive `OpsOrderListProjection` shows a different representation (a composite type, a JSONB blob, a single column), the chapter and the implementation need reconciling. The two-column shape keeps `WHERE` and `ORDER BY` simple relational predicates.
