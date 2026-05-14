@@ -8,6 +8,16 @@ This is the reference implementation for the book *Event Sourcing & CQRS: A Comp
 
 This is a teaching artifact, not a production framework. Readers clone it, run it, study it, and use it as a reference for their own systems. They do not deploy it.
 
+## Source-of-truth hierarchy
+
+The reference implementation source code in this repository is the highest-priority source of truth for the book at ~/Documents/GitHub/event-sourcing-cqrs-book/. When the manuscript depicts the current canonical shape of a domain type, API signature, schema column, type token, parameter name, or any other observable artifact and disagrees with the code in this repository, the code is canonical. The book gets normalized to match.
+
+Cluster work in the book repo that touches potentially-divergent surfaces verifies against this repository's code before scoping. Pre-flight reads of the manuscript are starting points; the code is authority.
+
+Deliberate historical-shape pedagogy in the book stays as-written. Ch 11's upcasting V1 to V4 progression depicts an event's evolution across schema versions; the V1 shape is intentionally divergent from the current code. Ch 18's legacy-CRUD depictions are intentional. Pedagogical divergence is exempt; current-state divergence is not.
+
+This rule applies symmetrically across both Claude Code instances and the Claude.ai planner. Same rule appears in the book repo's CLAUDE.md and HANDOFF.md.
+
 ## What "good" looks like in this repository
 
 Code in this repo must reflect the patterns the book teaches. The book is opinionated. The code must be opinionated in the same direction. When there is a choice between idiomatic .NET and the book's pattern, the book's pattern wins. A reader who copies a snippet from the book and a snippet from the repo should see the same shape.
