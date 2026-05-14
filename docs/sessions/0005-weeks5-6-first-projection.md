@@ -11,8 +11,9 @@ In progress. Track C executing the commit slice from `docs/sessions/0005-weeks5-
 2. `5989ebe` — EventContext, IEventHandler widening, OutboxMessage.GlobalPosition, migration 0002, outbox global_position sourcing (2 new xUnit cases)
 3. `1cc073e` — ICheckpointStore, ReadModels.Postgres project, PostgresCheckpointStore, migration 0003, Projections.Tests project (4 new xUnit cases)
 4. `066158e` — IProjection, Projections project, OrderListProjection, IOrderListStore, PostgresOrderListStore, migration 0004 (14 new xUnit cases)
+5. `6ee3f92` — ProjectionReplayer, ProjectionReplayerTests, OrderListRebuildTests (7 new xUnit cases)
 
-Commits 5-6 pending.
+Commit 6 pending.
 
 ## Scope
 
@@ -50,6 +51,12 @@ The setup document is the design record. A deviation here is a divergence from t
 
 **Commit 4: the projection handles three events, OrderPlaced / OrderShipped / OrderCancelled.** The setup document named only `OrderPlaced` (decision 10). The shipped Order events are `OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderShipped`, `OrderCancelled`; the commit-4 prompt's guessed set (`OrderPaymentAuthorized`, `OrderInventoryReserved`, `OrderCompleted`) does not exist in the code. The list view is placed orders: `OrderPlaced` inserts a row, `OrderShipped` and `OrderCancelled` update its status, and the four cart-phase events are not list-relevant so the projection has no handler for them. `OrderPlaced` carries the final `Total` in its payload, so the projection never accumulates line totals.
 
+**Commit 5: ProjectionReplayer takes no service provider.** Setup-doc decision 8 said the replayer "takes `IEventStore`, an `IProjection` instance, and a service provider." The service provider has no role. The replayer does not resolve handlers from DI (single-projection-scoped: the caller hands it the projection instance), and the checkpoint advance lives inside the projection's own handler (commit 4's unit-of-work design), so there is no `ICheckpointStore` dependency either. `ProjectionReplayer`'s constructor is `(IEventStore, IProjection)` and nothing else. The setup-doc framing came from viewing the replayer through `InProcessMessageDispatcher`'s DI-fan-out lens; the replayer does not fan out, it invokes one projection.
+
+**Commit 5: ProjectionReplayer lives at `src/Projections/ProjectionReplayer.cs`, no `Infrastructure/` subfolder.** The setup document's project layout put it under `Projections/Infrastructure/`. One file does not earn a subfolder; the subfolder lands when a second projection-side infrastructure type does.
+
+**Commit 5: the reflection in ProjectionReplayer is duplicated from InProcessMessageDispatcher, not extracted.** Both resolve a closed `IEventHandler<TEvent>.HandleAsync` and an `EventContext<TEvent>` constructor by reflection, but the dispatcher fans out through DI from an `OutboxMessage` while the replayer invokes one given projection from an `EventEnvelope`. Sharing would force an abstraction over that difference. Forward flag: a third consumer earns the extraction. Same reasoning as the Session 0004 parameter-binding-helper duplication.
+
 ## Internal notes
 
 **`NpgsqlConnectionFactory` takes an `NpgsqlDataSource`, not `PostgresEventStoreOptions`.** The Session 0005 commit-3 prompt framed the read-model connection factory as "reading `ReadModelOptions.ConnectionString`." It does not, and neither does the event-store factory it mirrors. `NpgsqlConnectionFactory` takes an `NpgsqlDataSource`; the options class is read by the DI extension (`AddPostgresEventStore`) to build that data source. `NpgsqlReadModelConnectionFactory` mirrors this exactly: it takes an `NpgsqlDataSource`, and `ReadModelOptions` (deferred to commit 6) is read by `AddReadModels`. Recorded so a future reader does not reconstruct the wrong wiring from the prompt's framing.
@@ -59,6 +66,8 @@ The setup document is the design record. A deviation here is a divergence from t
 **`ix_order_list_status` became the compound `ix_order_list_status_placed_utc`.** Setup-doc decision 12 named a bare index on the `status` column. A bare index on a column with three or four distinct values is rarely chosen by the planner; the compound `(status, placed_utc DESC)` supports the "orders with status X, most recent first" query and does not bake in a partial predicate that would pin the index to one UI's notion of an active order. The name reflects the compound shape.
 
 **`PostgresOrderListUnitOfWork` binds timestamp parameters inline, without a `Kind`-validating helper.** `PostgresEventStore` and `OutboxProcessor` each carry an `AddTimestampTz` helper that throws on a non-UTC `DateTime`; `PostgresCheckpointStore` (commit 3) set the `ReadModels.Postgres` precedent of plain inline `AddWithValue`. Commit 4 follows the inline precedent: the timestamps reaching the order-list write are downstream of the event store, which already validates `Kind` on write, and Npgsql's own error on a non-UTC `DateTime` written to `timestamptz` is clear enough. Adding a third copy of the helper would amplify a duplication the Session 0004 log already tracks for a future consolidation.
+
+**`Projections.Tests` gained a `Microsoft.Extensions.DependencyInjection` package reference and an `Outbox` project reference in commit 5.** Both were already in the project graph and `Directory.Packages.props` from Session 0004. The rebuild test wires up the live-dispatch arm of its convergence assertion (`InProcessMessageDispatcher`, which lives in the `Outbox` project, fed from a hand-built `ServiceCollection`), so the test project now depends on `Outbox` directly rather than only transitively through `EventStore.Postgres`.
 
 ## Test count
 
@@ -71,6 +80,7 @@ Legend per the Session 0004 convention: **planned methods** = setup-doc projecti
 | Commit 2 actual xUnit cases | 22 | 63 | 0 | 85 |
 | Commit 3 actual xUnit cases | 22 | 63 | 4 | 89 |
 | Commit 4 actual xUnit cases | 22 | 63 | 18 | 103 |
+| Commit 5 actual xUnit cases | 22 | 63 | 25 | 110 |
 
 Commit 1 method-level: 5 new `PostgresEventStore_ReadAllAsync_Tests` methods, 1 new `InMemoryEventStoreTests` method, plus `GlobalPosition` assertions added to two existing read tests without adding methods.
 
@@ -80,7 +90,9 @@ Commit 3 method-level: 4 new `PostgresCheckpointStoreTests` methods in the new `
 
 Commit 4 method-level: 8 new `OrderListProjectionTests` methods (against the in-memory store double) and 6 new `PostgresOrderListStoreTests` methods, both in `Projections.Tests`. The setup document projected 8 and 5; the sixth `PostgresOrderListStoreTests` method covers `TruncateAsync`, which the commit-5 rebuild test depends on and which is otherwise untested code. The `PostgresMigrationRunnerTests` updates for migration `0004` are assertion-level plus the `First_run` rename, no method-count change.
 
-`Infrastructure.Tests` warm-cache wall time stayed at ~3s; container reuse via `IClassFixture<PostgresFixture>` absorbed the new test classes.
+Commit 5 method-level: 4 new `ProjectionReplayerTests` methods (unit tests over a `FakeEventStore` and a `RecordingProjection`, no database) and 3 new `OrderListRebuildTests` methods (integration tests against `PostgresFixture`). Matches the setup-doc projection of 4 and 3.
+
+`Infrastructure.Tests` and `Projections.Tests` warm-cache wall time stayed at ~3s each; container reuse via `IClassFixture<PostgresFixture>` absorbed the new test classes.
 
 ## Cross-track flags (Track A)
 
