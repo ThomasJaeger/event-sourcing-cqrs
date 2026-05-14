@@ -5,15 +5,14 @@ Phase: 6 (Weeks 11-12) per PLAN.md; Weeks 5-6 of the reconciled six-week foundat
 
 ## Status
 
-In progress. Track C executing the commit slice from `docs/sessions/0005-weeks5-6-first-projection-setup.md`. The setup document's seven-commit slice is now six: commit 3 absorbs the standalone migration commit (see the commit-3 deviations).
+Shipped 2026-05-14. Track C executed the commit slice from `docs/sessions/0005-weeks5-6-first-projection-setup.md` in six commits. The setup document's seven-commit slice became six: commit 3 absorbed the standalone migration commit (see the commit-3 deviations).
 
 1. `9361f27` — EventEnvelope.GlobalPosition and IEventStore.ReadAllAsync; PostgresEventStore and InMemoryEventStore read paths (6 new xUnit cases)
 2. `5989ebe` — EventContext, IEventHandler widening, OutboxMessage.GlobalPosition, migration 0002, outbox global_position sourcing (2 new xUnit cases)
 3. `1cc073e` — ICheckpointStore, ReadModels.Postgres project, PostgresCheckpointStore, migration 0003, Projections.Tests project (4 new xUnit cases)
 4. `066158e` — IProjection, Projections project, OrderListProjection, IOrderListStore, PostgresOrderListStore, migration 0004 (14 new xUnit cases)
 5. `6ee3f92` — ProjectionReplayer, ProjectionReplayerTests, OrderListRebuildTests (7 new xUnit cases)
-
-Commit 6 pending.
+6. `1b61b2d` — AddReadModels composition-root extension, ReadModelOptions, ServiceCollectionExtensions_AddReadModels_Tests (1 new xUnit case)
 
 ## Scope
 
@@ -23,7 +22,7 @@ Out of scope: LISTEN/NOTIFY dispatch (deferred to the Workers host or first UI s
 
 ## Deviations from the design record
 
-The setup document is the design record. A deviation here is a divergence from that record caught during execution. None so far has changed a design decision; the entries are scope resequencing and refinements the record was silent on or mildly wrong about.
+The setup document is the design record. A deviation here is a divergence from that record caught during execution. None changed a design decision; the entries are scope resequencing and refinements the record was silent on or mildly wrong about.
 
 **Commit 1: OutboxMessage.GlobalPosition and the OutboxProcessor query change resequenced from commit 1 to commit 2.** Setup-doc decision 2 asserted the outbox row already carried `global_position` ("the outbox processor's deserialization path already reads the column at zero additional cost"). Verification against `migrations/0001_initial_event_store.sql` showed it does not: `event_store.outbox` has no `global_position` column, and `OutboxProcessor.SelectPendingAsync` does not read one. Populating `OutboxMessage.GlobalPosition` therefore requires a sourcing decision, JOIN to `event_store.events` on `event_id` versus a new column on the outbox table populated at append time. That decision deserves the dispatcher-refactor context of commit 2, where the `EventContext<TEvent>` work lands and `OutboxProcessorTests` are touched anyway. An INNER JOIN would also have broken all eight `OutboxProcessorTests`, which seed outbox rows directly with no matching events row. This is a deviation from the design record's commit slicing, not from a design decision: `OutboxMessage` still gains the field and the live-tail path still carries `GlobalPosition`, one commit later than the record placed it. Commit 1 stayed read-side only and disturbed no Session 0004 test.
 
@@ -57,6 +56,10 @@ The setup document is the design record. A deviation here is a divergence from t
 
 **Commit 5: the reflection in ProjectionReplayer is duplicated from InProcessMessageDispatcher, not extracted.** Both resolve a closed `IEventHandler<TEvent>.HandleAsync` and an `EventContext<TEvent>` constructor by reflection, but the dispatcher fans out through DI from an `OutboxMessage` while the replayer invokes one given projection from an `EventEnvelope`. Sharing would force an abstraction over that difference. Forward flag: a third consumer earns the extraction. Same reasoning as the Session 0004 parameter-binding-helper duplication.
 
+**Commit 6: AddReadModels does not register a bare NpgsqlDataSource, diverging from the AddPostgresEventStore template.** The commit-6 prompt framed `AddReadModels` as mirroring `AddPostgresEventStore`, including its `TryAddSingleton<NpgsqlDataSource>`. Reading the two extension methods side by side showed the mirror does not hold: `AddPostgresEventStore` already registers `NpgsqlDataSource` as that bare service type, so a second `TryAddSingleton<NpgsqlDataSource>` from `AddReadModels` is silently dropped by call order, and `ReadModelOptions.ConnectionString` is ignored whenever `AddPostgresEventStore` ran first. `AddReadModels` instead builds the read-model `NpgsqlDataSource` inside the `IReadModelConnectionFactory` factory delegate, from `ReadModelOptions.ConnectionString`. The two sides keep independent, individually-addressable data sources; the host override point is `IReadModelConnectionFactory` (registered `TryAddSingleton`). One consequence: the read-model data source is not container-tracked for disposal. In v1 a non-issue, since the only caller is the DI-resolution test against a dummy connection string that never opens a connection. The Workers-host session revisits data-source lifetime with a real host in front of it; the options there are `NpgsqlReadModelConnectionFactory` owning `IAsyncDisposable`, or keyed `NpgsqlDataSource` registrations so the two extensions register distinguishable services.
+
+**Commit 6: ProjectionReplayer is deliberately not registered in DI.** The replayer has no v1 consumer: no Workers host runs it, and the tests construct it directly. `services.AddSingleton<ProjectionReplayer>()` would work today (DI would inject the single `IProjection`), but the pattern does not scale to a second projection and there is nothing in v1 to validate it against. Phase 9's AdminConsole Replay Tool designs the replayer's resolution shape when it lands, with concrete pressure from a real operator tool. Forward-flagged.
+
 ## Internal notes
 
 **`NpgsqlConnectionFactory` takes an `NpgsqlDataSource`, not `PostgresEventStoreOptions`.** The Session 0005 commit-3 prompt framed the read-model connection factory as "reading `ReadModelOptions.ConnectionString`." It does not, and neither does the event-store factory it mirrors. `NpgsqlConnectionFactory` takes an `NpgsqlDataSource`; the options class is read by the DI extension (`AddPostgresEventStore`) to build that data source. `NpgsqlReadModelConnectionFactory` mirrors this exactly: it takes an `NpgsqlDataSource`, and `ReadModelOptions` (deferred to commit 6) is read by `AddReadModels`. Recorded so a future reader does not reconstruct the wrong wiring from the prompt's framing.
@@ -68,6 +71,8 @@ The setup document is the design record. A deviation here is a divergence from t
 **`PostgresOrderListUnitOfWork` binds timestamp parameters inline, without a `Kind`-validating helper.** `PostgresEventStore` and `OutboxProcessor` each carry an `AddTimestampTz` helper that throws on a non-UTC `DateTime`; `PostgresCheckpointStore` (commit 3) set the `ReadModels.Postgres` precedent of plain inline `AddWithValue`. Commit 4 follows the inline precedent: the timestamps reaching the order-list write are downstream of the event store, which already validates `Kind` on write, and Npgsql's own error on a non-UTC `DateTime` written to `timestamptz` is clear enough. Adding a third copy of the helper would amplify a duplication the Session 0004 log already tracks for a future consolidation.
 
 **`Projections.Tests` gained a `Microsoft.Extensions.DependencyInjection` package reference and an `Outbox` project reference in commit 5.** Both were already in the project graph and `Directory.Packages.props` from Session 0004. The rebuild test wires up the live-dispatch arm of its convergence assertion (`InProcessMessageDispatcher`, which lives in the `Outbox` project, fed from a hand-built `ServiceCollection`), so the test project now depends on `Outbox` directly rather than only transitively through `EventStore.Postgres`.
+
+**`ReadModels.Postgres` gained `Microsoft.Extensions.DependencyInjection.Abstractions` and `Microsoft.Extensions.Options` package references in commit 6; `Projections.Tests` gained `Microsoft.Extensions.Logging.Abstractions`.** The first two are what `AddReadModels` needs (`IServiceCollection`, `TryAddSingleton`, `Configure`, `IOptions`); the third is what the DI-resolution test directly names (`NullLogger<>`, `ILogger<>`), previously reachable only transitively through `EventStore.Postgres`. All three were already in `Directory.Packages.props` from Session 0004; no new package versions.
 
 ## Test count
 
@@ -81,6 +86,7 @@ Legend per the Session 0004 convention: **planned methods** = setup-doc projecti
 | Commit 3 actual xUnit cases | 22 | 63 | 4 | 89 |
 | Commit 4 actual xUnit cases | 22 | 63 | 18 | 103 |
 | Commit 5 actual xUnit cases | 22 | 63 | 25 | 110 |
+| Commit 6 actual xUnit cases | 22 | 63 | 26 | 111 |
 
 Commit 1 method-level: 5 new `PostgresEventStore_ReadAllAsync_Tests` methods, 1 new `InMemoryEventStoreTests` method, plus `GlobalPosition` assertions added to two existing read tests without adding methods.
 
@@ -92,14 +98,54 @@ Commit 4 method-level: 8 new `OrderListProjectionTests` methods (against the in-
 
 Commit 5 method-level: 4 new `ProjectionReplayerTests` methods (unit tests over a `FakeEventStore` and a `RecordingProjection`, no database) and 3 new `OrderListRebuildTests` methods (integration tests against `PostgresFixture`). Matches the setup-doc projection of 4 and 3.
 
+Commit 6 method-level: 1 new `ServiceCollectionExtensions_AddReadModels_Tests` method in `Projections.Tests`, one method with many resolution assertions. Matches the setup-doc projection of 1.
+
 `Infrastructure.Tests` and `Projections.Tests` warm-cache wall time stayed at ~3s each; container reuse via `IClassFixture<PostgresFixture>` absorbed the new test classes.
+
+Planned versus actual. The setup document projected a session total of 82 — its table read 22 Domain, 35 Infrastructure.Tests, 25 Projections.Tests, from a Session 0004 baseline of 52. That baseline was stale: the Session 0004 log records the actual baseline as 77 xUnit cases (22 Domain, 55 Infrastructure.Tests) under its three-number convention, and the setup document's 52 predates the Session 0004 reconciliation. Against the correct 77 baseline, Session 0005 added 34 xUnit cases for a final 111: Infrastructure.Tests 55 to 63 (+8, from commit 1's `PostgresEventStore.ReadAllAsync` coverage and `InMemoryEventStore` test and commit 2's two `InProcessMessageDispatcherTests`), Projections.Tests 0 to 26 (the new project). Each addition that exceeded the setup-doc projection — the `InMemoryEventStore` `ReadAllAsync` test, the two dispatcher tests, the sixth `PostgresOrderListStoreTests` method — has its own per-commit deviation or method-level entry above, and each was confirmed before execution. Session 0006's baseline is 111.
 
 ## Cross-track flags (Track A)
 
-Carried from the setup document's pre-recorded flag candidates; final IDs assigned at session-log close. Commit 4 discovered three flags against Chapter 13's depiction of the order-list projection:
+Final IDs are assigned when the consolidated `cross-track-flags-summary.md` index in the book repo is updated post-session. Two groups: flags discovered during execution, and the setup document's pre-recorded candidates with how the implementation resolved each.
 
-1. **The projection write path is a unit of work with an explicit `CommitAsync`.** Chapter 13's deep-dive `OrderDetailProjection` makes two separate calls, `_store.UpsertAsync(view, ct)` then `_checkpoints.AdvanceAsync(nameof(...), meta.GlobalPosition, ct)`, with no visible transaction binding and the atomicity claim left to in-prose assertion. The reference implementation's `IOrderListUnitOfWork.CommitAsync(projectionName, position, ct)` makes the atomicity structural: the checkpoint advance and the row write commit on one transaction or roll back together. Co-resolves with the setup document's pre-recorded F-0005 candidates 1 and 2 (the `IEventHandler` signature and the `ICheckpointStore` shape).
+### Discovered during execution
+
+1. **The projection write path is a unit of work with an explicit `CommitAsync`.** Chapter 13's deep-dive `OrderDetailProjection` makes two separate calls, `_store.UpsertAsync(view, ct)` then `_checkpoints.AdvanceAsync(nameof(...), meta.GlobalPosition, ct)`, with no visible transaction binding and the atomicity claim left to in-prose assertion. The reference implementation's `IOrderListUnitOfWork.CommitAsync(projectionName, position, ct)` makes the atomicity structural: the checkpoint advance and the row write commit on one transaction or roll back together. Composes with candidates 4 and 5 below; see the F-0003-26 note at the end of this section.
 
 2. **The handler set is `OrderPlaced` / `OrderShipped` / `OrderCancelled`.** Chapter 13's early `OrderListProjection` also handles three events, but a different three: `OrderPlaced` + `OrderLineAdded` + `OrderCancelled`. That set assumes the `OrderPlaced` row exists before any `OrderLineAdded` arrives and accumulates the total incrementally, which is a race in an interleaved stream. The reference implementation's `OrderPlaced` carries the final `Total` in payload, so the projection handles only the three lifecycle transitions visible in a list of placed orders and skips the cart-phase line events entirely. The chapter's early code needs normalization against the shipped event shape.
 
 3. **`Money` on the read model is two columns, `total_amount NUMERIC(18, 4)` and `total_currency TEXT`.** Pre-recorded as a flag candidate per the commit-4 planning conversation: if Chapter 13's deep-dive `OpsOrderListProjection` shows a different representation (a composite type, a JSONB blob, a single column), the chapter and the implementation need reconciling. The two-column shape keeps `WHERE` and `ORDER BY` simple relational predicates.
+
+### Pre-recorded candidates from the setup document, resolved
+
+The setup document pre-recorded six flag candidates this session was expected to generate. Each resolved as follows:
+
+4. **`IEventHandler<TEvent>` signature.** Chapter 13's early `OrderListProjection` uses `HandleAsync(EventEnvelope envelope, ...)` with an `envelope.Payload` switch; deep-dive projections use `HandleAsync(TEvent evt, EventMetadata meta, ...)`. The implementation shipped `HandleAsync(EventContext<TEvent> context, ...)` — typed payload, metadata, and `GlobalPosition` on one context wrapper — and the interface is invariant, not `<in TEvent>` (CS1961; see the commit-2 deviation). Chapter 13 normalizes both early and deep-dive sites to the `EventContext<TEvent>` shape.
+
+5. **`ICheckpointStore` shape.** Chapter 13 uses both `SaveAsync(name, position, transaction, ct)` and `AdvanceAsync(name, position, ct)`. The implementation shipped `GetPositionAsync(name, ct)` plus `AdvanceAsync(name, position, DbTransaction, ct)`, the advance an idempotent UPSERT-and-`GREATEST`. Chapter 13 unifies on this shape.
+
+6. **`GlobalPosition` placement.** Chapter 13 leaves it open: `envelope.GlobalSequence` in early code, `meta.GlobalPosition` in deep-dive. The implementation puts `GlobalPosition` on `EventEnvelope`, and likewise on `OutboxMessage` and `EventContext`. F-0003-03 already normalized the name to `GlobalPosition`; this closes the placement question.
+
+7. **`IProjection` marker role.** Chapter 13's early code shows `IProjection` carrying both a `Name` property and a `HandleAsync(EventEnvelope, ...)` method on one interface. The implementation splits the roles: `IProjection` is marker-only (`Name`), and per-event dispatch comes through `IEventHandler<TEvent>`. Chapter 13 splits the roles or notes the split.
+
+8. **`customer_name` on the order-list read model.** Chapter 13's deep-dive `OpsOrderListProjection` denormalizes `customer_name` from the event payload. The reference `OrderPlaced` carries only `CustomerId`, so the v1 `order_list` read model has `customer_id` and no `customer_name`. Populating it needs Phase 4's customer aggregates and a `CustomerSummary` projection. Chapter 13 acknowledges the staging, or leaves the deep-dive aspirational with a footnote.
+
+9. **Read-model storage location.** Chapter 13's prose advocates a separate database for read models. The reference implementation uses two schemas in one PostgreSQL database for v1 (`event_store` and `read_models`), with the split deferred. Chapter 13 acknowledges the implementation choice and the production-pattern delta.
+
+### How these compose for the next F-0003-26 pass
+
+F-0003-26 is the open flag against Chapter 13's dispatch style. Setup-doc decision 3 already picked option (a) from its entry — one dispatch signature propagated through Chapter 13 — and the implementation realized it as `EventContext<TEvent>`. Flag 1's unit-of-work atomicity is the implementation's answer to F-0003-26's other open sub-question: whether the `ICheckpointStore` call sits inside or outside the read-model write's transaction. It sits inside, structurally, via `IOrderListUnitOfWork.CommitAsync`. The combined effect is that when F-0003-26 next gets a book-repo reconciliation pass, the cluster scope is largely determined: normalize Chapter 13's dispatch signature to `IEventHandler<TEvent>` with `EventContext<TEvent>` (flags 4 and 6), normalize the checkpoint shape to the transaction-bound `AdvanceAsync` (flag 5), and decide whether to introduce the unit-of-work pattern in the chapter's prose or to leave the atomicity claim in-prose while acknowledging the implementation's stronger structural guarantee (flag 1). The reconciliation pass can build cluster scope from these entries without re-deriving from the code.
+
+## Notes for next sessions
+
+**Workers host.** `AddPostgresEventStore` and `AddReadModels` are both wired but unconsumed: no `Program.cs` calls them, nothing starts the `OutboxProcessor`, and the projection's live tail never runs outside the rebuild test. The Workers host is the consumer that changes that. It is also where the read-model `NpgsqlDataSource` disposal-lifetime question gets settled (see the commit-6 deviation), and where the deferred LISTEN/NOTIFY trigger pairs naturally with the first latency-sensitive consumer. The Session 0004 log already flagged the Workers host and the embedded migration-runner-call placement; both are still owed.
+
+**The second projection forces the projection-registration-helper question.** `AddReadModels` hand-writes five registrations for one projection: `OrderListProjection` as a bare type, plus `IProjection` and three `IEventHandler<TEvent>` forwarding registrations. Phase 4's `CustomerSummaryProjection` is the second projection; that is when the hand-written-versus-reflection-helper question gets a real answer with two concrete projections in front of it.
+
+**The third consumer forces the reflection-extraction question.** `InProcessMessageDispatcher` and `ProjectionReplayer` each carry their own closed-generic reflection (resolve `IEventHandler<TEvent>.HandleAsync`, resolve the `EventContext<TEvent>` constructor). They are not shared because their drivers differ. A third consumer of that reflection earns the extraction.
+
+**The MigrationRunner extraction trigger fired.** `Projections.Tests` is the third consumer of `MigrationRunner` (after `EventStore.Postgres.Cli` and `Infrastructure.Tests`), which the setup document's deferred-items list set as the trigger for extracting it from `EventStore.Postgres`. The extraction was out of this session's scope; it is owed.
+
+**`PostgresFixture` is duplicated between `Infrastructure.Tests` and `Projections.Tests`.** The setup document set extraction to a shared `tests/TestInfrastructure/` project at the third consumer. There are still two; a third test project consuming it triggers the extraction.
+
+**PLAN.md reconciliation owed in Phase 14.** This session is PLAN.md Phase 6 work pulled forward into the reconciled six-week foundation plan, per F-0001-A. PLAN.md still numbers it Phase 6, Weeks 11-12. The reconciliation is owed in Phase 14, alongside the F-0001-A items the Session 0004 log already records.
