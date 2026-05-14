@@ -7,9 +7,11 @@
     <Project Path="src/Infrastructure/EventStore.Postgres/EventStore.Postgres.csproj" />
     <Project Path="src/Infrastructure/EventStore.Postgres.Cli/EventStore.Postgres.Cli.csproj" />
     <Project Path="src/Infrastructure/Outbox/Outbox.csproj" />
+    <Project Path="src/Infrastructure/ReadModels.Postgres/ReadModels.Postgres.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Domain.Tests/Domain.Tests.csproj" />
     <Project Path="tests/Infrastructure.Tests/Infrastructure.Tests.csproj" />
+    <Project Path="tests/Projections.Tests/Projections.Tests.csproj" />
   </Folder>
 </Solution>
