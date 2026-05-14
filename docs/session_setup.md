@@ -56,7 +56,7 @@ The reconciled six-week foundation plan (master setup, May 8, 2026) governs the 
 - Weeks 3-4: PostgreSQL adapter and outbox, three sessions
   - Session 0002 (shipped): initial migration plus `MigrationRunner` plus CLI
   - Session 0003 (shipped): PostgreSQL `IEventStore` adapter with `AppendAsync`, `ReadStreamAsync`, `EventTypeRegistry`
-  - Session 0004 (design committed, execution pending): `OutboxProcessor` plus `IMessageDispatcher` plus `AddPostgresEventStore` composition root
+  - Session 0004 (shipped): `OutboxProcessor` plus `IMessageDispatcher` plus `AddPostgresEventStore` composition root
 - Weeks 5-6: first projection and the read side (Session 0005, next Track B planning topic)
 
 PLAN.md's phase numbering does not match the six-week plan's week numbering. Where the two disagree, the six-week plan is in effect through mid-June. PLAN.md reconciliation happens in Phase 14 or sooner if the divergence grows.
@@ -65,7 +65,7 @@ The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules 
 
 ## Where the build stands now
 
-Sessions 0001, 0002, and 0003 are shipped. Session 0004's design record is committed but Track C has not yet executed it.
+Sessions 0001 through 0004 are shipped.
 
 ### Session 0001 (shipped)
 
@@ -95,7 +95,7 @@ PostgreSQL `IEventStore` adapter implementation in `EventStore.Postgres`. `Postg
 
 `EventStore.Postgres.csproj` gained a `ProjectReference` to `Domain.Abstractions` (the `EventTypeRegistry`'s `Register<TEvent> where TEvent : IDomainEvent` constraint surfaced the need). This was the one deviation from Session 0003's pre-execution design.
 
-### Session 0004 (design committed, execution pending)
+### Session 0004 (shipped)
 
 The design record is at `docs/sessions/0004-weeks3-4-outbox-processor.md`. It captures eight design decisions made in Track B (dispatch trigger, read query and lock mode, backoff schedule, quarantine path, crash recovery, `IMessageDispatcher` interface, test plan, composition root) plus eight cross-track flags accumulating against Chapter 8's Publication of Events section.
 
@@ -103,11 +103,9 @@ Headline decisions: polling-only dispatch (no `LISTEN/NOTIFY` until Phase 6); `F
 
 Planned test count after Session 0004 execution: 22 Domain + 41 Infrastructure = 63 total. Eleven new tests (8 integration, 2 retry-policy unit, 1 DI-resolution).
 
-Track C will execute Session 0004 against the design record. Updates to the design record happen in place per the single-file convention.
+Track C executed Session 0004 against the design record. Updates to the design record happen in place per the single-file convention.
 
 ## What is not yet in place
-
-- **Session 0004 execution by Track C.** The eleven tests, the `OutboxProcessor`, the `OutboxRetryPolicy`, the `IMessageDispatcher` and `InProcessMessageDispatcher`, the `IEventHandler<TEvent>` abstraction, the `INpgsqlConnectionFactory`, the `OutboxProcessorOptions`, the `AddPostgresEventStore` extension. All scoped in the design record.
 
 - **Workers host.** No `Program.cs` yet consumes `AddPostgresEventStore`. The first host probably lands alongside the Phase 2 Application command pipeline session or the Web/Api session in Phase 7, depending on what the foundation plan needs first. The embedded migration-runner call flagged in Session 0002 (`MigrationRunner.RunPendingAsync` before binding ports) lands in that same host-introduction session.
 
@@ -128,8 +126,6 @@ Track C will execute Session 0004 against the design record. Updates to the desi
 Session 0005: planning for the first projection.
 
 The expected scope is `OrderListProjection` plus the projection infrastructure that supports it — `IProjection` or equivalent abstraction, checkpoint store, the polling consumer that drives the projection from the events table forward by `global_position`, and the test pattern for projection rebuilds. The trigger mechanism question (polling versus `LISTEN/NOTIFY`) is open and is the natural Session 0005 design topic; it also revisits the deferred Session-0004 question about whether the outbox processor benefits from the same signaling.
-
-If Track C surfaces a design question during Session 0004 execution that needs Track B input rather than a `CLAUDE.md`-grounded judgment call, this same `session_setup.md` is the entry point for that follow-up Track B touch-up conversation; the responsible session just states its specific task instead of opening Session 0005 scope.
 
 ## Cross-track flags pending
 
