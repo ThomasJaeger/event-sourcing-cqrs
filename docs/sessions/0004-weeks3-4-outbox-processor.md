@@ -366,3 +366,15 @@ None of these changed a design decision. Each is a refinement caught during exec
 **`OutboxRetryPolicy` curve is host-tunable as shipped.** `BaseSeconds = 1` and `CapSeconds = 300` are the policy's `public const int` defaults; `OutboxProcessorOptions` exposes both as `init`-able properties whose defaults reference the policy constants. The DI factory delegate constructs the policy from the options at first resolution, so a host that wants a different curve calls `services.Configure<OutboxProcessorOptions>` before `AddPostgresEventStore`. `MaxAttempts` is on the options too; it controls the processor's quarantine-branch decision rather than the curve.
 
 **PLAN.md folder layout describes `Infrastructure/Outbox/` in its pre-ADR-0004 sense.** PLAN.md says the folder hosts "OutboxProcessor (PostgreSQL-resident outbox)". Per ADR 0004 the per-adapter `OutboxProcessor` lives in `EventStore.Postgres`, and Session 0004 repurposed `Infrastructure/Outbox/` for the engine-agnostic `InProcessMessageDispatcher`. Phase 14 reconciliation should update PLAN.md to describe the project's actual post-Session-0004 role; not blocking earlier work.
+
+## Post-execution updates (F-0001-A, F-0001-E)
+
+This section is the addendum the work order's planner-side discussion identified. It keeps the cross-repo flag-closure trail discoverable without taking the 0005 session number reserved for first-projection planning. F-0001-A and F-0001-E were both filed against Session 0004's PLAN.md and session_setup.md assumptions, so the closure record belongs in this log.
+
+Commit `c82d568` ("Reconcile PLAN.md and session_setup.md against shipped state") closes both flags. The edits:
+
+- **F-0001-A, PLAN.md Phase 1 port list.** `ISnapshotStore` and `IProjectionCheckpoint` were listed as Phase 1 ports. Neither shipped in Phase 1. Both moved to the Phase 1 Out-of-scope list with forward-pointers: `ISnapshotStore` to Phase 12, `IProjectionCheckpoint` to Phase 6, in PLAN.md's own phase numbering.
+- **F-0001-E, PLAN.md Phase 3 event set.** Phase 3's Goals described an Order aggregate the shipped code does not implement, and the drift ran wider than the event list. Five bullets (lifecycle, events, command methods, invariant examples, value objects) were updated to the shipped Draft / AddLine / RemoveLine / SetShippingAddress / Place / Ship / Cancel lifecycle. The `OrderRepository` naming question and the Phase 3 phase-ordering divergence stayed out of scope and route to Phase 14.
+- **session_setup.md Session 0004 status.** The doc described Session 0004 as "design committed, execution pending" across five sites. All five were corrected to shipped state. The "Planned test count" line and the "Cross-track flags pending" section were left as frozen-accurate, with the post-execution test count and the flag-index reconciliation routing to the Session 0005 forward refresh.
+
+Book-repo follow-up: update the F-0001-A and F-0001-E rows in `cross-track-flags-summary.md` to resolved status, citing commit `c82d568`. That is a future book-repo session, not part of this addendum's commit.
