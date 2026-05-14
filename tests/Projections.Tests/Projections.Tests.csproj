@@ -9,12 +9,14 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Domain\Domain.csproj" />
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Projections\Projections.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
   </ItemGroup>
 </Project>
