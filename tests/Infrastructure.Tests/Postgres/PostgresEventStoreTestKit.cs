@@ -47,7 +47,8 @@ internal static class PostgresEventStoreTestKit
             EventVersion: 1,
             Payload: payload,
             Metadata: metadata,
-            OccurredUtc: when);
+            OccurredUtc: when,
+            GlobalPosition: 0);
     }
 }
 

@@ -68,6 +68,8 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         var read = await store.ReadStreamAsync(streamId, 0, CancellationToken.None);
 
         read.Select(e => e.StreamVersion).Should().Equal(1, 2, 3);
+        // Fresh database, IDENTITY starts at 1: ReadStreamAsync populates GlobalPosition.
+        read.Select(e => e.GlobalPosition).Should().Equal(1, 2, 3);
         read[0].Payload.Should().BeOfType<TestPayload>();
         read[1].Payload.Should().BeOfType<OtherTestPayload>().Which.Description.Should().Be("two");
         read[2].Payload.Should().BeOfType<TestPayload>();

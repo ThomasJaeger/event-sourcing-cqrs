@@ -68,7 +68,8 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
                 EventVersion: 1,
                 Payload: @event,
                 Metadata: metadata,
-                OccurredUtc: now);
+                OccurredUtc: now,
+                GlobalPosition: 0);
         }
         return envelopes;
     }
