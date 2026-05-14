@@ -203,13 +203,15 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Connection from .NET to all four services working with smoke tests.
 - `migrations/` folder with the first event store schema migration for PostgreSQL.
 - CI pipeline: build plus test on every push, against all four services. CI uses .NET 10 SDK.
-- Domain.Abstractions populated with the core ports: `IAggregateRoot`, `IDomainEvent`, `IEventStore`, `IRepository<T>`, `ISnapshotStore`, `IProjectionCheckpoint`.
+- Domain.Abstractions populated with the core ports: `IAggregateRoot`, `IDomainEvent`, `IEventStore`, `IRepository<T>`.
 - Common types defined: `EventId`, `StreamId`, `Version`, `EventEnvelope`, `EventMetadata` (CorrelationId, CausationId, OccurredAt, Actor).
 
 **Out of scope.**
 - Aggregate code. Phase 3.
 - UI. Phase 7.
 - KurrentDB and DynamoDB adapter implementation. Phases 10 and 11.
+- `ISnapshotStore` port. Phase 12, with the snapshot pattern.
+- `IProjectionCheckpoint` port. Phase 6, with the projection infrastructure.
 
 **Done when.**
 - `dotnet --version` inside the repo reports 10.0.x.
@@ -246,12 +248,12 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 ### Phase 3, Weeks 5-6: Sales context (Order aggregate)
 
 **Goals.**
-- `Order` aggregate with full lifecycle: Placed, PaymentAuthorized, InventoryReserved, Shipped, Completed, Cancelled.
-- Events: OrderPlaced, OrderPaymentAuthorized, OrderInventoryReserved, OrderShipped, OrderCompleted, OrderCancelled.
-- Command methods: PlaceOrder, RecordPaymentAuthorized, RecordInventoryReserved, MarkShipped, MarkCompleted, Cancel.
+- `Order` aggregate with full lifecycle: drafted, lines added and removed, shipping address set, placed, then shipped or cancelled.
+- Events: OrderDrafted, OrderLineAdded, OrderLineRemoved, ShippingAddressSet, OrderPlaced, OrderCancelled, OrderShipped.
+- Command methods: Draft (static factory), AddLine, RemoveLine, SetShippingAddress, Place, Ship, Cancel.
 - `Apply(IDomainEvent)` reconstruction.
-- Aggregate-level invariants enforced (cannot ship an unpaid order, cannot cancel a completed order, etc.).
-- Value objects: `OrderId`, `Money`, `OrderLine`, `CustomerReference`.
+- Aggregate-level invariants enforced (lines change only while the order is a draft, an order cannot be placed without lines and a shipping address, a shipped order cannot be cancelled, etc.).
+- Value objects: `Money`, `Address`, `OrderLine`.
 - Given-When-Then unit tests covering happy path and every invariant violation.
 - `OrderRepository` that loads the aggregate by replaying events from the EventStore through the PostgreSQL adapter.
 
