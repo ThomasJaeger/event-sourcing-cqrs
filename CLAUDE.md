@@ -18,6 +18,12 @@ Deliberate historical-shape pedagogy in the book stays as-written. Ch 11's upcas
 
 This rule applies symmetrically across both Claude Code instances and the Claude.ai planner. Same rule appears in the book repo's CLAUDE.md and HANDOFF.md.
 
+## Attribution convention
+
+Commit messages, session log content, and doc-edit prose in this repository carry no Co-Authored-By or other Claude / Anthropic attribution. The AI-assistance pattern is internal to the working model, not a public artifact. Historical commits carrying attribution stay as-is; enforcement is forward-only.
+
+This rule applies symmetrically across both Claude Code instances and the Claude.ai planner. Same rule appears in the book repo's CLAUDE.md and HANDOFF.md.
+
 ## What "good" looks like in this repository
 
 Code in this repo must reflect the patterns the book teaches. The book is opinionated. The code must be opinionated in the same direction. When there is a choice between idiomatic .NET and the book's pattern, the book's pattern wins. A reader who copies a snippet from the book and a snippet from the repo should see the same shape.
