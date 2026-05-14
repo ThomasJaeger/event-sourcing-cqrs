@@ -164,7 +164,8 @@ public sealed class OutboxProcessor : BackgroundService
         await using var cmd = connection.CreateCommand();
         cmd.Transaction = transaction;
         cmd.CommandText =
-            "SELECT outbox_id, event_id, event_type, payload, metadata, attempt_count " +
+            "SELECT outbox_id, event_id, event_type, payload, metadata, attempt_count, " +
+            "global_position " +
             "FROM event_store.outbox " +
             "WHERE sent_utc IS NULL " +
             "  AND (next_attempt_at IS NULL OR next_attempt_at <= @now) " +
@@ -184,7 +185,8 @@ public sealed class OutboxProcessor : BackgroundService
                 EventType: reader.GetString(2),
                 PayloadJson: reader.GetString(3),
                 MetadataJson: reader.GetString(4),
-                AttemptCount: reader.GetInt32(5)));
+                AttemptCount: reader.GetInt32(5),
+                GlobalPosition: reader.GetInt64(6)));
         }
         return rows;
     }
@@ -202,6 +204,7 @@ public sealed class OutboxProcessor : BackgroundService
             EventType: row.EventType,
             Event: payload,
             Metadata: metadata,
+            GlobalPosition: row.GlobalPosition,
             AttemptCount: row.AttemptCount);
     }
 
@@ -303,5 +306,6 @@ public sealed class OutboxProcessor : BackgroundService
         string EventType,
         string PayloadJson,
         string MetadataJson,
-        int AttemptCount);
+        int AttemptCount,
+        long GlobalPosition);
 }
