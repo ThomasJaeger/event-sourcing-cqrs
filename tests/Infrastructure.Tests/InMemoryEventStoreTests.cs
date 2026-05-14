@@ -24,6 +24,31 @@ public class InMemoryEventStoreTests
 
         read.Should().HaveCount(3);
         read.Select(e => e.StreamVersion).Should().Equal(1, 2, 3);
+        // The store stamps GlobalPosition on append; write-path envelopes carry 0.
+        read.Select(e => e.GlobalPosition).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public async Task ReadAllAsync_returns_events_across_streams_in_global_position_order()
+    {
+        var store = new InMemoryEventStore();
+        var streamA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var streamB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        await store.AppendAsync(
+            streamA, expectedVersion: 0,
+            BuildEnvelopes(streamA, count: 2, baseVersion: 0), CancellationToken.None);
+        await store.AppendAsync(
+            streamB, expectedVersion: 0,
+            BuildEnvelopes(streamB, count: 2, baseVersion: 0), CancellationToken.None);
+
+        var all = new List<EventEnvelope>();
+        await foreach (var envelope in store.ReadAllAsync(0, CancellationToken.None))
+        {
+            all.Add(envelope);
+        }
+
+        all.Select(e => e.GlobalPosition).Should().Equal(1, 2, 3, 4);
+        all.Select(e => e.StreamId).Should().Equal(streamA, streamA, streamB, streamB);
     }
 
     [Fact]
@@ -80,7 +105,8 @@ public class InMemoryEventStoreTests
                 EventVersion: 1,
                 Payload: new TestEvent(),
                 Metadata: metadata,
-                OccurredUtc: At);
+                OccurredUtc: At,
+                GlobalPosition: 0);
         }
         return envelopes;
     }

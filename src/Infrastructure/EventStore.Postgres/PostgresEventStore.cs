@@ -1,3 +1,5 @@
+using System.Data;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using Npgsql;
@@ -113,7 +115,7 @@ public sealed class PostgresEventStore : IEventStore
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "SELECT stream_version, event_id, event_type, event_version, " +
+            "SELECT global_position, stream_version, event_id, event_type, event_version, " +
             "payload, metadata, occurred_utc " +
             "FROM event_store.events " +
             "WHERE stream_id = @stream_id AND stream_version > @from_version " +
@@ -125,13 +127,14 @@ public sealed class PostgresEventStore : IEventStore
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            var streamVersion = reader.GetInt32(0);
-            var eventId = reader.GetGuid(1);
-            var eventType = reader.GetString(2);
-            var eventVersion = reader.GetInt16(3);
-            var payloadJson = reader.GetString(4);
-            var metadataJson = reader.GetString(5);
-            var occurredUtc = DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc);
+            var globalPosition = reader.GetInt64(0);
+            var streamVersion = reader.GetInt32(1);
+            var eventId = reader.GetGuid(2);
+            var eventType = reader.GetString(3);
+            var eventVersion = reader.GetInt16(4);
+            var payloadJson = reader.GetString(5);
+            var metadataJson = reader.GetString(6);
+            var occurredUtc = DateTime.SpecifyKind(reader.GetDateTime(7), DateTimeKind.Utc);
 
             Type clrType;
             try
@@ -156,10 +159,78 @@ public sealed class PostgresEventStore : IEventStore
                 EventVersion: eventVersion,
                 Payload: payload,
                 Metadata: metadata,
-                OccurredUtc: occurredUtc));
+                OccurredUtc: occurredUtc,
+                GlobalPosition: globalPosition));
         }
 
         return envelopes;
+    }
+
+    // Streams the whole events table in global_position order, yielding rows
+    // as the reader produces them. SequentialAccess keeps the reader from
+    // buffering whole rows; the single connection is held open for the
+    // enumeration's lifetime. v1 read loads tolerate this; very large rebuilds
+    // may need keyset-paginated batching, deferred until that is a real concern.
+    public async IAsyncEnumerable<EventEnvelope> ReadAllAsync(
+        long fromPosition,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT global_position, stream_id, stream_version, event_id, event_type, " +
+            "event_version, payload, metadata, occurred_utc " +
+            "FROM event_store.events " +
+            "WHERE global_position > @from_position " +
+            "ORDER BY global_position";
+        AddBigInt(cmd, "from_position", fromPosition);
+
+        await using var reader = await cmd.ExecuteReaderAsync(
+            CommandBehavior.SequentialAccess, ct);
+        while (await reader.ReadAsync(ct))
+        {
+            // ReadAsync only observes the token when it does real async I/O, so a
+            // buffered result set would not see a cancellation between rows. Check
+            // explicitly each iteration so enumeration stops deterministically.
+            ct.ThrowIfCancellationRequested();
+
+            // SequentialAccess requires reading columns in ascending ordinal order.
+            var globalPosition = reader.GetInt64(0);
+            var streamId = reader.GetGuid(1);
+            var streamVersion = reader.GetInt32(2);
+            var eventId = reader.GetGuid(3);
+            var eventType = reader.GetString(4);
+            var eventVersion = reader.GetInt16(5);
+            var payloadJson = reader.GetString(6);
+            var metadataJson = reader.GetString(7);
+            var occurredUtc = DateTime.SpecifyKind(reader.GetDateTime(8), DateTimeKind.Utc);
+
+            Type clrType;
+            try
+            {
+                clrType = _registry.TypeFor(eventType);
+            }
+            catch (UnknownEventTypeException ex)
+            {
+                throw new UnknownEventTypeException(eventType, streamId, ex);
+            }
+
+            var payload = (IDomainEvent)JsonSerializer.Deserialize(
+                payloadJson, clrType, _jsonOptions)!;
+            var metadata = JsonSerializer.Deserialize<EventMetadata>(
+                metadataJson, _jsonOptions)!;
+
+            yield return new EventEnvelope(
+                StreamId: streamId,
+                StreamVersion: streamVersion,
+                EventId: eventId,
+                EventType: eventType,
+                EventVersion: eventVersion,
+                Payload: payload,
+                Metadata: metadata,
+                OccurredUtc: occurredUtc,
+                GlobalPosition: globalPosition);
+        }
     }
 
     private static void AddUuid(NpgsqlCommand cmd, string name, Guid value)
@@ -170,6 +241,9 @@ public sealed class PostgresEventStore : IEventStore
 
     private static void AddInteger(NpgsqlCommand cmd, string name, int value)
         => cmd.Parameters.AddWithValue(name, NpgsqlDbType.Integer, value);
+
+    private static void AddBigInt(NpgsqlCommand cmd, string name, long value)
+        => cmd.Parameters.AddWithValue(name, NpgsqlDbType.Bigint, value);
 
     private static void AddSmallInt(NpgsqlCommand cmd, string name, short value)
         => cmd.Parameters.AddWithValue(name, NpgsqlDbType.Smallint, value);
