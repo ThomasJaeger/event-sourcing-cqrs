@@ -57,7 +57,7 @@ The reconciled six-week foundation plan (master setup, May 8, 2026) governs the 
   - Session 0002 (shipped): initial migration plus `MigrationRunner` plus CLI
   - Session 0003 (shipped): PostgreSQL `IEventStore` adapter with `AppendAsync`, `ReadStreamAsync`, `EventTypeRegistry`
   - Session 0004 (shipped): `OutboxProcessor` plus `IMessageDispatcher` plus `AddPostgresEventStore` composition root
-- Weeks 5-6: first projection and the read side (Session 0005, next Track B planning topic)
+- Weeks 5-6: first projection and the read side (Session 0005, shipped): `EventEnvelope.GlobalPosition` plus `IEventStore.ReadAllAsync`, `EventContext<TEvent>`, `ICheckpointStore`, `OrderListProjection`, `ProjectionReplayer`, `AddReadModels`
 
 PLAN.md's phase numbering does not match the six-week plan's week numbering. Where the two disagree, the six-week plan is in effect through mid-June. PLAN.md reconciliation happens in Phase 14 or sooner if the divergence grows.
 
@@ -65,7 +65,7 @@ The repo-wide rules for Claude Code live in `CLAUDE.md`. My writing style rules 
 
 ## Where the build stands now
 
-Sessions 0001 through 0004 are shipped.
+Sessions 0001 through 0005 are shipped.
 
 ### Session 0001 (shipped)
 
@@ -105,17 +105,31 @@ Planned test count after Session 0004 execution: 22 Domain + 41 Infrastructure =
 
 Track C executed Session 0004 against the design record. Updates to the design record happen in place per the single-file convention.
 
+### Session 0005 (shipped)
+
+`OrderListProjection` and the read side. Six commits land the slice end to end: `EventEnvelope.GlobalPosition` plus `IEventStore.ReadAllAsync` on both adapters, the `EventContext<TEvent>` handler signature, `ICheckpointStore` plus `PostgresCheckpointStore`, the `ReadModels.Postgres` project, `IProjection` and the `Projections` project, `OrderListProjection` with `IOrderListStore` plus `IOrderListUnitOfWork`, `PostgresOrderListStore`, the `ProjectionReplayer`, and the `AddReadModels` composition root. Migrations `0002_add_outbox_global_position.sql`, `0003_initial_read_models.sql`, and `0004_add_order_list_read_model.sql` land alongside.
+
+Headline decisions: `IProjection` is marker-only with per-event dispatch through `IEventHandler<TEvent>` (invariant, not `<in TEvent>`, by compiler constraint); `ICheckpointStore.AdvanceAsync` is transaction-bound and the projection write path is a unit of work (`IOrderListUnitOfWork.CommitAsync`); `EventContext<TEvent>` carries typed payload, metadata, and `GlobalPosition` on one wrapper; `OrderListProjection` handles `OrderPlaced`, `OrderShipped`, `OrderCancelled` only (`OrderPlaced` carries the final `Total`); `Money` on the read model is two columns (`total_amount NUMERIC(18,4)`, `total_currency TEXT`); `ProjectionReplayer` is single-projection-scoped (constructor-injected `IProjection`); `AddReadModels` builds the read-model `NpgsqlDataSource` inside the `IReadModelConnectionFactory` factory delegate, not via a shared `TryAddSingleton<NpgsqlDataSource>` with `AddPostgresEventStore`.
+
+111 xUnit cases at the end of Session 0005: 22 Domain.Tests, 63 Infrastructure.Tests, 26 Projections.Tests. The design record, deviations, and per-commit deltas live at `docs/sessions/0005-weeks5-6-first-projection.md`.
+
 ## What is not yet in place
 
-- **Workers host.** No `Program.cs` yet consumes `AddPostgresEventStore`. The first host probably lands alongside the Phase 2 Application command pipeline session or the Web/Api session in Phase 7, depending on what the foundation plan needs first. The embedded migration-runner call flagged in Session 0002 (`MigrationRunner.RunPendingAsync` before binding ports) lands in that same host-introduction session.
+- **Workers host.** Both `AddPostgresEventStore` and `AddReadModels` are wired but unconsumed: no `Program.cs` calls them, nothing starts the `OutboxProcessor` as a `BackgroundService`, and `OrderListProjection`'s live tail never runs outside the rebuild test. The Workers host is the consumer that changes that. It is also where the deferred `LISTEN/NOTIFY` trigger pairs naturally with the first latency-sensitive consumer, where the read-model `NpgsqlDataSource` disposal-lifetime question (Session 0005's commit-6 deviation) gets settled, and where the embedded `MigrationRunner.RunPendingAsync` call flagged in Session 0002 lands.
 
-- **First projection (Session 0005).** Weeks 5-6 of the six-week plan. `OrderListProjection` is the canonical first one given the Order aggregate is already in place. The projection-trigger session for `LISTEN/NOTIFY` lives alongside this work and is where the deferred Session-0004 question (LISTEN/NOTIFY for the outbox processor too?) gets answered.
-
-- **Application layer.** Empty project shell ready. Commands, queries, middleware, `ICommandContext` arrive in Phase 2 with the command pipeline. Real correlation/causation/actor metadata flows from there into `EventStoreRepository`'s envelope construction.
+- **Application layer.** Empty project shell ready. Commands, queries, middleware, and `ICommandContext` arrive with the command pipeline. Real correlation/causation/actor metadata flows from there into `EventStoreRepository`'s envelope construction.
 
 - **`EventTypeRegistry` cleaner two-phase registration.** Per-aggregate-module `IEventTypeProvider` contributions composed by a single registry factory. Lands alongside the first host introduction.
 
-- **SQL Server adapter.** Parallel hand-rolled relational implementation in `src/Infrastructure/EventStore.SqlServer/`. Self-contained per ADR 0004. Later in Phase 2 after the PostgreSQL trio (Sessions 0002, 0003, 0004) is fully shipped.
+- **Additional aggregates.** Inventory and Shipment (Fulfillment), Payment (Billing). Phase 4 of PLAN.md.
+
+- **Process managers.** `OrderFulfillmentProcessManager` (the four-branch saga with all compensation paths) and `ReturnProcessManager`. Both event-sourced. Phase 5 of PLAN.md.
+
+- **Additional projections.** `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`. The second projection forces the projection-registration-helper question; `AddReadModels` hand-writes five registrations for one projection today.
+
+- **UI and API hosts.** Blazor Server Web host plus minimal-API host. Phase 7.
+
+- **SQL Server adapter.** Parallel hand-rolled relational implementation in `src/Infrastructure/EventStore.SqlServer/`. Self-contained per ADR 0004. Later in Phase 2 after the PostgreSQL slice is fully consumed.
 
 - **KurrentDB and DynamoDB adapters.** Phases 10 and 11 of PLAN.md.
 
@@ -123,21 +137,8 @@ Track C executed Session 0004 against the design record. Updates to the design r
 
 ## What the next Track B session is for
 
-Session 0005: planning for the first projection.
-
-The expected scope is `OrderListProjection` plus the projection infrastructure that supports it — `IProjection` or equivalent abstraction, checkpoint store, the polling consumer that drives the projection from the events table forward by `global_position`, and the test pattern for projection rebuilds. The trigger mechanism question (polling versus `LISTEN/NOTIFY`) is open and is the natural Session 0005 design topic; it also revisits the deferred Session-0004 question about whether the outbox processor benefits from the same signaling.
+The next planner conversation chooses the topic. The Workers host is the natural follow-on per the Session 0005 log's "Notes for next sessions": it consumes both `AddPostgresEventStore` and `AddReadModels`, runs `OutboxProcessor` as a `BackgroundService`, runs the live tail of `OrderListProjection`, calls `MigrationRunner.RunPendingAsync` before binding ports, and is the right pressure point for the deferred `LISTEN/NOTIFY` signaling and the read-model `NpgsqlDataSource` disposal-lifetime question.
 
 ## Cross-track flags pending
 
-Eight flags accumulated in Session 0004's design record, all against Chapter 8's Publication of Events section. The next Track A session should be informed of these so the next Chapter 8 pass picks them up. Summary:
-
-1. Chapter 8's `OutboxProcessor` code is polling-only with no `LISTEN/NOTIFY` and no backoff column; implementation adds `next_attempt_at` and `last_error`.
-2. Chapter 8's processor reads pending rows without a lock hint; implementation adds `FOR UPDATE SKIP LOCKED`.
-3. Chapter 8 commits to "exponential backoff" in prose but doesn't realize it in code; implementation does via `OutboxRetryPolicy` (base 1s, cap 5min, full jitter).
-4. Chapter 8's `QuarantineAsync` is opaque; implementation realizes it as an atomic `DELETE ... RETURNING ... INSERT` CTE.
-5. Chapter 8 describes timeout-threshold startup recovery; implementation relies on transaction-scoped row locks and needs no recovery code.
-6. Chapter 8 references `IMessageDispatcher` and `IEventHandler<TEvent>` without defining either; implementation defines both in `Domain.Abstractions`.
-7. Chapter 8's processor uses wall-clock `DateTime` implicitly; implementation injects `TimeProvider` and a jitter source via `OutboxProcessorOptions`.
-8. Chapter 8 shows no composition-root wiring; implementation ships `AddPostgresEventStore` extension with adapter-specific `INpgsqlConnectionFactory`.
-
-Full text in `docs/sessions/0004-weeks3-4-outbox-processor.md`. Also accumulated from earlier sessions are the 25 Track A flags in Session 0003's log and the 10 Track A flags in Session 0002's log. None are resolved yet on the book side.
+The consolidated index lives in the book repo at `~/Documents/GitHub/event-sourcing-cqrs-book/docs/sessions/cross-track-flags-summary.md`. As of book-repo commit `b354d1d`, the index covers 48 flags across the five shipped sessions (0001 through 0005). Chapter 13 is the post-arc concentration point with a well-scoped reconciliation pass owed against the dispatch-signature, checkpoint, and unit-of-work flags Session 0005 added; see F-0003-26 in the index for the cluster scope. Per-session flag detail lives in each session log under "Cross-track flags (Track A)"; this file no longer enumerates them.
