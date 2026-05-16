@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 using FluentAssertions;
 using Npgsql;
 using Xunit;
@@ -19,7 +20,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
     {
         var connStr = await _fixture.CreateDatabaseAsync();
         var log = new List<string>();
-        var runner = new MigrationRunner();
+        var runner = new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix);
 
         await runner.RunPendingAsync(
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
@@ -89,7 +92,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
     public async Task Re_run_against_already_applied_database_is_a_no_op()
     {
         var connStr = await _fixture.CreateDatabaseAsync();
-        var runner = new MigrationRunner();
+        var runner = new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix);
         await runner.RunPendingAsync(
             new MigrationRunnerOptions { ConnectionString = connStr },
             CancellationToken.None);
@@ -126,7 +131,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
 
         var logA = new List<string>();
         var logB = new List<string>();
-        var runner = new MigrationRunner();
+        var runner = new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix);
         var taskA = Task.Run(() => runner.RunPendingAsync(
             new MigrationRunnerOptions { ConnectionString = connStr, Log = logA.Add },
             CancellationToken.None));
@@ -169,7 +176,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
     public async Task Checksum_mismatch_throws_with_migration_identity_in_message()
     {
         var connStr = await _fixture.CreateDatabaseAsync();
-        var runner = new MigrationRunner();
+        var runner = new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix);
         await runner.RunPendingAsync(
             new MigrationRunnerOptions { ConnectionString = connStr },
             CancellationToken.None);
@@ -200,7 +209,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
     {
         var connStr = await _fixture.CreateDatabaseAsync();
         var log = new List<string>();
-        var runner = new MigrationRunner();
+        var runner = new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix);
 
         await runner.RunPendingAsync(
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },

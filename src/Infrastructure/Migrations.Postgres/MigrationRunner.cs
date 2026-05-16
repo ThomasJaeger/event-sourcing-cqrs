@@ -1,9 +1,10 @@
 using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Npgsql;
 
-namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+namespace EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 
 public sealed class MigrationRunner
 {
@@ -13,7 +14,21 @@ public sealed class MigrationRunner
     // targeting the same PostgreSQL instance picks a different value.
     public const long MigrationAdvisoryLockKey = 0x4553_5243_515F_4D52L;
 
-    private const string ResourcePrefix = "EventStore.Postgres.Migrations.";
+    private readonly Assembly _assembly;
+    private readonly string _resourcePrefix;
+
+    // Migrations live as embedded .sql resources in some engine's adapter
+    // assembly. The runner is engine-agnostic per ADR 0004, so the assembly
+    // handle and the LogicalName prefix that the csproj sets on those
+    // resources come in through the constructor. The PostgreSQL adapter's
+    // EventStorePostgresMigrations exposes both values in one place.
+    public MigrationRunner(Assembly assembly, string resourcePrefix)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+        ArgumentException.ThrowIfNullOrEmpty(resourcePrefix);
+        _assembly = assembly;
+        _resourcePrefix = resourcePrefix;
+    }
 
     public async Task RunPendingAsync(MigrationRunnerOptions options, CancellationToken ct)
     {
@@ -162,18 +177,17 @@ public sealed class MigrationRunner
         }
     }
 
-    private static IReadOnlyList<MigrationFile> LoadEmbeddedMigrations()
+    private IReadOnlyList<MigrationFile> LoadEmbeddedMigrations()
     {
-        var assembly = typeof(MigrationRunner).Assembly;
         var migrations = new List<MigrationFile>();
-        foreach (var resourceName in assembly.GetManifestResourceNames())
+        foreach (var resourceName in _assembly.GetManifestResourceNames())
         {
-            if (!resourceName.StartsWith(ResourcePrefix, StringComparison.Ordinal)
+            if (!resourceName.StartsWith(_resourcePrefix, StringComparison.Ordinal)
                 || !resourceName.EndsWith(".sql", StringComparison.Ordinal))
             {
                 continue;
             }
-            var fileName = resourceName[ResourcePrefix.Length..];
+            var fileName = resourceName[_resourcePrefix.Length..];
             if (fileName.Length < 6 || fileName[4] != '_')
             {
                 throw new InvalidOperationException(
@@ -183,7 +197,7 @@ public sealed class MigrationRunner
                 fileName.AsSpan(0, 4), NumberStyles.None, CultureInfo.InvariantCulture);
             var name = Path.GetFileNameWithoutExtension(fileName)[5..];
 
-            using var stream = assembly.GetManifestResourceStream(resourceName)
+            using var stream = _assembly.GetManifestResourceStream(resourceName)
                 ?? throw new InvalidOperationException(
                     $"Embedded migration '{resourceName}' could not be opened.");
             using var memory = new MemoryStream();

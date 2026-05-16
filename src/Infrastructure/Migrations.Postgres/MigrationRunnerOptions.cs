@@ -1,4 +1,4 @@
-namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+namespace EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 
 public sealed class MigrationRunnerOptions
 {

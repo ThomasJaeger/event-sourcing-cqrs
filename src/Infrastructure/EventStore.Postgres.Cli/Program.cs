@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 
 const string usage = "Usage: EventStore.Postgres.Cli migrate [--dry-run]";
 
@@ -38,7 +39,9 @@ Console.CancelKeyPress += (_, e) =>
 
 try
 {
-    var runner = new MigrationRunner();
+    var runner = new MigrationRunner(
+        EventStorePostgresMigrations.Assembly,
+        EventStorePostgresMigrations.ResourcePrefix);
     await runner.RunPendingAsync(
         new MigrationRunnerOptions
         {
