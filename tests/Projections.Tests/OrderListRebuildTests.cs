@@ -6,6 +6,7 @@ using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderList;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

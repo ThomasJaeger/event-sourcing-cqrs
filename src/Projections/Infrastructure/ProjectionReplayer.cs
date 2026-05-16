@@ -1,7 +1,7 @@
 using System.Reflection;
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Projections;
+namespace EventSourcingCqrs.Projections.Infrastructure;
 
 // Pattern from Chapter 13: rebuilding and catching up a projection. The
 // replayer drives a projection's IEventHandler<TEvent> handlers from the event

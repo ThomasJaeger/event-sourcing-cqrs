@@ -10,6 +10,7 @@
     <Project Path="src/Infrastructure/Migrations.Postgres/Migrations.Postgres.csproj" />
     <Project Path="src/Infrastructure/Outbox/Outbox.csproj" />
     <Project Path="src/Infrastructure/ReadModels.Postgres/ReadModels.Postgres.csproj" />
+    <Project Path="src/Hosts/Workers/Workers.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Domain.Tests/Domain.Tests.csproj" />
