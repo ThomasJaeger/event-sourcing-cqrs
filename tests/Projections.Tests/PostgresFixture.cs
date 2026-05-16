@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -46,9 +47,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async Task<string> CreateMigratedDatabaseAsync()
     {
         var connectionString = await CreateDatabaseAsync();
-        await new MigrationRunner().RunPendingAsync(
-            new MigrationRunnerOptions { ConnectionString = connectionString },
-            CancellationToken.None);
+        await new MigrationRunner(
+                EventStorePostgresMigrations.Assembly,
+                EventStorePostgresMigrations.ResourcePrefix)
+            .RunPendingAsync(
+                new MigrationRunnerOptions { ConnectionString = connectionString },
+                CancellationToken.None);
         return connectionString;
     }
 }

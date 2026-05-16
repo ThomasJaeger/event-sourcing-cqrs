@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
+    <ProjectReference Include="..\Migrations.Postgres\Migrations.Postgres.csproj" />
     <ProjectReference Include="..\Outbox\Outbox.csproj" />
   </ItemGroup>
 </Project>
