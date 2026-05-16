@@ -149,6 +149,99 @@ public class OrderListProjectionTests
     }
 
     [Fact]
+    public async Task OrderPlaced_handler_skips_when_position_is_at_or_below_checkpoint()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store);
+        var firstOrderId = Guid.NewGuid();
+        var secondOrderId = Guid.NewGuid();
+        // First placement advances the checkpoint to position 10.
+        await projection.HandleAsync(
+            Context(new OrderPlaced(
+                    firstOrderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+                position: 10),
+            CancellationToken.None);
+        var insertsAfterFirst = store.InsertCount;
+
+        // A second OrderPlaced for a different order at position 10 (or below)
+        // is an at-least-once redelivery from the projection's perspective:
+        // the handler returns early without opening a row.
+        await projection.HandleAsync(
+            Context(new OrderPlaced(
+                    secondOrderId, Guid.NewGuid(), new Money(20m, "USD"), PlacedAt),
+                position: 10),
+            CancellationToken.None);
+
+        store.InsertCount.Should().Be(insertsAfterFirst);
+        (await store.GetAsync(secondOrderId, CancellationToken.None)).Should().BeNull();
+        store.Checkpoints[projection.Name].Should().Be(10);
+    }
+
+    [Fact]
+    public async Task OrderShipped_handler_skips_when_position_is_at_or_below_checkpoint()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store);
+        var orderId = Guid.NewGuid();
+        // Place the order at position 5, then cancel it at position 20: the
+        // checkpoint moves to 20 and the row is Cancelled.
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+                position: 5),
+            CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new OrderCancelled(orderId, "out of stock", Guid.NewGuid(), ShippedAt),
+                position: 20, occurredUtc: ShippedAt),
+            CancellationToken.None);
+        var updatesAfterCancel = store.UpdateCount;
+
+        // A stale OrderShipped from before the cancel arrives via redelivery at
+        // position 10. Without the position-check the handler would clobber
+        // Cancelled back to Shipped; the checkpoint comparison is what catches
+        // this reordering.
+        await projection.HandleAsync(
+            Context(new OrderShipped(orderId, "UPS", "1Z999", ShippedAt),
+                position: 10, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.UpdateCount.Should().Be(updatesAfterCancel);
+        (await store.GetAsync(orderId, CancellationToken.None))!
+            .Status.Should().Be(OrderStatus.Cancelled);
+        store.Checkpoints[projection.Name].Should().Be(20);
+    }
+
+    [Fact]
+    public async Task OrderCancelled_handler_skips_when_position_is_at_or_below_checkpoint()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store);
+        var orderId = Guid.NewGuid();
+        // Place, then ship at position 20: checkpoint advances past the
+        // hypothetical earlier cancel position.
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+                position: 5),
+            CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new OrderShipped(orderId, "UPS", "1Z999", ShippedAt),
+                position: 20, occurredUtc: ShippedAt),
+            CancellationToken.None);
+        var updatesAfterShip = store.UpdateCount;
+
+        // A stale OrderCancelled at position 15 redelivers after the ship:
+        // the handler returns early and the Shipped status holds.
+        await projection.HandleAsync(
+            Context(new OrderCancelled(orderId, "out of stock", Guid.NewGuid(), ShippedAt),
+                position: 15, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.UpdateCount.Should().Be(updatesAfterShip);
+        (await store.GetAsync(orderId, CancellationToken.None))!
+            .Status.Should().Be(OrderStatus.Shipped);
+        store.Checkpoints[projection.Name].Should().Be(20);
+    }
+
+    [Fact]
     public async Task Handlers_advance_the_checkpoint_under_the_projection_name()
     {
         var store = new InMemoryOrderListStore();
