@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
 using Xunit;

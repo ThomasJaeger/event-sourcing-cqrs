@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
 using Xunit;
