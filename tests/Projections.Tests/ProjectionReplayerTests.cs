@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Projections;
+using EventSourcingCqrs.Projections.Infrastructure;
 using FluentAssertions;
 using Xunit;
 
