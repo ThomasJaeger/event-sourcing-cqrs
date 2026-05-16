@@ -19,5 +19,6 @@
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
+    <ProjectReference Include="..\TestInfrastructure\TestInfrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
 using NpgsqlTypes;

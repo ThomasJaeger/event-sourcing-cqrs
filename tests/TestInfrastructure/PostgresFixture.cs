@@ -4,15 +4,19 @@ using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
 
-namespace EventSourcingCqrs.Projections.Tests;
+namespace EventSourcingCqrs.TestInfrastructure;
 
-// Shared PostgreSQL container for all tests in the class fixture. Each test
-// asks for its own database via CreateDatabaseAsync so test state doesn't
-// leak across cases; the container itself stays up for the class lifetime
-// to amortize the startup cost.
+// Shared PostgreSQL container for every test project that needs a real
+// PostgreSQL backend. Each test asks for its own database via
+// CreateDatabaseAsync so test state doesn't leak across cases; the
+// container itself stays up for the class lifetime (per
+// IClassFixture<PostgresFixture>) to amortize the startup cost.
 //
-// Duplicated from Infrastructure.Tests per the Session 0005 setup document.
-// A third consumer triggers extraction to a shared test-infrastructure project.
+// xUnit fixture scoping is per-assembly, so each test assembly that uses
+// this fixture spins up its own container at the first IClassFixture
+// resolution. Three assemblies use it as of Session 0006: Infrastructure
+// .Tests, Projections.Tests, Workers.Tests. Containers do not cross
+// assembly boundaries.
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
@@ -42,8 +46,10 @@ public sealed class PostgresFixture : IAsyncLifetime
         return builder.ConnectionString;
     }
 
-    // A freshly-created database with every migration applied. MigrationRunner
-    // is resource-driven, so this picks up 0001 through 0003 with no variant.
+    // Convenience for tests that need a freshly-created database with every
+    // migration applied. MigrationRunner is resource-driven through
+    // EventStorePostgresMigrations, so this picks up every migration in
+    // event_store and read_models with no variant.
     public async Task<string> CreateMigratedDatabaseAsync()
     {
         var connectionString = await CreateDatabaseAsync();

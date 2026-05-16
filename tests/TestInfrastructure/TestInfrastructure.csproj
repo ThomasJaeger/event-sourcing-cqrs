@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      Opt out of dotnet test discovery. The xunit package reference is here
+      only to expose IAsyncLifetime to PostgresFixture; the project is a
+      library, not a test assembly, and has no Microsoft.NET.Test.Sdk or
+      runner to host tests with.
+    -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Migrations.Postgres\Migrations.Postgres.csproj" />
+  </ItemGroup>
+</Project>
