@@ -16,7 +16,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 public class ServiceCollectionExtensions_AddReadModels_Tests
 {
     [Fact]
-    public void AddReadModels_resolves_the_read_side_service_graph()
+    public async Task AddReadModels_resolves_the_read_side_service_graph()
     {
         var services = new ServiceCollection();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
@@ -25,7 +25,10 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         services.AddReadModels(opts =>
             opts.ConnectionString = "Host=localhost;Database=stub");
 
-        using var provider = services.BuildServiceProvider();
+        // await using on the provider: NpgsqlReadModelConnectionFactory is an
+        // IAsyncDisposable-only singleton, and ServiceProvider.Dispose throws
+        // on such a singleton to make the misuse explicit.
+        await using var provider = services.BuildServiceProvider();
 
         provider.GetRequiredService<IReadModelConnectionFactory>()
             .Should().BeOfType<NpgsqlReadModelConnectionFactory>();
@@ -50,5 +53,29 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
             .Should().BeOfType<InProcessMessageDispatcher>();
         provider.GetServices<IHostedService>().OfType<OutboxProcessor>()
             .Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Disposing_the_provider_disposes_the_read_model_connection_factory()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddPostgresEventStore(opts =>
+            opts.ConnectionString = "Host=localhost;Database=stub");
+        services.AddReadModels(opts =>
+            opts.ConnectionString = "Host=localhost;Database=stub");
+        var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IReadModelConnectionFactory>();
+
+        // ServiceProvider implements IAsyncDisposable; the async disposal path
+        // is what triggers IAsyncDisposable.DisposeAsync on singletons.
+        await provider.DisposeAsync();
+
+        // After provider disposal the factory's underlying NpgsqlDataSource is
+        // gone; further OpenConnectionAsync calls throw. Proves the container
+        // walked from the IReadModelConnectionFactory singleton (registered as
+        // the interface) to the concrete's IAsyncDisposable.
+        await factory.Invoking(f => f.OpenConnectionAsync(CancellationToken.None))
+            .Should().ThrowAsync<ObjectDisposedException>();
     }
 }
