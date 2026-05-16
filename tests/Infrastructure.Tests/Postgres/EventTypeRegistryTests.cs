@@ -97,6 +97,41 @@ public class EventTypeRegistryTests
         act.Should().Throw<UnknownEventTypeException>();
     }
 
+    [Fact]
+    public void Register_with_Type_overload_uses_clr_type_name_as_storage_name()
+    {
+        var registry = new EventTypeRegistry()
+            .Register(typeof(EventA));
+
+        registry.NameFor(typeof(EventA)).Should().Be(nameof(EventA));
+        registry.TypeFor(nameof(EventA)).Should().Be(typeof(EventA));
+    }
+
+    [Fact]
+    public void Register_with_Type_and_name_overload_uses_the_explicit_name()
+    {
+        var registry = new EventTypeRegistry()
+            .Register(typeof(EventA), "event_a_v1");
+
+        registry.NameFor(typeof(EventA)).Should().Be("event_a_v1");
+        registry.TypeFor("event_a_v1").Should().Be(typeof(EventA));
+    }
+
+    [Fact]
+    public void Register_throws_when_Type_does_not_implement_IDomainEvent()
+    {
+        var registry = new EventTypeRegistry();
+
+        var act = () => registry.Register(typeof(NotAnEvent));
+
+        // The generic Register<TEvent> form would reject this at compile time
+        // through the IDomainEvent constraint; the non-generic Register(Type)
+        // path used by IEventTypeProvider enforces the same rule at runtime.
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*NotAnEvent*does not implement IDomainEvent*");
+    }
+
     private sealed record EventA : IDomainEvent;
     private sealed record EventB : IDomainEvent;
+    private sealed class NotAnEvent;
 }
