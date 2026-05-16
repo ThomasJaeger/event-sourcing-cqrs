@@ -40,7 +40,27 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
-        services.AddSingleton<EventTypeRegistry>();
+
+        // Providers contribute by bounded context. The factory walks every
+        // registered IEventTypeProvider once on first resolution; the registry
+        // is built and immutable from there. TryAddSingleton so a host can
+        // pre-register a fully populated EventTypeRegistry and win. GetServices
+        // enumerates at first-resolution time, not registration time, so an
+        // IEventTypeProvider may land in the container before or after
+        // AddPostgresEventStore.
+        services.TryAddSingleton<EventTypeRegistry>(sp =>
+        {
+            var registry = new EventTypeRegistry();
+            foreach (var provider in sp.GetServices<IEventTypeProvider>())
+            {
+                foreach (var eventType in provider.GetEventTypes())
+                {
+                    registry.Register(eventType);
+                }
+            }
+            return registry;
+        });
+
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
         // Factory delegate so the policy picks up OutboxProcessorOptions

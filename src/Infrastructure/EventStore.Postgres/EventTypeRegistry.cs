@@ -19,28 +19,48 @@ public sealed class EventTypeRegistry
     private readonly Dictionary<Type, string> _byType = [];
 
     public EventTypeRegistry Register<TEvent>() where TEvent : IDomainEvent
-        => Register<TEvent>(typeof(TEvent).Name);
+        => Register(typeof(TEvent));
 
     public EventTypeRegistry Register<TEvent>(string typeName) where TEvent : IDomainEvent
+        => Register(typeof(TEvent), typeName);
+
+    public EventTypeRegistry Register(Type eventType)
     {
+        ArgumentNullException.ThrowIfNull(eventType);
+        return Register(eventType, eventType.Name);
+    }
+
+    public EventTypeRegistry Register(Type eventType, string typeName)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
         ArgumentException.ThrowIfNullOrEmpty(typeName);
-        var type = typeof(TEvent);
+
+        // The generic overloads enforce IDomainEvent at compile time; the
+        // non-generic path that IEventTypeProvider walks needs the same
+        // guarantee at runtime, otherwise a typo in a provider would land
+        // a non-event type in the registry and surface much later.
+        if (!typeof(IDomainEvent).IsAssignableFrom(eventType))
+        {
+            throw new ArgumentException(
+                $"Type '{eventType.FullName}' does not implement IDomainEvent.",
+                nameof(eventType));
+        }
 
         if (_byName.TryGetValue(typeName, out var existingType))
         {
             throw new InvalidOperationException(
                 $"Event type name '{typeName}' is already registered to '{existingType.FullName}'. " +
-                $"Conflicting registration: '{type.FullName}'.");
+                $"Conflicting registration: '{eventType.FullName}'.");
         }
-        if (_byType.TryGetValue(type, out var existingName))
+        if (_byType.TryGetValue(eventType, out var existingName))
         {
             throw new InvalidOperationException(
-                $"CLR type '{type.FullName}' is already registered under name '{existingName}'. " +
+                $"CLR type '{eventType.FullName}' is already registered under name '{existingName}'. " +
                 $"Conflicting registration: '{typeName}'.");
         }
 
-        _byName.Add(typeName, type);
-        _byType.Add(type, typeName);
+        _byName.Add(typeName, eventType);
+        _byType.Add(eventType, typeName);
         return this;
     }
 
