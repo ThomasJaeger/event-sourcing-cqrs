@@ -25,6 +25,13 @@ public interface IOrderListStore
 // projection knows its own identity and passes it.
 public interface IOrderListUnitOfWork : IAsyncDisposable
 {
+    // Reads the projection's checkpoint inside this unit of work's transaction.
+    // The projection calls this right after BeginAsync to skip an at-least-once
+    // redelivery whose global position is at or below what it has already
+    // processed. Disposing the uow without a CommitAsync rolls the empty
+    // transaction back, so the skip path costs one SELECT.
+    Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct);
+
     Task InsertAsync(OrderListRow row, CancellationToken ct);
 
     Task UpdateStatusAsync(

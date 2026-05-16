@@ -125,6 +125,29 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task GetCheckpointAsync_inside_a_unit_of_work_reads_a_previously_committed_advance()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+
+        // Commit an advance to 5 through a first uow.
+        await using (var first = await store.BeginAsync(CancellationToken.None))
+        {
+            await first.InsertAsync(SampleRow(Guid.NewGuid()), CancellationToken.None);
+            await first.CommitAsync(ProjectionName, 5, CancellationToken.None);
+        }
+
+        // A second uow's GetCheckpointAsync sees the persisted value: the read
+        // joins the new transaction and finds the committed checkpoint row.
+        await using var second = await store.BeginAsync(CancellationToken.None);
+        var checkpoint = await second.GetCheckpointAsync(ProjectionName, CancellationToken.None);
+
+        checkpoint.Should().Be(5);
+    }
+
+    [Fact]
     public async Task Truncate_empties_the_table()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();

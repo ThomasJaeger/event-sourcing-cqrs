@@ -26,6 +26,11 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         _checkpointStore = checkpointStore;
     }
 
+    public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
+        // Reads through the checkpoint store on this same transaction, so the
+        // projection's idempotency check shares isolation with its row write.
+        => _checkpointStore.GetPositionAsync(projectionName, _transaction, ct);
+
     public async Task InsertAsync(OrderListRow row, CancellationToken ct)
     {
         await using var cmd = _connection.CreateCommand();

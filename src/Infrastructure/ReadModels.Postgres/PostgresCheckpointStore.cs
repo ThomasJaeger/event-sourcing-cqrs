@@ -40,6 +40,29 @@ public sealed class PostgresCheckpointStore : ICheckpointStore
         return result is null or DBNull ? 0L : (long)result;
     }
 
+    public async Task<long> GetPositionAsync(
+        string projectionName,
+        DbTransaction transaction,
+        CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(projectionName);
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        // Same SELECT as the non-transactional overload, joined to the caller's
+        // transaction so the read sees the handler's own uncommitted advance
+        // (read-your-own-writes) and runs at the transaction's isolation level.
+        var npgsqlTransaction = (NpgsqlTransaction)transaction;
+        await using var cmd = npgsqlTransaction.Connection!.CreateCommand();
+        cmd.Transaction = npgsqlTransaction;
+        cmd.CommandText =
+            "SELECT position FROM read_models.projection_checkpoints " +
+            "WHERE projection_name = @projection_name";
+        cmd.Parameters.AddWithValue("projection_name", NpgsqlDbType.Text, projectionName);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? 0L : (long)result;
+    }
+
     public async Task AdvanceAsync(
         string projectionName,
         long position,
