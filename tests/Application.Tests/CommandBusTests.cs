@@ -1,0 +1,66 @@
+using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Domain.Abstractions;
+using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace EventSourcingCqrs.Application.Tests;
+
+public sealed class CommandBusTests
+{
+    [Fact]
+    public async Task SendAsync_dispatches_to_registered_handler()
+    {
+        var handler = new RecordingHandler();
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(handler)
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+        var command = new DoThing("hello");
+
+        await bus.SendAsync(command, CancellationToken.None);
+
+        handler.Received.Should().BeSameAs(command);
+    }
+
+    [Fact]
+    public async Task SendAsync_throws_when_handler_not_registered()
+    {
+        var services = new ServiceCollection().BuildServiceProvider();
+        var bus = new CommandBus(services);
+
+        var act = () => bus.SendAsync(new DoThing("x"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task SendAsync_passes_cancellation_token_to_handler()
+    {
+        var handler = new RecordingHandler();
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(handler)
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+        using var cts = new CancellationTokenSource();
+
+        await bus.SendAsync(new DoThing("x"), cts.Token);
+
+        handler.ReceivedToken.Should().Be(cts.Token);
+    }
+
+    private sealed record DoThing(string Payload) : ICommand;
+
+    private sealed class RecordingHandler : ICommandHandler<DoThing>
+    {
+        public DoThing? Received { get; private set; }
+        public CancellationToken ReceivedToken { get; private set; }
+
+        public Task HandleAsync(DoThing command, CancellationToken ct)
+        {
+            Received = command;
+            ReceivedToken = ct;
+            return Task.CompletedTask;
+        }
+    }
+}
