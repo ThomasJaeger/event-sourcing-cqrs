@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,16 +26,26 @@ public sealed class QueryBus : IQueryBus
         ArgumentNullException.ThrowIfNull(query);
         var invoker = InvokerCache.GetOrAdd(query.GetType(), t => BuildInvoker(t, typeof(TResult)));
         var handler = _services.GetRequiredService(invoker.HandlerType);
-        return (Task<TResult>)invoker.HandleMethod.Invoke(handler, new object[] { query, ct })!;
+        var behaviors = _services.GetServices(invoker.BehaviorType).ToArray();
+        var pipeline = QueryPipelineBuilder.Build<TResult>(
+            behaviors, handler, query, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
+        return pipeline();
     }
 
     private static QueryInvoker BuildInvoker(Type queryType, Type resultType)
     {
         var handlerType = typeof(IQueryHandler<,>).MakeGenericType(queryType, resultType);
+        var behaviorType = typeof(IQueryPipelineBehavior<,>).MakeGenericType(queryType, resultType);
         return new QueryInvoker(
             HandlerType: handlerType,
-            HandleMethod: handlerType.GetMethod("HandleAsync")!);
+            HandleMethod: handlerType.GetMethod("HandleAsync")!,
+            BehaviorType: behaviorType,
+            BehaviorHandleMethod: behaviorType.GetMethod("HandleAsync")!);
     }
 
-    private sealed record QueryInvoker(Type HandlerType, MethodInfo HandleMethod);
+    private sealed record QueryInvoker(
+        Type HandlerType,
+        MethodInfo HandleMethod,
+        Type BehaviorType,
+        MethodInfo BehaviorHandleMethod);
 }

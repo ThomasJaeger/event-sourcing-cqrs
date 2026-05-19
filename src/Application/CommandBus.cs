@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,16 +28,26 @@ public sealed class CommandBus : ICommandBus
         ArgumentNullException.ThrowIfNull(command);
         var invoker = InvokerCache.GetOrAdd(command.GetType(), BuildInvoker);
         var handler = _services.GetRequiredService(invoker.HandlerType);
-        return (Task)invoker.HandleMethod.Invoke(handler, new object[] { command, ct })!;
+        var behaviors = _services.GetServices(invoker.BehaviorType).ToArray();
+        var pipeline = CommandPipelineBuilder.Build(
+            behaviors, handler, command, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
+        return pipeline();
     }
 
     private static CommandInvoker BuildInvoker(Type commandType)
     {
         var handlerType = typeof(ICommandHandler<>).MakeGenericType(commandType);
+        var behaviorType = typeof(ICommandPipelineBehavior<>).MakeGenericType(commandType);
         return new CommandInvoker(
             HandlerType: handlerType,
-            HandleMethod: handlerType.GetMethod(nameof(ICommandHandler<ICommand>.HandleAsync))!);
+            HandleMethod: handlerType.GetMethod(nameof(ICommandHandler<ICommand>.HandleAsync))!,
+            BehaviorType: behaviorType,
+            BehaviorHandleMethod: behaviorType.GetMethod(nameof(ICommandPipelineBehavior<ICommand>.HandleAsync))!);
     }
 
-    private sealed record CommandInvoker(Type HandlerType, MethodInfo HandleMethod);
+    private sealed record CommandInvoker(
+        Type HandlerType,
+        MethodInfo HandleMethod,
+        Type BehaviorType,
+        MethodInfo BehaviorHandleMethod);
 }
