@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.Domain.Tests.Fulfillment;
 public class FulfillmentEventTypeProviderTests
 {
     [Fact]
-    public void GetEventTypes_returns_the_four_Inventory_events_in_canonical_order()
+    public void GetEventTypes_returns_all_Fulfillment_events_in_canonical_lifecycle_order()
     {
         var provider = new FulfillmentEventTypeProvider();
 
@@ -16,6 +16,10 @@ public class FulfillmentEventTypeProviderTests
             typeof(InventoryCreated),
             typeof(InventoryAdjusted),
             typeof(InventoryReserved),
-            typeof(InventoryReleased));
+            typeof(InventoryReleased),
+            typeof(ShipmentScheduled),
+            typeof(ShipmentDispatched),
+            typeof(ShipmentDelivered),
+            typeof(ShipmentReturned));
     }
 }
