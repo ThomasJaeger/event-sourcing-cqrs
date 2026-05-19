@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
@@ -17,6 +18,7 @@ public sealed class ValidationBehaviorTests
             .AddSingleton<ICommandHandler<DoThing>>(handler)
             .AddSingleton<IValidator<DoThing>>(new FailingValidator("field", "is required"))
             .AddSingleton<ICommandPipelineBehavior<DoThing>, ValidationCommandBehavior<DoThing>>()
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -35,6 +37,7 @@ public sealed class ValidationBehaviorTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(handler)
             .AddSingleton<ICommandPipelineBehavior<DoThing>, ValidationCommandBehavior<DoThing>>()
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -52,6 +55,7 @@ public sealed class ValidationBehaviorTests
             .AddSingleton<IValidator<DoThing>>(new FailingValidator("a", "bad"))
             .AddSingleton<IValidator<DoThing>>(new FailingValidator("b", "also bad"))
             .AddSingleton<ICommandPipelineBehavior<DoThing>, ValidationCommandBehavior<DoThing>>()
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 

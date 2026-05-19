@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ public sealed class CommandBusTests
         var handler = new RecordingHandler();
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(handler)
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
         var command = new DoThing("hello");
@@ -26,7 +28,9 @@ public sealed class CommandBusTests
     [Fact]
     public async Task SendAsync_throws_when_handler_not_registered()
     {
-        var services = new ServiceCollection().BuildServiceProvider();
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .BuildServiceProvider();
         var bus = new CommandBus(services);
 
         var act = () => bus.SendAsync(new DoThing("x"), CancellationToken.None);
@@ -40,6 +44,7 @@ public sealed class CommandBusTests
         var handler = new RecordingHandler();
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(handler)
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
         using var cts = new CancellationTokenSource();

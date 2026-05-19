@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,7 @@ public sealed class PipelineBehaviorTests
             .AddSingleton<ICommandHandler<DoThing>>(new RecordingCommandHandler(log))
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new RecordingCommandBehavior(log, "first"))
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new RecordingCommandBehavior(log, "second"))
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -31,6 +33,7 @@ public sealed class PipelineBehaviorTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(new RecordingCommandHandler(log))
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new SkipNextBehavior(log))
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 

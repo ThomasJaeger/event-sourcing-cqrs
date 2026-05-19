@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,11 @@ namespace EventSourcingCqrs.Application;
 // subsequent dispatch is one DI lookup plus one MethodInfo.Invoke. A compiled
 // delegate cache would skip the Invoke cost but adds machinery; v1 keeps the
 // shape simple and a later commit can swap it in if a profiler asks for it.
+//
+// Each dispatch opens a service scope, builds a fresh CommandContext, pushes
+// it onto the AsyncLocal accessor, runs the pipeline, and restores the prior
+// accessor value in finally so nested dispatches and exception paths leak no
+// context.
 public sealed class CommandBus : ICommandBus
 {
     private static readonly ConcurrentDictionary<Type, CommandInvoker> InvokerCache = new();
@@ -24,14 +30,50 @@ public sealed class CommandBus : ICommandBus
     }
 
     public Task SendAsync(ICommand command, CancellationToken ct)
+        => SendInternal(command, Guid.NewGuid(), ct);
+
+    // Overload for callers that already have a correlation ID (HTTP middleware
+    // forwarding an X-Correlation-Id header, a process manager continuing an
+    // existing causation chain). Lives on the concrete class so the interface
+    // stays at the shape Ch 10 depicts; callers that need this take CommandBus
+    // directly or push a pre-built context onto the accessor before calling
+    // the interface form.
+    public Task SendAsync(ICommand command, Guid correlationId, CancellationToken ct)
+        => SendInternal(command, correlationId, ct);
+
+    private async Task SendInternal(ICommand command, Guid correlationId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
+        using var scope = _services.CreateScope();
+        var sp = scope.ServiceProvider;
         var invoker = InvokerCache.GetOrAdd(command.GetType(), BuildInvoker);
-        var handler = _services.GetRequiredService(invoker.HandlerType);
-        var behaviors = _services.GetServices(invoker.BehaviorType).ToArray();
-        var pipeline = CommandPipelineBuilder.Build(
-            behaviors, handler, command, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
-        return pipeline();
+        var handler = sp.GetRequiredService(invoker.HandlerType);
+        var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
+        var accessor = sp.GetRequiredService<ICommandContextAccessor>();
+        var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+
+        // ServiceName is hardcoded in v1; commit 8 switches it to read from
+        // ApplicationOptions once AddApplication lands.
+        var context = new CommandContext(timeProvider)
+        {
+            CorrelationId = correlationId,
+            CausationCommandId = Guid.NewGuid(),
+            UserId = "system",
+            ServiceName = "Workers"
+        };
+
+        var previous = accessor.Current;
+        accessor.Current = context;
+        try
+        {
+            var pipeline = CommandPipelineBuilder.Build(
+                behaviors, handler, command, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
+            await pipeline();
+        }
+        finally
+        {
+            accessor.Current = previous;
+        }
     }
 
     private static CommandInvoker BuildInvoker(Type commandType)
