@@ -9,5 +9,5 @@ public sealed class OrderLine(Guid lineId, string sku, int quantity, Money unitP
     public int Quantity { get; } = quantity;
     public Money UnitPrice { get; } = unitPrice;
 
-    public Money Subtotal => new(UnitPrice.Amount * Quantity, UnitPrice.Currency);
+    public Money Subtotal => UnitPrice * Quantity;
 }

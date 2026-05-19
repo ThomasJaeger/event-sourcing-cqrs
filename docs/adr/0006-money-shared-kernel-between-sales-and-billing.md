@@ -16,6 +16,8 @@ Phase 4's Billing context uses `Money` from `Domain/SharedKernel/`. No `Billing.
 
 If future currency-aware operations emerge that Billing needs and Sales does not, they are addressed as a separate decision at that point; see Trigger-for-revisiting for the conditions and the first-cut response.
 
+Pattern specification: see ADR 0009 (Money implements Fowler's pattern from PoEAA, including typed precision-aware Currency and Allocate methods). ADR 0006 specifies that Money is shared across contexts; ADR 0009 specifies the shape of that shared Money.
+
 ## Consequences
 
 - Sales and Billing share invariant ownership of `Money`. A change to `Money` requires considering both contexts' needs. Phase 4 ships no such change.

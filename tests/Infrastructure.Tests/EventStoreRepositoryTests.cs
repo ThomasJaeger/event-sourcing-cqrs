@@ -14,7 +14,7 @@ public class EventStoreRepositoryTests
     private static readonly Guid CustomerId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid LineId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly DateTime At = new(2026, 5, 11, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly Money TenUsd = new(10m, "USD");
+    private static readonly Money TenUsd = new(10m, Currency.USD);
     private static readonly Address Shipping = new("1 Main St", "Smalltown", "12345", "US");
 
     [Fact]

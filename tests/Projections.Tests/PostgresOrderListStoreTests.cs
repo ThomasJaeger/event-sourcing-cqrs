@@ -52,7 +52,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
         var orderId = Guid.NewGuid();
         var first = SampleRow(orderId);
-        var second = first with { CustomerId = Guid.NewGuid(), Total = new Money(1m, "USD") };
+        var second = first with { CustomerId = Guid.NewGuid(), Total = new Money(1m, Currency.USD) };
 
         await InsertAndCommitAsync(store, first, position: 1);
         await InsertAndCommitAsync(store, second, position: 2);
@@ -218,7 +218,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
             OrderId: orderId,
             CustomerId: Guid.NewGuid(),
             Status: OrderStatus.Placed,
-            Total: new Money(149.95m, "USD"),
+            Total: new Money(149.95m, Currency.USD),
             PlacedUtc: PlacedAt,
             LastUpdatedUtc: PlacedAt);
 }

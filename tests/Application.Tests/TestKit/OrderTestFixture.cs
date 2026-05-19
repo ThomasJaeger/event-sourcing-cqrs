@@ -16,7 +16,7 @@ internal sealed class OrderTestFixture
     public static readonly Guid OrderId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid CustomerId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     public static readonly Guid LineId1 = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    public static readonly Money TenUsd = new(10m, "USD");
+    public static readonly Money TenUsd = new(10m, Currency.USD);
     public static readonly Address Shipping = new("1 Main St", "Smalltown", "12345", "US");
     public static readonly DateTime At = new(2026, 5, 18, 12, 0, 0, DateTimeKind.Utc);
 

@@ -53,7 +53,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
                 payload: new OrderPlaced(
                     OrderId: orderId,
                     CustomerId: Guid.NewGuid(),
-                    Total: new Money(99.95m, "USD"),
+                    Total: new Money(99.95m, Currency.USD),
                     PlacedUtc: new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc)));
 
             var eventStore = host.Services.GetRequiredService<IEventStore>();
@@ -66,7 +66,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
                 "AppendAsync should reach order_list end-to-end within {0} via LISTEN/NOTIFY", PollBudget);
             row!.OrderId.Should().Be(orderId);
             row.Status.Should().Be(OrderStatus.Placed);
-            row.Total.Should().Be(new Money(99.95m, "USD"));
+            row.Total.Should().Be(new Money(99.95m, Currency.USD));
         }
         finally
         {

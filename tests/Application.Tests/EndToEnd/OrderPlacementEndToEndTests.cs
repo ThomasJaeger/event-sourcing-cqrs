@@ -49,7 +49,7 @@ public class OrderPlacementEndToEndTests : IClassFixture<PostgresFixture>
 
             await commandBus.SendAsync(new DraftOrder(orderId, customerId), cts.Token);
             await commandBus.SendAsync(
-                new AddOrderLine(orderId, lineId, "SKU-1", 2, new Money(10m, "USD")),
+                new AddOrderLine(orderId, lineId, "SKU-1", 2, new Money(10m, Currency.USD)),
                 cts.Token);
             await commandBus.SendAsync(new SetOrderShippingAddress(orderId, address), cts.Token);
             await commandBus.SendAsync(new PlaceOrder(orderId), cts.Token);
@@ -61,7 +61,7 @@ public class OrderPlacementEndToEndTests : IClassFixture<PostgresFixture>
                 PollBudget);
             row!.OrderId.Should().Be(orderId);
             row.Status.Should().Be(OrderStatus.Placed);
-            row.Total.Should().Be(new Money(20m, "USD"));
+            row.Total.Should().Be(new Money(20m, Currency.USD));
         }
         finally
         {

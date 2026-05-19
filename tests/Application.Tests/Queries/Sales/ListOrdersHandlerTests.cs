@@ -44,7 +44,7 @@ public sealed class ListOrdersHandlerTests
             OrderId: orderId,
             CustomerId: Guid.NewGuid(),
             Status: OrderStatus.Placed,
-            Total: new Money(50m, "USD"),
+            Total: new Money(50m, Currency.USD),
             PlacedUtc: PlacedAt,
             LastUpdatedUtc: PlacedAt);
 

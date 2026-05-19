@@ -21,7 +21,7 @@ public class OrderListProjectionTests
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
-        var placed = new OrderPlaced(orderId, customerId, new Money(149.95m, "USD"), PlacedAt);
+        var placed = new OrderPlaced(orderId, customerId, new Money(149.95m, Currency.USD), PlacedAt);
 
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
 
@@ -30,7 +30,7 @@ public class OrderListProjectionTests
         row!.OrderId.Should().Be(orderId);
         row.CustomerId.Should().Be(customerId);
         row.Status.Should().Be(OrderStatus.Placed);
-        row.Total.Should().Be(new Money(149.95m, "USD"));
+        row.Total.Should().Be(new Money(149.95m, Currency.USD));
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class OrderListProjectionTests
         var store = new InMemoryOrderListStore();
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
-        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt);
+        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
 
         await projection.HandleAsync(
             Context(placed, position: 1, occurredUtc: SystemAt), CancellationToken.None);
@@ -58,7 +58,7 @@ public class OrderListProjectionTests
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 1, occurredUtc: PlacedAt),
             CancellationToken.None);
 
@@ -81,7 +81,7 @@ public class OrderListProjectionTests
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 1, occurredUtc: PlacedAt),
             CancellationToken.None);
 
@@ -118,7 +118,7 @@ public class OrderListProjectionTests
         var store = new InMemoryOrderListStore();
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
-        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt);
+        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
 
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
@@ -134,7 +134,7 @@ public class OrderListProjectionTests
         var store = new InMemoryOrderListStore();
         var projection = new OrderListProjection(store);
         var orderId = Guid.NewGuid();
-        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt);
+        var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
         await projection.HandleAsync(
             Context(new OrderShipped(orderId, "UPS", "1Z999", ShippedAt), position: 2),
@@ -158,7 +158,7 @@ public class OrderListProjectionTests
         // First placement advances the checkpoint to position 10.
         await projection.HandleAsync(
             Context(new OrderPlaced(
-                    firstOrderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+                    firstOrderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 10),
             CancellationToken.None);
         var insertsAfterFirst = store.InsertCount;
@@ -168,7 +168,7 @@ public class OrderListProjectionTests
         // the handler returns early without opening a row.
         await projection.HandleAsync(
             Context(new OrderPlaced(
-                    secondOrderId, Guid.NewGuid(), new Money(20m, "USD"), PlacedAt),
+                    secondOrderId, Guid.NewGuid(), new Money(20m, Currency.USD), PlacedAt),
                 position: 10),
             CancellationToken.None);
 
@@ -186,7 +186,7 @@ public class OrderListProjectionTests
         // Place the order at position 5, then cancel it at position 20: the
         // checkpoint moves to 20 and the row is Cancelled.
         await projection.HandleAsync(
-            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 5),
             CancellationToken.None);
         await projection.HandleAsync(
@@ -219,7 +219,7 @@ public class OrderListProjectionTests
         // Place, then ship at position 20: checkpoint advances past the
         // hypothetical earlier cancel position.
         await projection.HandleAsync(
-            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 5),
             CancellationToken.None);
         await projection.HandleAsync(
@@ -250,7 +250,7 @@ public class OrderListProjectionTests
         var orderId = Guid.NewGuid();
 
         await projection.HandleAsync(
-            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, "USD"), PlacedAt),
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
                 position: 7),
             CancellationToken.None);
         store.Checkpoints[projection.Name].Should().Be(7);

@@ -49,7 +49,7 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, row.CustomerId);
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, row.Status.ToString());
         cmd.Parameters.AddWithValue("total_amount", NpgsqlDbType.Numeric, row.Total.Amount);
-        cmd.Parameters.AddWithValue("total_currency", NpgsqlDbType.Text, row.Total.Currency);
+        cmd.Parameters.AddWithValue("total_currency", NpgsqlDbType.Text, row.Total.Currency.Code);
         cmd.Parameters.AddWithValue("placed_utc", NpgsqlDbType.TimestampTz, row.PlacedUtc);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, row.LastUpdatedUtc);
         await cmd.ExecuteNonQueryAsync(ct);

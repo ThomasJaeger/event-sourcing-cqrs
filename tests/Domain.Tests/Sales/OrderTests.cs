@@ -17,7 +17,7 @@ public class OrderTests
     private static readonly Guid UserId = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private static readonly DateTime At = new(2026, 5, 11, 12, 0, 0, DateTimeKind.Utc);
     private static readonly Address Shipping = new("1 Main St", "Smalltown", "12345", "US");
-    private static readonly Money TenUsd = new(10m, "USD");
+    private static readonly Money TenUsd = new(10m, Currency.USD);
 
     [Fact]
     public void Draft_creates_an_order_with_Draft_status()
@@ -105,7 +105,7 @@ public class OrderTests
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 2, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At))
             .When(o => o.Place(At))
-            .Then(new OrderPlaced(OrderId, CustomerId, new Money(20m, "USD"), At));
+            .Then(new OrderPlaced(OrderId, CustomerId, new Money(20m, Currency.USD), At));
     }
 
     [Fact]

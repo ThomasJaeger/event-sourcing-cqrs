@@ -15,7 +15,7 @@ public class EventStoreRepositoryMetadataTests
     private static readonly Guid CustomerId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid LineId1 = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly DateTime At = new(2026, 5, 11, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly Money TenUsd = new(10m, "USD");
+    private static readonly Money TenUsd = new(10m, Currency.USD);
 
     [Fact]
     public async Task SaveAsync_stamps_metadata_with_values_from_the_current_command_context()

@@ -13,7 +13,7 @@ public sealed class Order : AggregateRoot
 
     public IReadOnlyList<OrderLine> Lines => _lines;
     public OrderStatus Status => _status;
-    public Money Total => _lines.Aggregate(Money.Zero, (sum, l) => sum + l.Subtotal);
+    public Money Total => _lines.Aggregate(Money.Zero(Currency.USD), (sum, l) => sum + l.Subtotal);
 
     // Public for event-sourced rehydration. Use Order.Draft(...) to create a new order from a command.
     public Order() { }

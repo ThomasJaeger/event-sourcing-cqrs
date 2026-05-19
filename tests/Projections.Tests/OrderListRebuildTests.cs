@@ -138,9 +138,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         [
             Env(orderA, 1, new OrderDrafted(orderA, customer, BaseTime)),
             Env(orderA, 2, new OrderLineAdded(
-                orderA, Guid.NewGuid(), "SKU-A", 1, new Money(20m, "USD"), BaseTime)),
+                orderA, Guid.NewGuid(), "SKU-A", 1, new Money(20m, Currency.USD), BaseTime)),
             Env(orderA, 3, new OrderPlaced(
-                orderA, customer, new Money(20m, "USD"), BaseTime.AddHours(1))),
+                orderA, customer, new Money(20m, Currency.USD), BaseTime.AddHours(1))),
             Env(orderA, 4, new OrderShipped(orderA, "UPS", "1Z-A", BaseTime.AddHours(2))),
         ], CancellationToken.None);
 
@@ -148,9 +148,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         [
             Env(orderB, 1, new OrderDrafted(orderB, customer, BaseTime)),
             Env(orderB, 2, new OrderLineAdded(
-                orderB, Guid.NewGuid(), "SKU-B", 3, new Money(5m, "USD"), BaseTime)),
+                orderB, Guid.NewGuid(), "SKU-B", 3, new Money(5m, Currency.USD), BaseTime)),
             Env(orderB, 3, new OrderPlaced(
-                orderB, customer, new Money(15m, "USD"), BaseTime.AddHours(1))),
+                orderB, customer, new Money(15m, Currency.USD), BaseTime.AddHours(1))),
             Env(orderB, 4, new OrderCancelled(
                 orderB, "out of stock", Guid.NewGuid(), BaseTime.AddHours(2))),
         ], CancellationToken.None);
@@ -159,9 +159,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         [
             Env(orderC, 1, new OrderDrafted(orderC, customer, BaseTime)),
             Env(orderC, 2, new OrderLineAdded(
-                orderC, Guid.NewGuid(), "SKU-C", 2, new Money(49.50m, "USD"), BaseTime)),
+                orderC, Guid.NewGuid(), "SKU-C", 2, new Money(49.50m, Currency.USD), BaseTime)),
             Env(orderC, 3, new OrderPlaced(
-                orderC, customer, new Money(99m, "USD"), BaseTime.AddHours(1))),
+                orderC, customer, new Money(99m, Currency.USD), BaseTime.AddHours(1))),
         ], CancellationToken.None);
 
         return new RebuildContext(

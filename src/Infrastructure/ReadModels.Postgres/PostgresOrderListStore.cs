@@ -64,7 +64,7 @@ public sealed class PostgresOrderListStore : IOrderListStore
             // Case-sensitive: a lowercase "placed" in the column is a data
             // integrity bug, not something to read gracefully.
             Status: Enum.Parse<OrderStatus>(reader.GetString(2)),
-            Total: new Money(reader.GetDecimal(3), reader.GetString(4)),
+            Total: new Money(reader.GetDecimal(3), new Currency(reader.GetString(4))),
             PlacedUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
             LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc));
     }
@@ -101,7 +101,7 @@ public sealed class PostgresOrderListStore : IOrderListStore
                 OrderId: reader.GetGuid(0),
                 CustomerId: reader.GetGuid(1),
                 Status: Enum.Parse<OrderStatus>(reader.GetString(2)),
-                Total: new Money(reader.GetDecimal(3), reader.GetString(4)),
+                Total: new Money(reader.GetDecimal(3), new Currency(reader.GetString(4))),
                 PlacedUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
                 LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)));
         }
