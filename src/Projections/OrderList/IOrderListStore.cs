@@ -15,6 +15,12 @@ public interface IOrderListStore
     // Read path: used by the rebuild test, and by query handlers later.
     Task<OrderListRow?> GetAsync(Guid orderId, CancellationToken ct);
 
+    // Paged read path: backs Application's ListOrders query handler. Rows
+    // return newest-first by PlacedUtc. The implementation clamps oversized
+    // limits internally so a misbehaving caller can't pull every row in one
+    // request; Phase 7's API binding adds the user-visible validation.
+    Task<IReadOnlyList<OrderListRow>> GetPageAsync(int offset, int limit, CancellationToken ct);
+
     // Rebuild support: drop every row so a replay starts from empty.
     Task TruncateAsync(CancellationToken ct);
 }

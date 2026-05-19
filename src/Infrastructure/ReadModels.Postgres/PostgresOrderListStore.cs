@@ -69,6 +69,45 @@ public sealed class PostgresOrderListStore : IOrderListStore
             LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc));
     }
 
+    public async Task<IReadOnlyList<OrderListRow>> GetPageAsync(
+        int offset, int limit, CancellationToken ct)
+    {
+        // Defense-in-depth clamp. 200 covers every reasonable page size for
+        // a list view; the caller still gets a deterministic answer for a
+        // pathological request rather than a slow scan of the whole table.
+        var clampedLimit = Math.Clamp(limit, 0, 200);
+        var safeOffset = Math.Max(0, offset);
+        if (clampedLimit == 0)
+        {
+            return Array.Empty<OrderListRow>();
+        }
+
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT order_id, customer_id, status, total_amount, total_currency, " +
+            "placed_utc, last_updated_utc " +
+            "FROM read_models.order_list " +
+            "ORDER BY placed_utc DESC, order_id DESC " +
+            "LIMIT @limit OFFSET @offset";
+        cmd.Parameters.AddWithValue("limit", NpgsqlDbType.Integer, clampedLimit);
+        cmd.Parameters.AddWithValue("offset", NpgsqlDbType.Integer, safeOffset);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<OrderListRow>(clampedLimit);
+        while (await reader.ReadAsync(ct))
+        {
+            rows.Add(new OrderListRow(
+                OrderId: reader.GetGuid(0),
+                CustomerId: reader.GetGuid(1),
+                Status: Enum.Parse<OrderStatus>(reader.GetString(2)),
+                Total: new Money(reader.GetDecimal(3), reader.GetString(4)),
+                PlacedUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
+                LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)));
+        }
+        return rows;
+    }
+
     public async Task TruncateAsync(CancellationToken ct)
     {
         await using var connection = await _factory.OpenConnectionAsync(ct);

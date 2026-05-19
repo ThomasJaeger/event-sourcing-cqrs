@@ -149,6 +149,45 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task GetPageAsync_returns_rows_newest_first_by_placed_utc()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var older = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-1) };
+        var newer = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt };
+        await InsertAndCommitAsync(store, older, position: 1);
+        await InsertAndCommitAsync(store, newer, position: 2);
+
+        var page = await store.GetPageAsync(offset: 0, limit: 50, CancellationToken.None);
+
+        page.Should().HaveCount(2);
+        page[0].OrderId.Should().Be(newer.OrderId);
+        page[1].OrderId.Should().Be(older.OrderId);
+    }
+
+    [Fact]
+    public async Task GetPageAsync_applies_offset_and_limit_within_the_ordered_page()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var first = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt };
+        var second = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-1) };
+        var third = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-2) };
+        await InsertAndCommitAsync(store, first, position: 1);
+        await InsertAndCommitAsync(store, second, position: 2);
+        await InsertAndCommitAsync(store, third, position: 3);
+
+        var page = await store.GetPageAsync(offset: 1, limit: 1, CancellationToken.None);
+
+        page.Should().ContainSingle();
+        page[0].OrderId.Should().Be(second.OrderId);
+    }
+
+    [Fact]
     public async Task Truncate_empties_the_table()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();

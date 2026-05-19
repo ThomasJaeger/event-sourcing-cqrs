@@ -31,6 +31,19 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
     public Task<OrderListRow?> GetAsync(Guid orderId, CancellationToken ct)
         => Task.FromResult(_rows.GetValueOrDefault(orderId));
 
+    public Task<IReadOnlyList<OrderListRow>> GetPageAsync(int offset, int limit, CancellationToken ct)
+    {
+        var clampedLimit = Math.Clamp(limit, 0, 200);
+        var safeOffset = Math.Max(0, offset);
+        IReadOnlyList<OrderListRow> page = _rows.Values
+            .OrderByDescending(r => r.PlacedUtc)
+            .ThenByDescending(r => r.OrderId)
+            .Skip(safeOffset)
+            .Take(clampedLimit)
+            .ToList();
+        return Task.FromResult(page);
+    }
+
     public Task TruncateAsync(CancellationToken ct)
     {
         _rows.Clear();
