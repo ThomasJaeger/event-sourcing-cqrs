@@ -52,7 +52,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 ### Hexagonal architecture (ports and adapters)
 
 * Domain at the center. No I/O dependencies in Domain.
-* Application depends on Domain and Domain.Abstractions only.
+* Application depends on Domain, Domain.Abstractions, and Projections only. The Projections dependency is for read-side store interfaces shared with read-model consumers; no I/O.
 * Infrastructure projects implement the abstractions Domain.Abstractions declares.
 * Hosts (Web, Api, Workers, AdminConsole) depend on Application.
 * Domain.Tests has no infrastructure dependencies and runs in microseconds.
