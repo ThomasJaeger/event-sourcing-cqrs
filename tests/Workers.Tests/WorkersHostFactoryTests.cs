@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Hosts.Workers;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
@@ -26,11 +27,13 @@ public class WorkersHostFactoryTests
         host.Services.GetRequiredService<IEventStore>()
             .Should().BeOfType<PostgresEventStore>();
 
-        // EventTypeRegistry populated via SalesEventTypeProvider: the
+        // EventTypeRegistry populated via Sales and Fulfillment providers: the
         // factory-on-first-resolution path from commit 4 actually fires here.
         var registry = host.Services.GetRequiredService<EventTypeRegistry>();
         registry.NameFor(typeof(OrderPlaced)).Should().Be(nameof(OrderPlaced));
         registry.NameFor(typeof(OrderDrafted)).Should().Be(nameof(OrderDrafted));
+        registry.NameFor(typeof(InventoryCreated)).Should().Be(nameof(InventoryCreated));
+        registry.NameFor(typeof(InventoryReserved)).Should().Be(nameof(InventoryReserved));
 
         // OrderListProjection is the same instance under every interface its
         // consumers resolve.

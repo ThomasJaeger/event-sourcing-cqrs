@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
@@ -26,6 +27,7 @@ public static class WorkersHostFactory
 
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
+        builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
         builder.Services.AddApplication();
