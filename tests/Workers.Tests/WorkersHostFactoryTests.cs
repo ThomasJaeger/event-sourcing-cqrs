@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Hosts.Workers;
@@ -36,6 +37,8 @@ public class WorkersHostFactoryTests
         registry.NameFor(typeof(InventoryReserved)).Should().Be(nameof(InventoryReserved));
         registry.NameFor(typeof(ShipmentScheduled)).Should().Be(nameof(ShipmentScheduled));
         registry.NameFor(typeof(ShipmentDelivered)).Should().Be(nameof(ShipmentDelivered));
+        registry.NameFor(typeof(PaymentAuthorized)).Should().Be(nameof(PaymentAuthorized));
+        registry.NameFor(typeof(PaymentCaptured)).Should().Be(nameof(PaymentCaptured));
 
         // OrderListProjection is the same instance under every interface its
         // consumers resolve.
