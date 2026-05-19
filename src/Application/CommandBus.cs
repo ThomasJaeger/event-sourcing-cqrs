@@ -53,12 +53,13 @@ public sealed class CommandBus : ICommandBus
         var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
 
         // ServiceName is hardcoded in v1; commit 8 switches it to read from
-        // ApplicationOptions once AddApplication lands.
+        // ApplicationOptions once AddApplication lands. ActorId stays Guid.Empty
+        // until Phase 7's HTTP middleware maps an authenticated principal.
         var context = new CommandContext(timeProvider)
         {
             CorrelationId = correlationId,
             CausationCommandId = Guid.NewGuid(),
-            UserId = "system",
+            ActorId = Guid.Empty,
             ServiceName = "Workers"
         };
 

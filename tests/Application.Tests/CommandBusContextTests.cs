@@ -25,7 +25,7 @@ public sealed class CommandBusContextTests
         capture.Observed.Should().NotBeNull();
         capture.Observed!.CorrelationId.Should().NotBe(Guid.Empty);
         capture.Observed.CausationCommandId.Should().NotBe(Guid.Empty);
-        capture.Observed.UserId.Should().Be("system");
+        capture.Observed.ActorId.Should().Be(Guid.Empty);
         capture.Observed.ServiceName.Should().Be("Workers");
     }
 

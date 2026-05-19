@@ -14,7 +14,7 @@ public sealed class CommandContextTests
 
         system.CorrelationId.Should().Be(Guid.Empty);
         system.CausationCommandId.Should().Be(Guid.Empty);
-        system.UserId.Should().Be("system");
+        system.ActorId.Should().Be(Guid.Empty);
         system.ServiceName.Should().Be("Workers");
         system.UtcNow().Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
     }
@@ -28,14 +28,14 @@ public sealed class CommandContextTests
         {
             CorrelationId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             CausationCommandId = Guid.Empty,
-            UserId = "alice",
+            ActorId = Guid.Empty,
             ServiceName = "test"
         });
         var second = RunFlow(accessor, new CommandContext
         {
             CorrelationId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             CausationCommandId = Guid.Empty,
-            UserId = "bob",
+            ActorId = Guid.Empty,
             ServiceName = "test"
         });
 

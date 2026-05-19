@@ -23,21 +23,21 @@ public sealed class CommandContext : ICommandContext
 
     public required Guid CausationCommandId { get; init; }
 
-    public required string UserId { get; init; }
+    public required Guid ActorId { get; init; }
 
     public required string ServiceName { get; init; }
 
     public DateTimeOffset UtcNow() => _timeProvider.GetUtcNow();
 
     // Fallback context for writes that originate outside a command scope:
-    // projection workers, the outbox processor, anything the EventSerializer
-    // sees with a null accessor.Current. Carries deterministic stub values so
-    // the metadata still parses without special-casing system writes downstream.
+    // projection workers, the outbox processor, anything that stamps metadata
+    // when no command is in flight. Carries deterministic stub values so the
+    // envelopes still parse without special-casing system writes downstream.
     public static CommandContext System { get; } = new()
     {
         CorrelationId = Guid.Empty,
         CausationCommandId = Guid.Empty,
-        UserId = "system",
+        ActorId = Guid.Empty,
         ServiceName = "Workers"
     };
 }

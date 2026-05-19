@@ -6,7 +6,7 @@ internal sealed class StubCommandContext : ICommandContext
 {
     public Guid CorrelationId { get; init; } = Guid.Empty;
     public Guid CausationCommandId { get; init; } = Guid.Empty;
-    public string UserId { get; init; } = "test-user";
+    public Guid ActorId { get; init; } = Guid.Empty;
     public string ServiceName { get; init; } = "test-service";
 
     private readonly DateTimeOffset _utcNow = DateTimeOffset.UtcNow;
