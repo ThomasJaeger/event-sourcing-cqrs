@@ -34,6 +34,8 @@ public class WorkersHostFactoryTests
         registry.NameFor(typeof(OrderDrafted)).Should().Be(nameof(OrderDrafted));
         registry.NameFor(typeof(InventoryCreated)).Should().Be(nameof(InventoryCreated));
         registry.NameFor(typeof(InventoryReserved)).Should().Be(nameof(InventoryReserved));
+        registry.NameFor(typeof(ShipmentScheduled)).Should().Be(nameof(ShipmentScheduled));
+        registry.NameFor(typeof(ShipmentDelivered)).Should().Be(nameof(ShipmentDelivered));
 
         // OrderListProjection is the same instance under every interface its
         // consumers resolve.
