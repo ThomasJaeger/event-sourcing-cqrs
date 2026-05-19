@@ -1,9 +1,9 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Hosts.Workers;
-using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

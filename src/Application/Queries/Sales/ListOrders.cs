@@ -1,5 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 
 namespace EventSourcingCqrs.Application.Queries.Sales;
 

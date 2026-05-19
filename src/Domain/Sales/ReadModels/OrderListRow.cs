@@ -1,7 +1,6 @@
-using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
 
-namespace EventSourcingCqrs.Projections.OrderList;
+namespace EventSourcingCqrs.Domain.Sales.ReadModels;
 
 // One row of the order-list read model: the C# shape of read_models.order_list.
 // Carries the domain's Money and OrderStatus directly. PostgresOrderListStore

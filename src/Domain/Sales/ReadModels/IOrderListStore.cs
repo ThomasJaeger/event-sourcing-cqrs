@@ -1,10 +1,8 @@
-using EventSourcingCqrs.Domain.Sales;
+namespace EventSourcingCqrs.Domain.Sales.ReadModels;
 
-namespace EventSourcingCqrs.Projections.OrderList;
-
-// The order-list read model's persistence port. Lives next to the projection,
-// not in Domain.Abstractions: it is the projection's own seam for unit testing
-// against an in-memory store, not a cross-cutting abstraction.
+// The order-list read model's persistence port. Lives in Domain.Sales.ReadModels
+// so the row's typed OrderStatus and Money stay reachable without forcing
+// Domain.Abstractions to depend on Domain. See ADR 0008.
 public interface IOrderListStore
 {
     // Opens a unit of work. The handler writes its one row change on the unit

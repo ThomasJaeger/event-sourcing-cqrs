@@ -1,6 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
-using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using Npgsql;
 using NpgsqlTypes;
 

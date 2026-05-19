@@ -1,7 +1,7 @@
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
-using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;

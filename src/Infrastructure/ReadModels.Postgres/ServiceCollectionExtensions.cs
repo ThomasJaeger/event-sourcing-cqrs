@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Projections.OrderList;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;

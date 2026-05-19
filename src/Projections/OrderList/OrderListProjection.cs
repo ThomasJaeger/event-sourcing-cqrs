@@ -1,6 +1,7 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 
 namespace EventSourcingCqrs.Projections.OrderList;
 

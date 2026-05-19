@@ -1,7 +1,7 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
-using EventSourcingCqrs.Projections.OrderList;
 using Npgsql;
 using NpgsqlTypes;
 
