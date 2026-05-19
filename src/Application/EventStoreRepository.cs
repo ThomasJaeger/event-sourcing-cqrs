@@ -1,7 +1,18 @@
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Infrastructure.EventStore.InMemory;
+namespace EventSourcingCqrs.Application;
 
+// Engine-agnostic repository wrapper. Loads by replaying the stream through
+// the aggregate's ApplyHistoric path; saves by dequeueing uncommitted events,
+// stamping each with metadata from the current command context, and appending
+// atomically through IEventStore.
+//
+// Moved here from Infrastructure/EventStore.InMemory in commit 8, closing the
+// Session 0006 deferred-items #11 / Session 0007 deferred-items #1 placement.
+// Every dependency the class touches (IEventStore, ICommandContextAccessor,
+// EventMetadata, EventEnvelope, AggregateRoot) lives in Domain.Abstractions,
+// so the class's natural home is Application alongside the command handlers
+// that use it.
 public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAggregate>
     where TAggregate : AggregateRoot, new()
 {

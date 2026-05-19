@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
@@ -27,6 +28,7 @@ public static class WorkersHostFactory
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
+        builder.Services.AddApplication();
         builder.Services.AddReadModels(opts =>
             opts.ConnectionString = readModelConnectionString);
         builder.Services.AddHostedService<ProjectionStartupCatchUpService>();

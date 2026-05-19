@@ -51,16 +51,17 @@ public sealed class CommandBus : ICommandBus
         var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
         var accessor = sp.GetRequiredService<ICommandContextAccessor>();
         var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+        var options = sp.GetService<ApplicationOptions>() ?? new ApplicationOptions();
 
-        // ServiceName is hardcoded in v1; commit 8 switches it to read from
-        // ApplicationOptions once AddApplication lands. ActorId stays Guid.Empty
-        // until Phase 7's HTTP middleware maps an authenticated principal.
+        // ActorId stays Guid.Empty until Phase 7's HTTP middleware maps an
+        // authenticated principal. ServiceName reads from ApplicationOptions,
+        // defaulting to "Workers" when the host has not configured it.
         var context = new CommandContext(timeProvider)
         {
             CorrelationId = correlationId,
             CausationCommandId = Guid.NewGuid(),
             ActorId = Guid.Empty,
-            ServiceName = "Workers"
+            ServiceName = options.ServiceName
         };
 
         var previous = accessor.Current;

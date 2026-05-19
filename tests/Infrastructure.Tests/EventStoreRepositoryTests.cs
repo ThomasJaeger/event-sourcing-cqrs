@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.InMemory;

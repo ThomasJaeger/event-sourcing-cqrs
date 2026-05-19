@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
