@@ -28,7 +28,14 @@ public static class ServiceCollectionExtensions
         // to the wall clock when nothing has been registered yet.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddSingleton<ICommandBus, CommandBus>();
+        // One CommandBus instance behind two handles: the public ICommandBus and
+        // the concrete type. CausedCommandBus needs the concrete type to reach
+        // the internal SendWithContextAsync seam (ADR 0014), and both must
+        // resolve the same singleton so the AsyncLocal accessor scoping stays
+        // coherent across user and process-manager dispatch.
+        services.AddSingleton<CommandBus>();
+        services.AddSingleton<ICommandBus>(sp => sp.GetRequiredService<CommandBus>());
+        services.AddSingleton<ICausedCommandBus, CausedCommandBus>();
         services.AddSingleton<IQueryBus, QueryBus>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
 

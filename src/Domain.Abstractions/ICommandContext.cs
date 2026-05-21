@@ -16,5 +16,11 @@ public interface ICommandContext
 
     string ServiceName { get; }
 
+    // Set only on process-manager dispatch through CausedCommandBus (ADR 0014);
+    // null on the user-dispatch path. IdempotencyBehavior (ADR 0016, a later
+    // commit) reads it to dedupe retried commands. Nullable so the construction
+    // sites that never set it stay unchanged.
+    string? IdempotencyKey { get; }
+
     DateTimeOffset UtcNow();
 }

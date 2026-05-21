@@ -41,7 +41,50 @@ public sealed class CommandBus : ICommandBus
     public Task SendAsync(ICommand command, Guid correlationId, CancellationToken ct)
         => SendInternal(command, correlationId, ct);
 
-    private async Task SendInternal(ICommand command, Guid correlationId, CancellationToken ct)
+    private Task SendInternal(ICommand command, Guid correlationId, CancellationToken ct)
+        // ActorId stays Guid.Empty until Phase 7's HTTP middleware maps an
+        // authenticated principal. ServiceName reads from ApplicationOptions,
+        // defaulting to "Workers" when the host has not configured it.
+        => DispatchAsync(
+            command,
+            (timeProvider, options) => new CommandContext(timeProvider)
+            {
+                CorrelationId = correlationId,
+                CausationCommandId = Guid.NewGuid(),
+                ActorId = Guid.Empty,
+                ServiceName = options.ServiceName
+            },
+            ct);
+
+    // Process-manager dispatch enters here through CausedCommandBus (ADR 0014).
+    // The caller supplies the context values built from the causing event's
+    // metadata instead of letting the bus mint fresh ones; everything else is
+    // the user-dispatch path unchanged. internal because CausedCommandBus shares
+    // this assembly, so the public ICommandBus surface does not widen.
+    internal Task SendWithContextAsync(
+        ICommand command, CausedDispatchFragment fragment, CancellationToken ct)
+        => DispatchAsync(
+            command,
+            (timeProvider, _) => new CommandContext(timeProvider)
+            {
+                CorrelationId = fragment.CorrelationId,
+                CausationCommandId = fragment.CausationCommandId,
+                ActorId = fragment.ActorId,
+                ServiceName = fragment.ServiceName,
+                IdempotencyKey = fragment.IdempotencyKey
+            },
+            ct);
+
+    // The one dispatch loop both entry points run: open a scope, resolve the
+    // handler, behaviors, and accessor, build the context from the caller's
+    // recipe, push it for the pipeline's duration, and restore the prior value
+    // in finally. Sharing it makes behaviors-run-once and accessor-scope-holds
+    // structural properties of either caller rather than discipline repeated at
+    // two sites.
+    private async Task DispatchAsync(
+        ICommand command,
+        Func<TimeProvider, ApplicationOptions, CommandContext> buildContext,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
         using var scope = _services.CreateScope();
@@ -53,16 +96,7 @@ public sealed class CommandBus : ICommandBus
         var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
         var options = sp.GetService<ApplicationOptions>() ?? new ApplicationOptions();
 
-        // ActorId stays Guid.Empty until Phase 7's HTTP middleware maps an
-        // authenticated principal. ServiceName reads from ApplicationOptions,
-        // defaulting to "Workers" when the host has not configured it.
-        var context = new CommandContext(timeProvider)
-        {
-            CorrelationId = correlationId,
-            CausationCommandId = Guid.NewGuid(),
-            ActorId = Guid.Empty,
-            ServiceName = options.ServiceName
-        };
+        var context = buildContext(timeProvider, options);
 
         var previous = accessor.Current;
         accessor.Current = context;

@@ -27,6 +27,10 @@ public sealed class CommandContext : ICommandContext
 
     public required string ServiceName { get; init; }
 
+    // Non-required: only the CausedCommandBus seam sets it (ADR 0014). The
+    // user-dispatch path and the System fallback leave it null.
+    public string? IdempotencyKey { get; init; }
+
     public DateTimeOffset UtcNow() => _timeProvider.GetUtcNow();
 
     // Fallback context for writes that originate outside a command scope:

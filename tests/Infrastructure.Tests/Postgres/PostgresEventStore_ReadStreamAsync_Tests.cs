@@ -49,6 +49,12 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         read[0].StreamId.Should().Be(streamId);
         read[0].StreamVersion.Should().Be(1);
         read[0].Payload.Should().BeOfType<TestPayload>().Which.Should().Be(payload);
+        // EventId and Metadata.EventId are stored separately (the event_id
+        // column and the metadata JSONB) but must round-trip equal: ADR 0014
+        // sets a PM-dispatched command's causation to the causing event's
+        // Metadata.EventId, and the Phase 9 Correlation-ID Tracer follows
+        // chains through that field.
+        read[0].EventId.Should().Be(read[0].Metadata.EventId);
     }
 
     [Fact]
