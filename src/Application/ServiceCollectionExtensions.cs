@@ -39,10 +39,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IQueryBus, QueryBus>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
 
-        // Logging wraps Validation so a short-circuited validation failure
-        // still produces one log line per command with the elapsed time and
-        // the correlation id, matching the production observability story.
+        // Logging is outermost so its one-log-line-per-command guarantee covers
+        // short-circuited validation failures and deduplicated duplicates alike.
+        // Idempotency sits inside logging and before validation (ADR 0016): a
+        // duplicate is logged but does no validation work and never reaches the
+        // handler. Registration order is pipeline order outermost-to-innermost
+        // (CommandPipelineBuilder folds in reverse).
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(LoggingCommandBehavior<>));
+        services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(ValidationCommandBehavior<>));
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>));
 
