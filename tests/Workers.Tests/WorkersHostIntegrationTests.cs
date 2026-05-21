@@ -47,8 +47,9 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
         try
         {
             var orderId = Guid.NewGuid();
+            var stream = StreamId.ForAggregate<Order>(orderId);
             var envelope = BuildEnvelope(
-                streamId: orderId,
+                streamId: stream,
                 streamVersion: 1,
                 payload: new OrderPlaced(
                     OrderId: orderId,
@@ -57,7 +58,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
                     PlacedUtc: new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc)));
 
             var eventStore = host.Services.GetRequiredService<IEventStore>();
-            await eventStore.AppendAsync(orderId, 0, [envelope], cts.Token);
+            await eventStore.AppendAsync(stream, 0, [envelope], cts.Token);
 
             var orderListStore = host.Services.GetRequiredService<IOrderListStore>();
             var row = await PollForRowAsync(orderListStore, orderId, PollBudget, cts.Token);
@@ -88,7 +89,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
     }
 
     private static EventEnvelope BuildEnvelope(
-        Guid streamId, int streamVersion, IDomainEvent payload)
+        StreamId streamId, int streamVersion, IDomainEvent payload)
     {
         var eventId = Guid.NewGuid();
         var when = new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc);

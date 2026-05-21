@@ -36,7 +36,7 @@ public sealed class PostgresEventStore : IEventStore
     }
 
     public async Task AppendAsync(
-        Guid streamId,
+        StreamId streamId,
         int expectedVersion,
         IReadOnlyList<EventEnvelope> events,
         CancellationToken ct)
@@ -72,7 +72,7 @@ public sealed class PostgresEventStore : IEventStore
                         "VALUES (@stream_id, @stream_version, @event_id, @event_type, " +
                         "@event_version, @payload, @metadata, @occurred_utc) " +
                         "RETURNING global_position";
-                    AddUuid(insertEvent, "stream_id", envelope.StreamId);
+                    AddText(insertEvent, "stream_id", envelope.StreamId.Value);
                     AddInteger(insertEvent, "stream_version", envelope.StreamVersion);
                     AddUuid(insertEvent, "event_id", envelope.EventId);
                     AddText(insertEvent, "event_type", eventTypeName);
@@ -116,7 +116,7 @@ public sealed class PostgresEventStore : IEventStore
     }
 
     public async Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
-        Guid streamId,
+        StreamId streamId,
         int fromVersion = 0,
         CancellationToken ct = default)
     {
@@ -128,7 +128,7 @@ public sealed class PostgresEventStore : IEventStore
             "FROM event_store.events " +
             "WHERE stream_id = @stream_id AND stream_version > @from_version " +
             "ORDER BY stream_version";
-        AddUuid(cmd, "stream_id", streamId);
+        AddText(cmd, "stream_id", streamId.Value);
         AddInteger(cmd, "from_version", fromVersion);
 
         var envelopes = new List<EventEnvelope>();
@@ -204,7 +204,7 @@ public sealed class PostgresEventStore : IEventStore
 
             // SequentialAccess requires reading columns in ascending ordinal order.
             var globalPosition = reader.GetInt64(0);
-            var streamId = reader.GetGuid(1);
+            var streamId = StreamId.Parse(reader.GetString(1));
             var streamVersion = reader.GetInt32(2);
             var eventId = reader.GetGuid(3);
             var eventType = reader.GetString(4);

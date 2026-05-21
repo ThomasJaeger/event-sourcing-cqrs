@@ -5,7 +5,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.InMemory;
 
 public sealed class InMemoryEventStore : IEventStore
 {
-    private readonly Dictionary<Guid, List<EventEnvelope>> _streams = [];
+    private readonly Dictionary<StreamId, List<EventEnvelope>> _streams = [];
 
     // Append order across all streams. The in-memory store assigns
     // GlobalPosition the way PostgreSQL IDENTITY does: monotonic, from 1. This
@@ -14,7 +14,7 @@ public sealed class InMemoryEventStore : IEventStore
     private long _nextGlobalPosition = 1;
 
     public Task AppendAsync(
-        Guid streamId,
+        StreamId streamId,
         int expectedVersion,
         IReadOnlyList<EventEnvelope> events,
         CancellationToken ct)
@@ -43,7 +43,7 @@ public sealed class InMemoryEventStore : IEventStore
     }
 
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
-        Guid streamId,
+        StreamId streamId,
         int fromVersion = 0,
         CancellationToken ct = default)
     {

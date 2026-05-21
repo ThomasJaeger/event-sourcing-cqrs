@@ -95,7 +95,7 @@ public class ProjectionStartupCatchUpServiceTests
             SchemaVersion: 1,
             OccurredUtc: At);
         return new EventEnvelope(
-            StreamId: Guid.NewGuid(),
+            StreamId: StreamId.Parse($"test:{Guid.NewGuid():N}"),
             StreamVersion: 1,
             EventId: id,
             EventType: payload.GetType().Name,
@@ -147,12 +147,12 @@ public class ProjectionStartupCatchUpServiceTests
         }
 
         public Task AppendAsync(
-            Guid streamId, int expectedVersion,
+            StreamId streamId, int expectedVersion,
             IReadOnlyList<EventEnvelope> events, CancellationToken ct)
             => throw new NotSupportedException();
 
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
-            Guid streamId, int fromVersion = 0, CancellationToken ct = default)
+            StreamId streamId, int fromVersion = 0, CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 

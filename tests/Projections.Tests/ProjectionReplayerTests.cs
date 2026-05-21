@@ -51,7 +51,7 @@ public class ProjectionReplayerTests
         var projection = new RecordingProjection();
         var metadata = Metadata();
         var envelope = new EventEnvelope(
-            StreamId: Guid.NewGuid(),
+            StreamId: StreamId.Parse($"test:{Guid.NewGuid():N}"),
             StreamVersion: 1,
             EventId: metadata.EventId,
             EventType: nameof(ReplayTestEvent),
@@ -83,7 +83,7 @@ public class ProjectionReplayerTests
 
     private static EventEnvelope Envelope(IDomainEvent payload, long globalPosition)
         => new(
-            StreamId: Guid.NewGuid(),
+            StreamId: StreamId.Parse($"test:{Guid.NewGuid():N}"),
             StreamVersion: 1,
             EventId: Guid.NewGuid(),
             EventType: payload.GetType().Name,
@@ -150,12 +150,12 @@ public class ProjectionReplayerTests
         }
 
         public Task AppendAsync(
-            Guid streamId, int expectedVersion,
+            StreamId streamId, int expectedVersion,
             IReadOnlyList<EventEnvelope> events, CancellationToken ct)
             => throw new NotSupportedException();
 
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
-            Guid streamId, int fromVersion = 0, CancellationToken ct = default)
+            StreamId streamId, int fromVersion = 0, CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 }

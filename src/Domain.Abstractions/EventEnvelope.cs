@@ -6,7 +6,7 @@ namespace EventSourcingCqrs.Domain.Abstractions;
 // value. PostgreSQL IDENTITY starts at 1, so 0 reads as "the store has not
 // touched this yet" without ever colliding with a stored row.
 public sealed record EventEnvelope(
-    Guid StreamId,
+    StreamId StreamId,
     int StreamVersion,
     Guid EventId,
     string EventType,

@@ -1,6 +1,7 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Hosts.Workers;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
@@ -42,7 +43,8 @@ public class CommandMetadataEndToEndTests : IClassFixture<PostgresFixture>
 
             await bus.SendAsync(new DraftOrder(orderId, customerId), correlationId, cts.Token);
 
-            var envelopes = await eventStore.ReadStreamAsync(orderId, fromVersion: 0, cts.Token);
+            var envelopes = await eventStore.ReadStreamAsync(
+                StreamId.ForAggregate<Order>(orderId), fromVersion: 0, cts.Token);
             envelopes.Should().ContainSingle();
             var metadata = envelopes[0].Metadata;
             metadata.CorrelationId.Should().Be(correlationId);

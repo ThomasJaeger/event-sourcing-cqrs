@@ -23,7 +23,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         var envelope = BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 42.5m));
 
         await store.AppendAsync(streamId, 0, [envelope], CancellationToken.None);
@@ -41,7 +41,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         var envelope = BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 7m));
 
         await store.AppendAsync(streamId, 0, [envelope], CancellationToken.None);
@@ -67,7 +67,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         EventEnvelope[] envelopes =
         [
             BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
@@ -87,7 +87,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         EventEnvelope[] first =
         [
             BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
@@ -112,7 +112,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(
             streamId,
             0,
@@ -142,7 +142,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         var correlationId = Guid.NewGuid();
         var payload = new TestPayload(Guid.NewGuid(), 99.95m);
         var envelope = BuildEnvelope(streamId, 1, payload, correlationId: correlationId);
@@ -178,8 +178,8 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamA = Guid.NewGuid();
-        var streamB = Guid.NewGuid();
+        var streamA = NewStreamId();
+        var streamB = NewStreamId();
         var sharedEventId = Guid.NewGuid();
 
         await store.AppendAsync(
@@ -224,7 +224,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
     }
 
     private static async Task<IReadOnlyList<(int StreamVersion, Guid EventId, string EventType)>>
-        ReadEventsAsync(string connStr, Guid streamId)
+        ReadEventsAsync(string connStr, StreamId streamId)
     {
         await using var connection = new NpgsqlConnection(connStr);
         await connection.OpenAsync();
@@ -232,7 +232,7 @@ public class PostgresEventStore_AppendAsync_Tests : IClassFixture<PostgresFixtur
         cmd.CommandText =
             "SELECT stream_version, event_id, event_type FROM event_store.events " +
             "WHERE stream_id = @stream_id ORDER BY stream_version";
-        cmd.Parameters.AddWithValue("stream_id", streamId);
+        cmd.Parameters.AddWithValue("stream_id", streamId.Value);
         var rows = new List<(int, Guid, string)>();
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())

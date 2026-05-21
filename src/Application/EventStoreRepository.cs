@@ -27,7 +27,8 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
 
     public async Task<TAggregate?> LoadAsync(Guid id, CancellationToken ct)
     {
-        var envelopes = await _store.ReadStreamAsync(id, fromVersion: 0, ct);
+        var streamId = StreamId.ForAggregate<TAggregate>(id);
+        var envelopes = await _store.ReadStreamAsync(streamId, fromVersion: 0, ct);
         if (envelopes.Count == 0)
         {
             return null;
@@ -50,8 +51,9 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
         }
 
         var expectedVersion = aggregate.Version - events.Count;
-        var envelopes = BuildEnvelopes(aggregate.Id, expectedVersion, events);
-        await _store.AppendAsync(aggregate.Id, expectedVersion, envelopes, ct);
+        var streamId = StreamId.ForAggregate<TAggregate>(aggregate.Id);
+        var envelopes = BuildEnvelopes(streamId, expectedVersion, events);
+        await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
     }
 
     // Stamps metadata from the current command context, chaining causation
@@ -64,7 +66,7 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
     // tests that construct EventStoreRepository directly without a command
     // bus on the call stack; production writes always go through the bus.
     private IReadOnlyList<EventEnvelope> BuildEnvelopes(
-        Guid streamId,
+        StreamId streamId,
         int baseVersion,
         IReadOnlyList<IDomainEvent> events)
     {

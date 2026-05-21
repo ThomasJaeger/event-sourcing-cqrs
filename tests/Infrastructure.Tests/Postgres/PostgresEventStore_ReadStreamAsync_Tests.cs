@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
@@ -24,7 +25,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
 
-        var read = await store.ReadStreamAsync(Guid.NewGuid(), 0, CancellationToken.None);
+        var read = await store.ReadStreamAsync(NewStreamId(), 0, CancellationToken.None);
 
         read.Should().BeEmpty();
     }
@@ -35,7 +36,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         var payload = new TestPayload(Guid.NewGuid(), 12.34m);
         await store.AppendAsync(
             streamId, 0,
@@ -56,7 +57,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,
             [
@@ -82,7 +83,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,
             [
@@ -104,7 +105,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
 
         // Insert a row directly with an event_type the registry does not
         // know about. Reading is what surfaces the failure: registries are
@@ -123,7 +124,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     }
 
     private static async Task InsertEventDirectlyAsync(
-        string connStr, Guid streamId, string eventType)
+        string connStr, StreamId streamId, string eventType)
     {
         await using var connection = new NpgsqlConnection(connStr);
         await connection.OpenAsync();
@@ -137,7 +138,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
             "jsonb_build_object('correlation_id', gen_random_uuid()::text, " +
             "'causation_id', gen_random_uuid()::text), " +
             "now())";
-        cmd.Parameters.AddWithValue("stream_id", NpgsqlDbType.Uuid, streamId);
+        cmd.Parameters.AddWithValue("stream_id", NpgsqlDbType.Text, streamId.Value);
         cmd.Parameters.AddWithValue("event_id", NpgsqlDbType.Uuid, Guid.NewGuid());
         cmd.Parameters.AddWithValue("event_type", NpgsqlDbType.Text, eventType);
         await cmd.ExecuteNonQueryAsync();

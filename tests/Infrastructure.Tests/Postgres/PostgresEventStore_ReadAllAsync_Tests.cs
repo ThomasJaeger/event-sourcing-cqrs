@@ -37,8 +37,8 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamA = Guid.NewGuid();
-        var streamB = Guid.NewGuid();
+        var streamA = NewStreamId();
+        var streamB = NewStreamId();
 
         // Interleave the appends so global order differs from per-stream order.
         await store.AppendAsync(streamA, 0,
@@ -65,7 +65,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
                 BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
@@ -87,7 +87,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
                 BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
@@ -110,7 +110,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
-        var streamId = Guid.NewGuid();
+        var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
                 BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),

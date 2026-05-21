@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.InMemory;
@@ -50,12 +51,12 @@ public class EventStoreRepositoryTests
         var order = Order.Draft(OrderId, CustomerId, At);
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var afterFirstSave = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var afterFirstSave = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         afterFirstSave.Should().HaveCount(1);
 
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var afterSecondSave = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var afterSecondSave = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         afterSecondSave.Should().HaveCount(1);
     }
 }

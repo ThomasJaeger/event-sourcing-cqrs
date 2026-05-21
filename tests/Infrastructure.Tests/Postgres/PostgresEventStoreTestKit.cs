@@ -21,8 +21,11 @@ internal static class PostgresEventStoreTestKit
             .Register<TestPayload>()
             .Register<OtherTestPayload>();
 
+    public static StreamId NewStreamId()
+        => StreamId.Parse($"test:{Guid.NewGuid():N}");
+
     public static EventEnvelope BuildEnvelope(
-        Guid streamId,
+        StreamId streamId,
         int streamVersion,
         IDomainEvent payload,
         DateTime? occurredUtc = null,

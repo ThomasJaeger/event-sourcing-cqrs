@@ -39,7 +39,7 @@ public class EventStoreRepositoryMetadataTests
 
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var envelopes = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var envelopes = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         envelopes.Should().ContainSingle();
         var metadata = envelopes[0].Metadata;
         metadata.CorrelationId.Should().Be(correlationId);
@@ -58,7 +58,7 @@ public class EventStoreRepositoryMetadataTests
 
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var envelopes = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var envelopes = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         var metadata = envelopes[0].Metadata;
         metadata.CorrelationId.Should().Be(Guid.Empty);
         metadata.CausationId.Should().Be(Guid.Empty);
@@ -82,7 +82,7 @@ public class EventStoreRepositoryMetadataTests
 
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var envelopes = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var envelopes = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         envelopes.Should().HaveCount(2);
         envelopes[0].Metadata.CausationId.Should().Be(commandId);
         envelopes[1].Metadata.CausationId.Should().Be(envelopes[0].Metadata.EventId);
@@ -104,7 +104,7 @@ public class EventStoreRepositoryMetadataTests
 
         await repo.SaveAsync(order, CancellationToken.None);
 
-        var envelopes = await store.ReadStreamAsync(OrderId, fromVersion: 0, CancellationToken.None);
+        var envelopes = await store.ReadStreamAsync(StreamId.ForAggregate<Order>(OrderId), fromVersion: 0, CancellationToken.None);
         envelopes.Should().AllSatisfy(e => e.Metadata.CorrelationId.Should().Be(correlationId));
     }
 }

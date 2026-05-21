@@ -133,34 +133,37 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         var orderB = Guid.NewGuid();
         var orderC = Guid.NewGuid();
         var customer = Guid.NewGuid();
+        var streamA = StreamId.ForAggregate<Order>(orderA);
+        var streamB = StreamId.ForAggregate<Order>(orderB);
+        var streamC = StreamId.ForAggregate<Order>(orderC);
 
-        await eventStore.AppendAsync(orderA, 0,
+        await eventStore.AppendAsync(streamA, 0,
         [
-            Env(orderA, 1, new OrderDrafted(orderA, customer, BaseTime)),
-            Env(orderA, 2, new OrderLineAdded(
+            Env(streamA, 1, new OrderDrafted(orderA, customer, BaseTime)),
+            Env(streamA, 2, new OrderLineAdded(
                 orderA, Guid.NewGuid(), "SKU-A", 1, new Money(20m, Currency.USD), BaseTime)),
-            Env(orderA, 3, new OrderPlaced(
+            Env(streamA, 3, new OrderPlaced(
                 orderA, customer, new Money(20m, Currency.USD), BaseTime.AddHours(1))),
-            Env(orderA, 4, new OrderShipped(orderA, "UPS", "1Z-A", BaseTime.AddHours(2))),
+            Env(streamA, 4, new OrderShipped(orderA, "UPS", "1Z-A", BaseTime.AddHours(2))),
         ], CancellationToken.None);
 
-        await eventStore.AppendAsync(orderB, 0,
+        await eventStore.AppendAsync(streamB, 0,
         [
-            Env(orderB, 1, new OrderDrafted(orderB, customer, BaseTime)),
-            Env(orderB, 2, new OrderLineAdded(
+            Env(streamB, 1, new OrderDrafted(orderB, customer, BaseTime)),
+            Env(streamB, 2, new OrderLineAdded(
                 orderB, Guid.NewGuid(), "SKU-B", 3, new Money(5m, Currency.USD), BaseTime)),
-            Env(orderB, 3, new OrderPlaced(
+            Env(streamB, 3, new OrderPlaced(
                 orderB, customer, new Money(15m, Currency.USD), BaseTime.AddHours(1))),
-            Env(orderB, 4, new OrderCancelled(
+            Env(streamB, 4, new OrderCancelled(
                 orderB, "out of stock", Guid.NewGuid(), BaseTime.AddHours(2))),
         ], CancellationToken.None);
 
-        await eventStore.AppendAsync(orderC, 0,
+        await eventStore.AppendAsync(streamC, 0,
         [
-            Env(orderC, 1, new OrderDrafted(orderC, customer, BaseTime)),
-            Env(orderC, 2, new OrderLineAdded(
+            Env(streamC, 1, new OrderDrafted(orderC, customer, BaseTime)),
+            Env(streamC, 2, new OrderLineAdded(
                 orderC, Guid.NewGuid(), "SKU-C", 2, new Money(49.50m, Currency.USD), BaseTime)),
-            Env(orderC, 3, new OrderPlaced(
+            Env(streamC, 3, new OrderPlaced(
                 orderC, customer, new Money(99m, Currency.USD), BaseTime.AddHours(1))),
         ], CancellationToken.None);
 
@@ -168,7 +171,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
             eventStore, checkpointStore, orderListStore, projection, orderA, orderB, orderC);
     }
 
-    private static EventEnvelope Env(Guid streamId, int version, IDomainEvent payload)
+    private static EventEnvelope Env(StreamId streamId, int version, IDomainEvent payload)
     {
         var eventId = Guid.NewGuid();
         var metadata = new EventMetadata(
