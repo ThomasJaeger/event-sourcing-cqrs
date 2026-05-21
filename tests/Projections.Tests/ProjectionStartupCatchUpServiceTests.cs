@@ -154,6 +154,15 @@ public class ProjectionStartupCatchUpServiceTests
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
             StreamId streamId, int fromVersion = 0, CancellationToken ct = default)
             => throw new NotSupportedException();
+
+        public Task AppendProcessManagerEventsAsync(
+            StreamId streamId, int expectedVersion,
+            IReadOnlyList<ProcessManagerEventEnvelope> events, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ProcessManagerEventEnvelope>> ReadProcessManagerStreamAsync(
+            StreamId streamId, int fromVersion = 0, CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     // Simple dictionary-backed checkpoint store. The catch-up service uses

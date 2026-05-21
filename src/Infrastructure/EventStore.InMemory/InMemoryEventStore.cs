@@ -13,6 +13,11 @@ public sealed class InMemoryEventStore : IEventStore
     private readonly List<EventEnvelope> _global = [];
     private long _nextGlobalPosition = 1;
 
+    // PM events share the global-position counter with aggregate events
+    // (faithful to Postgres's single IDENTITY across the events table) but
+    // enumerate separately; _global skips positions assigned to PM events.
+    private readonly Dictionary<StreamId, List<ProcessManagerEventEnvelope>> _pmStreams = [];
+
     public Task AppendAsync(
         StreamId streamId,
         int expectedVersion,
@@ -78,5 +83,60 @@ public sealed class InMemoryEventStore : IEventStore
             ct.ThrowIfCancellationRequested();
             yield return envelope;
         }
+    }
+
+    public Task AppendProcessManagerEventsAsync(
+        StreamId streamId,
+        int expectedVersion,
+        IReadOnlyList<ProcessManagerEventEnvelope> events,
+        CancellationToken ct)
+    {
+        if (!_pmStreams.TryGetValue(streamId, out var stream))
+        {
+            stream = [];
+            _pmStreams[streamId] = stream;
+        }
+
+        if (stream.Count != expectedVersion)
+        {
+            throw new ConcurrencyException(streamId, expectedVersion);
+        }
+
+        // Draws from the shared counter but stays out of _global, so ReadAllAsync
+        // never yields PM events.
+        foreach (var envelope in events)
+        {
+            stream.Add(envelope with { GlobalPosition = _nextGlobalPosition++ });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<ProcessManagerEventEnvelope>> ReadProcessManagerStreamAsync(
+        StreamId streamId,
+        int fromVersion = 0,
+        CancellationToken ct = default)
+    {
+        if (!streamId.Value.StartsWith("pm-", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "ReadProcessManagerStreamAsync requires a process-manager stream id " +
+                $"(pm- prefix); got '{streamId}'.",
+                nameof(streamId));
+        }
+
+        if (!_pmStreams.TryGetValue(streamId, out var stream))
+        {
+            return Task.FromResult<IReadOnlyList<ProcessManagerEventEnvelope>>(
+                Array.Empty<ProcessManagerEventEnvelope>());
+        }
+
+        if (fromVersion <= 0)
+        {
+            return Task.FromResult<IReadOnlyList<ProcessManagerEventEnvelope>>(stream.ToArray());
+        }
+
+        return Task.FromResult<IReadOnlyList<ProcessManagerEventEnvelope>>(
+            stream.Skip(fromVersion).ToArray());
     }
 }

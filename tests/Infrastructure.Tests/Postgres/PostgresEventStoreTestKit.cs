@@ -21,6 +21,9 @@ internal static class PostgresEventStoreTestKit
             .Register<TestPayload>()
             .Register<OtherTestPayload>();
 
+    public static ProcessManagerEventTypeRegistry CreatePmRegistry()
+        => new();
+
     public static StreamId NewStreamId()
         => StreamId.Parse($"test:{Guid.NewGuid():N}");
 

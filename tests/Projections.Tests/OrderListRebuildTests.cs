@@ -123,7 +123,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(readModelFactory, checkpointStore);
@@ -244,6 +244,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
             .Register<OrderPlaced>()
             .Register<OrderShipped>()
             .Register<OrderCancelled>();
+
+    private static ProcessManagerEventTypeRegistry CreatePmRegistry()
+        => new();
 
     private static JsonSerializerOptions CreateJsonOptions()
         => new()

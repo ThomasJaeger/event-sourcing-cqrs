@@ -20,18 +20,22 @@ public sealed class PostgresEventStore : IEventStore
 {
     private readonly INpgsqlConnectionFactory _factory;
     private readonly EventTypeRegistry _registry;
+    private readonly ProcessManagerEventTypeRegistry _pmRegistry;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public PostgresEventStore(
         INpgsqlConnectionFactory factory,
         EventTypeRegistry registry,
+        ProcessManagerEventTypeRegistry pmRegistry,
         JsonSerializerOptions jsonOptions)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(pmRegistry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
         _factory = factory;
         _registry = registry;
+        _pmRegistry = pmRegistry;
         _jsonOptions = jsonOptions;
     }
 
@@ -174,8 +178,134 @@ public sealed class PostgresEventStore : IEventStore
         return envelopes;
     }
 
-    // Streams the whole events table in global_position order, yielding rows
-    // as the reader produces them. SequentialAccess keeps the reader from
+    // Writes PM events to the same events table as AppendAsync, honoring the
+    // same (stream_id, stream_version) constraint, but writes no outbox row:
+    // PM events are internal coordination state, not published (ADR 0013).
+    public async Task AppendProcessManagerEventsAsync(
+        StreamId streamId,
+        int expectedVersion,
+        IReadOnlyList<ProcessManagerEventEnvelope> events,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        if (events.Count == 0)
+        {
+            return;
+        }
+
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            foreach (var envelope in events)
+            {
+                var eventTypeName = _pmRegistry.NameFor(envelope.Payload.GetType());
+                var payloadJson = JsonSerializer.Serialize(
+                    envelope.Payload, envelope.Payload.GetType(), _jsonOptions);
+                var metadataJson = JsonSerializer.Serialize(envelope.Metadata, _jsonOptions);
+
+                await using var insertEvent = connection.CreateCommand();
+                insertEvent.Transaction = transaction;
+                insertEvent.CommandText =
+                    "INSERT INTO event_store.events " +
+                    "(stream_id, stream_version, event_id, event_type, event_version, " +
+                    "payload, metadata, occurred_utc) " +
+                    "VALUES (@stream_id, @stream_version, @event_id, @event_type, " +
+                    "@event_version, @payload, @metadata, @occurred_utc)";
+                AddText(insertEvent, "stream_id", envelope.StreamId.Value);
+                AddInteger(insertEvent, "stream_version", envelope.StreamVersion);
+                AddUuid(insertEvent, "event_id", envelope.EventId);
+                AddText(insertEvent, "event_type", eventTypeName);
+                AddSmallInt(insertEvent, "event_version", (short)envelope.EventVersion);
+                AddJsonb(insertEvent, "payload", payloadJson);
+                AddJsonb(insertEvent, "metadata", metadataJson);
+                AddTimestampTz(insertEvent, "occurred_utc", envelope.OccurredUtc);
+                await insertEvent.ExecuteNonQueryAsync(ct);
+            }
+
+            await transaction.CommitAsync(ct);
+        }
+        catch (PostgresException ex) when (
+            ex.SqlState == PostgresErrorCodes.UniqueViolation
+            && ex.ConstraintName == "uq_events_stream_version")
+        {
+            throw new ConcurrencyException(streamId, expectedVersion);
+        }
+    }
+
+    // Reads a PM stream for rehydration. Requires a pm- prefixed StreamId
+    // (fail-loud per ADR 0011/0013) and resolves payload types through the PM
+    // registry, never the aggregate registry.
+    public async Task<IReadOnlyList<ProcessManagerEventEnvelope>> ReadProcessManagerStreamAsync(
+        StreamId streamId,
+        int fromVersion = 0,
+        CancellationToken ct = default)
+    {
+        if (!streamId.Value.StartsWith("pm-", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "ReadProcessManagerStreamAsync requires a process-manager stream id " +
+                $"(pm- prefix); got '{streamId}'.",
+                nameof(streamId));
+        }
+
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT global_position, stream_version, event_id, event_type, event_version, " +
+            "payload, metadata, occurred_utc " +
+            "FROM event_store.events " +
+            "WHERE stream_id = @stream_id AND stream_version > @from_version " +
+            "ORDER BY stream_version";
+        AddText(cmd, "stream_id", streamId.Value);
+        AddInteger(cmd, "from_version", fromVersion);
+
+        var envelopes = new List<ProcessManagerEventEnvelope>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var globalPosition = reader.GetInt64(0);
+            var streamVersion = reader.GetInt32(1);
+            var eventId = reader.GetGuid(2);
+            var eventType = reader.GetString(3);
+            var eventVersion = reader.GetInt16(4);
+            var payloadJson = reader.GetString(5);
+            var metadataJson = reader.GetString(6);
+            var occurredUtc = DateTime.SpecifyKind(reader.GetDateTime(7), DateTimeKind.Utc);
+
+            Type clrType;
+            try
+            {
+                clrType = _pmRegistry.TypeFor(eventType);
+            }
+            catch (UnknownEventTypeException ex)
+            {
+                throw new UnknownEventTypeException(eventType, streamId, ex);
+            }
+
+            var payload = (IProcessManagerEvent)JsonSerializer.Deserialize(
+                payloadJson, clrType, _jsonOptions)!;
+            var metadata = JsonSerializer.Deserialize<EventMetadata>(
+                metadataJson, _jsonOptions)!;
+
+            envelopes.Add(new ProcessManagerEventEnvelope(
+                StreamId: streamId,
+                StreamVersion: streamVersion,
+                EventId: eventId,
+                EventType: eventType,
+                EventVersion: eventVersion,
+                Payload: payload,
+                Metadata: metadata,
+                OccurredUtc: occurredUtc,
+                GlobalPosition: globalPosition));
+        }
+
+        return envelopes;
+    }
+
+    // Streams the events table excluding PM streams, in global_position order,
+    // yielding rows as the reader produces them. SequentialAccess keeps the reader from
     // buffering whole rows; the single connection is held open for the
     // enumeration's lifetime. v1 read loads tolerate this; very large rebuilds
     // may need keyset-paginated batching, deferred until that is a real concern.
@@ -190,6 +320,7 @@ public sealed class PostgresEventStore : IEventStore
             "event_version, payload, metadata, occurred_utc " +
             "FROM event_store.events " +
             "WHERE global_position > @from_position " +
+            "AND stream_id NOT LIKE 'pm-%' " +
             "ORDER BY global_position";
         AddBigInt(cmd, "from_position", fromPosition);
 

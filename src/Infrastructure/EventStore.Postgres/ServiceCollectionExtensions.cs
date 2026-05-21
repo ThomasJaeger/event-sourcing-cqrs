@@ -61,6 +61,12 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
+        // PM event types resolve through a separate registry (ADR 0013), empty
+        // here. The provider-driven population parallels EventTypeRegistry and
+        // wires in the next foundational commit; no PM events are written until
+        // the process managers ship, so an empty registry is correct now.
+        services.TryAddSingleton(_ => new ProcessManagerEventTypeRegistry());
+
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
         // Factory delegate so the policy picks up OutboxProcessorOptions

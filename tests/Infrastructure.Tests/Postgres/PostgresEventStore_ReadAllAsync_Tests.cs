@@ -23,7 +23,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
 
         var read = await CollectAsync(store.ReadAllAsync(0, CancellationToken.None));
 
@@ -36,7 +36,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamA = NewStreamId();
         var streamB = NewStreamId();
 
@@ -64,7 +64,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
@@ -86,7 +86,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
@@ -109,7 +109,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [

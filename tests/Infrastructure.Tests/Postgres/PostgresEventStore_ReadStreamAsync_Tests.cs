@@ -23,7 +23,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
 
         var read = await store.ReadStreamAsync(NewStreamId(), 0, CancellationToken.None);
 
@@ -35,7 +35,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         var payload = new TestPayload(Guid.NewGuid(), 12.34m);
         await store.AppendAsync(
@@ -56,7 +56,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,
@@ -82,7 +82,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,
@@ -104,7 +104,7 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreateJsonOptions());
+        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var streamId = NewStreamId();
 
         // Insert a row directly with an event_type the registry does not
