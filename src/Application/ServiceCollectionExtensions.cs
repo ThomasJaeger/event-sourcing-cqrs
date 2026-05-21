@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>));
 
         services.AddScoped(typeof(IEventStoreRepository<>), typeof(EventStoreRepository<>));
+        services.AddScoped(typeof(IProcessManagerRepository<>), typeof(ProcessManagerRepository<>));
 
         RegisterHandlers(services);
 

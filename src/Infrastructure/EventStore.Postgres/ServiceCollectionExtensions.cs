@@ -61,11 +61,23 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
-        // PM event types resolve through a separate registry (ADR 0013), empty
-        // here. The provider-driven population parallels EventTypeRegistry and
-        // wires in the next foundational commit; no PM events are written until
-        // the process managers ship, so an empty registry is correct now.
-        services.TryAddSingleton(_ => new ProcessManagerEventTypeRegistry());
+        // PM event types resolve through a separate registry (ADR 0013),
+        // populated from IProcessManagerEventTypeProvider exactly as the
+        // aggregate registry above is populated from IEventTypeProvider. Stays
+        // empty until per-PM-type providers register, which ships with the
+        // process managers themselves.
+        services.TryAddSingleton<ProcessManagerEventTypeRegistry>(sp =>
+        {
+            var registry = new ProcessManagerEventTypeRegistry();
+            foreach (var provider in sp.GetServices<IProcessManagerEventTypeProvider>())
+            {
+                foreach (var eventType in provider.GetEventTypes())
+                {
+                    registry.Register(eventType);
+                }
+            }
+            return registry;
+        });
 
         services.AddSingleton<IEventStore, PostgresEventStore>();
 

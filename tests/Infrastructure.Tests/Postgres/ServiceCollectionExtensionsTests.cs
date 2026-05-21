@@ -59,6 +59,24 @@ public class ServiceCollectionExtensionsTests
         registry.NameFor(typeof(EventThree)).Should().Be(nameof(EventThree));
     }
 
+    [Fact]
+    public void AddPostgresEventStore_populates_ProcessManagerEventTypeRegistry_from_registered_providers()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddPostgresEventStore(opts =>
+            opts.ConnectionString = "Host=localhost;Database=stub");
+        services.AddSingleton<IProcessManagerEventTypeProvider, FirstPmProvider>();
+        services.AddSingleton<IProcessManagerEventTypeProvider, SecondPmProvider>();
+
+        using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<ProcessManagerEventTypeRegistry>();
+
+        registry.NameFor(typeof(PmEventOne)).Should().Be(nameof(PmEventOne));
+        registry.NameFor(typeof(PmEventTwo)).Should().Be(nameof(PmEventTwo));
+        registry.NameFor(typeof(PmEventThree)).Should().Be(nameof(PmEventThree));
+    }
+
     private sealed record EventOne : IDomainEvent;
     private sealed record EventTwo : IDomainEvent;
     private sealed record EventThree : IDomainEvent;
@@ -71,5 +89,19 @@ public class ServiceCollectionExtensionsTests
     private sealed class SecondProvider : IEventTypeProvider
     {
         public IEnumerable<Type> GetEventTypes() => [typeof(EventThree)];
+    }
+
+    private sealed record PmEventOne : IProcessManagerEvent;
+    private sealed record PmEventTwo : IProcessManagerEvent;
+    private sealed record PmEventThree : IProcessManagerEvent;
+
+    private sealed class FirstPmProvider : IProcessManagerEventTypeProvider
+    {
+        public IEnumerable<Type> GetEventTypes() => [typeof(PmEventOne), typeof(PmEventTwo)];
+    }
+
+    private sealed class SecondPmProvider : IProcessManagerEventTypeProvider
+    {
+        public IEnumerable<Type> GetEventTypes() => [typeof(PmEventThree)];
     }
 }
