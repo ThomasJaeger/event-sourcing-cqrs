@@ -50,6 +50,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             "pk_outbox_quarantine",
             "pk_schema_migrations",
             "pk_command_idempotency",
+            "pk_delayed_commands",
+            "pk_delayed_commands_quarantine",
         });
 
         // Standalone (non-constraint) indexes.
@@ -60,6 +62,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             "ix_outbox_pending",
             "ix_outbox_correlation",
             "ix_command_idempotency_processed_utc",
+            "ix_delayed_commands_due",
+            "ix_delayed_commands_by_stream",
         });
 
         // ix_outbox_pending's partial predicate is the point of the index.
@@ -70,7 +74,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(7);
+        rows.Should().HaveCount(8);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -92,6 +96,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[6].Version.Should().Be(7);
         rows[6].Name.Should().Be("add_command_idempotency");
         rows[6].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[7].Version.Should().Be(8);
+        rows[7].Name.Should().Be("add_delayed_commands");
+        rows[7].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -100,7 +107,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0005 add_outbox_notify_trigger.");
         log.Should().Contain("Applying 0006 stream_id_to_text.");
         log.Should().Contain("Applying 0007 add_command_idempotency.");
-        log.Should().Contain("Applied 7 migration(s).");
+        log.Should().Contain("Applying 0008 add_delayed_commands.");
+        log.Should().Contain("Applied 8 migration(s).");
     }
 
     [Fact]
@@ -120,7 +128,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(7);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(8);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -176,11 +184,11 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(7);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(8);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
-        // pending batch (0001 through 0007); the other sees nothing pending.
+        // pending batch (0001 through 0008); the other sees nothing pending.
         // That signature is what the advisory lock produces and nothing else does.
         var combined = logA.Concat(logB).ToList();
         combined.Count(m => m == "Applying 0001 initial_event_store.").Should().Be(1);
@@ -232,7 +240,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 7 migration(s) pending.");
+        log.Should().Contain("Dry run: 8 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -240,6 +248,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0005 add_outbox_notify_trigger"));
         log.Should().Contain(m => m.EndsWith("0006 stream_id_to_text"));
         log.Should().Contain(m => m.EndsWith("0007 add_command_idempotency"));
+        log.Should().Contain(m => m.EndsWith("0008 add_delayed_commands"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();

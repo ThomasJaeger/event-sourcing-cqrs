@@ -79,12 +79,35 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
+        // Command types resolve through CommandTypeRegistry for the delay queue
+        // (ADR 0017): a scheduled command is stored by type name and resolved
+        // back on dispatch. Populated from ICommandTypeProvider exactly as the
+        // event registries above are. Empty until commands that get scheduled
+        // register a provider, which ships with the timeout commands.
+        services.TryAddSingleton<CommandTypeRegistry>(sp =>
+        {
+            var registry = new CommandTypeRegistry();
+            foreach (var provider in sp.GetServices<ICommandTypeProvider>())
+            {
+                foreach (var commandType in provider.GetCommandTypes())
+                {
+                    registry.Register(commandType);
+                }
+            }
+            return registry;
+        });
+
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
         // Command deduplication store (ADR 0016). Lives with the other Postgres
         // adapters because it consumes the same INpgsqlConnectionFactory; the
         // IdempotencyBehavior that reads it is registered in AddApplication.
         services.AddSingleton<IIdempotencyStore, PostgresIdempotencyStore>();
+
+        // Delay queue (ADR 0017). ScheduleAsync and CancelAsync ship here; the
+        // DelayQueueProcessor that drains due rows is a Workers-host background
+        // service registered in commit 17.
+        services.AddSingleton<IDelayQueue, PostgresDelayQueue>();
 
         // Factory delegate so the policy picks up OutboxProcessorOptions
         // overrides at first resolution. The singleton is constructed once;

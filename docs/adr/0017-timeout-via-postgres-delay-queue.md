@@ -107,7 +107,7 @@ public interface IDelayQueue
         string idempotencyKey,
         CancellationToken ct);
 
-    Task CancelAsync(
+    Task<bool> CancelAsync(
         StreamId scheduledByStream,
         string scheduledByStep,
         string cancellationReason,
@@ -121,7 +121,9 @@ From `causingEventMetadata` it stores `correlation_id` (the event's CorrelationI
 and `causation_id` (the event's EventId), so the timeout command's causation
 points back through the event that prompted the process manager to set the
 timeout, keeping the Phase 9 Correlation-ID Tracer chain intact. `CancelAsync`
-matches on the scheduling stream and step.
+matches on the scheduling stream and step, and returns whether any pending row
+was cancelled so a caller can log "no active timeout to cancel" without the
+information being load-bearing.
 
 ### Claim mechanism: row lock, not a claim column
 
