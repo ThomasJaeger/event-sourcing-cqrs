@@ -81,6 +81,11 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
+        // Command deduplication store (ADR 0016). Lives with the other Postgres
+        // adapters because it consumes the same INpgsqlConnectionFactory; the
+        // IdempotencyBehavior that reads it is registered in AddApplication.
+        services.AddSingleton<IIdempotencyStore, PostgresIdempotencyStore>();
+
         // Factory delegate so the policy picks up OutboxProcessorOptions
         // overrides at first resolution. The singleton is constructed once;
         // a services.Configure<OutboxProcessorOptions>(...) call AFTER
