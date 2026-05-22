@@ -126,4 +126,27 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    // The delay-queue processor is registered separately from AddPostgresEventStore
+    // because, unlike the outbox processor, it dispatches through ICausedCommandBus,
+    // which AddApplication provides. A host calls this after both
+    // AddPostgresEventStore and AddApplication so the bus is resolvable;
+    // AddPostgresEventStore stays resolvable on its own for read-side and
+    // adapter-only compositions that never start the processor (ADR 0017). The
+    // DelayQueueRetryPolicy is a concrete duplicate of OutboxRetryPolicy, not a
+    // shared type.
+    public static IServiceCollection AddPostgresDelayQueueProcessor(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<DelayQueueProcessorOptions>();
+        services.AddSingleton<DelayQueueRetryPolicy>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<DelayQueueProcessorOptions>>().Value;
+            return new DelayQueueRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
+        });
+        services.AddHostedService<DelayQueueProcessor>();
+
+        return services;
+    }
 }

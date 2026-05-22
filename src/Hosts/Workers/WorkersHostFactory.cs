@@ -33,6 +33,9 @@ public static class WorkersHostFactory
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
         builder.Services.AddApplication();
+        // After AddApplication so the delay-queue processor's ICausedCommandBus
+        // dependency is resolvable (ADR 0017).
+        builder.Services.AddPostgresDelayQueueProcessor();
         builder.Services.AddReadModels(opts =>
             opts.ConnectionString = readModelConnectionString);
         builder.Services.AddHostedService<ProjectionStartupCatchUpService>();
