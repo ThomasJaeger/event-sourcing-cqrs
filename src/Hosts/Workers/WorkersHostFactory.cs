@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 using EventSourcingCqrs.Projections.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -30,6 +31,9 @@ public static class WorkersHostFactory
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
+        // Process-manager event types resolve through the separate PM registry
+        // (ADR 0013); AddPostgresEventStore walks every IProcessManagerEventTypeProvider.
+        builder.Services.AddSingleton<IProcessManagerEventTypeProvider, OrderFulfillmentEventTypeProvider>();
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
         builder.Services.AddApplication();
