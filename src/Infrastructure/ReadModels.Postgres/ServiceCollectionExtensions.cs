@@ -1,8 +1,7 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
-using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
+using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,35 +39,18 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<ICheckpointStore, PostgresCheckpointStore>();
+
+        // The store-to-port pairings stay hand-written: they are Postgres-specific
+        // and not derivable from the projection type. AddProjection registers each
+        // projection's singleton, its IProjection forwarding, and one
+        // IEventHandler<TEvent> forwarding per subscribed event (by reflection over
+        // the projection's interfaces), so every interface its consumers resolve
+        // hands back the one singleton.
         services.AddSingleton<IOrderListStore, PostgresOrderListStore>();
+        services.AddProjection<OrderListProjection>();
 
-        // One projection instance with one identity, surfaced under every
-        // interface its consumers resolve: IProjection for the replayer and the
-        // AdminConsole dashboard, IEventHandler<TEvent> for the outbox
-        // dispatcher. The forwarding registrations all resolve the bare
-        // OrderListProjection singleton, so every interface hands back the same
-        // instance. Hand-written per event type; one projection does not earn a
-        // reflection-driven registration helper. The second projection does.
-        services.AddSingleton<OrderListProjection>();
-        services.AddSingleton<IProjection>(
-            sp => sp.GetRequiredService<OrderListProjection>());
-        services.AddSingleton<IEventHandler<OrderPlaced>>(
-            sp => sp.GetRequiredService<OrderListProjection>());
-        services.AddSingleton<IEventHandler<OrderShipped>>(
-            sp => sp.GetRequiredService<OrderListProjection>());
-        services.AddSingleton<IEventHandler<OrderCancelled>>(
-            sp => sp.GetRequiredService<OrderListProjection>());
-
-        // The second projection, hand-written the same way. The AddProjection<T>
-        // helper the comment above anticipates lands in commit 19 and refactors
-        // both projections onto it; this commit ships the registrations as-is so
-        // the projection is wired the moment its store and migration exist.
         services.AddSingleton<ISkuToInventoryIdStore, PostgresSkuToInventoryIdStore>();
-        services.AddSingleton<SkuToInventoryIdProjection>();
-        services.AddSingleton<IProjection>(
-            sp => sp.GetRequiredService<SkuToInventoryIdProjection>());
-        services.AddSingleton<IEventHandler<InventoryCreated>>(
-            sp => sp.GetRequiredService<SkuToInventoryIdProjection>());
+        services.AddProjection<SkuToInventoryIdProjection>();
 
         return services;
     }
