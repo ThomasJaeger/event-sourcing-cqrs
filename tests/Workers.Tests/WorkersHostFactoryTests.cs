@@ -6,6 +6,7 @@ using EventSourcingCqrs.Hosts.Workers;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,17 +41,22 @@ public class WorkersHostFactoryTests
         registry.NameFor(typeof(PaymentAuthorized)).Should().Be(nameof(PaymentAuthorized));
         registry.NameFor(typeof(PaymentCaptured)).Should().Be(nameof(PaymentCaptured));
 
-        // OrderListProjection is the same instance under every interface its
-        // consumers resolve.
-        var projection = host.Services.GetRequiredService<OrderListProjection>();
-        host.Services.GetRequiredService<IProjection>().Should().BeSameAs(projection);
-        host.Services.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(projection);
+        // Each projection is the same instance under every interface its
+        // consumers resolve; both land in the IProjection set.
+        var orderList = host.Services.GetRequiredService<OrderListProjection>();
+        host.Services.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(orderList);
+        var skuToInventory = host.Services.GetRequiredService<SkuToInventoryIdProjection>();
+        host.Services.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
+        host.Services.GetServices<IProjection>()
+            .Should().Contain(new IProjection[] { orderList, skuToInventory });
 
-        // Both hosted services land in the container: ProjectionStartupCatchUpService
-        // (the IHostedLifecycleService from commit 6) and OutboxProcessor (the
-        // BackgroundService transitively wired by AddPostgresEventStore).
+        // The hosted services land in the container: ProjectionStartupCatchUpService
+        // (the IHostedLifecycleService from commit 6), OutboxProcessor (wired by
+        // AddPostgresEventStore), and DelayQueueProcessor (wired by
+        // AddPostgresDelayQueueProcessor after AddApplication).
         var hosted = host.Services.GetServices<IHostedService>().ToList();
         hosted.OfType<ProjectionStartupCatchUpService>().Should().ContainSingle();
         hosted.OfType<OutboxProcessor>().Should().ContainSingle();
+        hosted.OfType<DelayQueueProcessor>().Should().ContainSingle();
     }
 }

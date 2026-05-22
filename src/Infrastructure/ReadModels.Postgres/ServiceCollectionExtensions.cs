@@ -1,7 +1,10 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
+using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.SkuToInventoryId;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -55,6 +58,17 @@ public static class ServiceCollectionExtensions
             sp => sp.GetRequiredService<OrderListProjection>());
         services.AddSingleton<IEventHandler<OrderCancelled>>(
             sp => sp.GetRequiredService<OrderListProjection>());
+
+        // The second projection, hand-written the same way. The AddProjection<T>
+        // helper the comment above anticipates lands in commit 19 and refactors
+        // both projections onto it; this commit ships the registrations as-is so
+        // the projection is wired the moment its store and migration exist.
+        services.AddSingleton<ISkuToInventoryIdStore, PostgresSkuToInventoryIdStore>();
+        services.AddSingleton<SkuToInventoryIdProjection>();
+        services.AddSingleton<IProjection>(
+            sp => sp.GetRequiredService<SkuToInventoryIdProjection>());
+        services.AddSingleton<IEventHandler<InventoryCreated>>(
+            sp => sp.GetRequiredService<SkuToInventoryIdProjection>());
 
         return services;
     }

@@ -1,10 +1,12 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -38,13 +40,21 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IOrderListStore>()
             .Should().BeOfType<PostgresOrderListStore>();
 
-        // One projection instance, surfaced under every interface its consumers
-        // resolve. All four forwarding registrations hand back the same singleton.
-        var projection = provider.GetRequiredService<OrderListProjection>();
-        provider.GetRequiredService<IProjection>().Should().BeSameAs(projection);
-        provider.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(projection);
-        provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(projection);
-        provider.GetRequiredService<IEventHandler<OrderCancelled>>().Should().BeSameAs(projection);
+        // Each projection is one instance surfaced under every interface its
+        // consumers resolve; the forwarding registrations hand back the same
+        // singleton. Two projections now, so the IProjection set holds both.
+        var orderList = provider.GetRequiredService<OrderListProjection>();
+        provider.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(orderList);
+        provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(orderList);
+        provider.GetRequiredService<IEventHandler<OrderCancelled>>().Should().BeSameAs(orderList);
+
+        var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
+        provider.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
+
+        var projections = provider.GetServices<IProjection>().ToList();
+        projections.Should().HaveCount(2);
+        projections.Should().Contain(orderList);
+        projections.Should().Contain(skuToInventory);
 
         // AddReadModels composes with AddPostgresEventStore: the event-store
         // side still resolves, because AddReadModels does not register an
