@@ -6,6 +6,7 @@ using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
@@ -44,11 +45,16 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
 
         // Each projection is one instance surfaced under every interface its
         // consumers resolve; the forwarding registrations hand back the same
-        // singleton. Three projections now, so the IProjection set holds all.
+        // singleton. Four projections now, so the IProjection set holds all.
         var orderList = provider.GetRequiredService<OrderListProjection>();
-        provider.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(orderList);
+        var customerSummary = provider.GetRequiredService<CustomerSummaryProjection>();
+        // OrderPlaced and OrderCancelled now have two handlers (OrderList and
+        // CustomerSummary); the dispatcher fans out to both via GetServices.
+        provider.GetServices<IEventHandler<OrderPlaced>>()
+            .Should().Contain(orderList).And.Contain(customerSummary);
+        provider.GetServices<IEventHandler<OrderCancelled>>()
+            .Should().Contain(orderList).And.Contain(customerSummary);
         provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(orderList);
-        provider.GetRequiredService<IEventHandler<OrderCancelled>>().Should().BeSameAs(orderList);
 
         var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
         provider.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
@@ -57,8 +63,9 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<PaymentAuthorized>>().Should().BeSameAs(orderToPayment);
 
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(3);
+        projections.Should().HaveCount(4);
         projections.Should().Contain(orderList);
+        projections.Should().Contain(customerSummary);
         projections.Should().Contain(skuToInventory);
         projections.Should().Contain(orderToPayment);
 

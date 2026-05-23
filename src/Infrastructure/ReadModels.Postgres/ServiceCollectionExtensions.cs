@@ -2,6 +2,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
+using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
@@ -56,6 +57,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IOrderIdToPaymentIdStore, PostgresOrderIdToPaymentIdStore>();
         services.AddProjection<OrderIdToPaymentIdProjection>();
+
+        services.AddSingleton<ICustomerSummaryStore, PostgresCustomerSummaryStore>();
+        services.AddProjection<CustomerSummaryProjection>();
 
         return services;
     }

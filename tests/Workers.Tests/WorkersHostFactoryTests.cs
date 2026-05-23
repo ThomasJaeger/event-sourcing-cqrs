@@ -4,6 +4,7 @@ using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Hosts.Workers;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
@@ -42,13 +43,16 @@ public class WorkersHostFactoryTests
         registry.NameFor(typeof(PaymentCaptured)).Should().Be(nameof(PaymentCaptured));
 
         // Each projection is the same instance under every interface its
-        // consumers resolve; both land in the IProjection set.
+        // consumers resolve; all land in the IProjection set. OrderPlaced has two
+        // handlers now (OrderList and CustomerSummary), resolved via GetServices.
         var orderList = host.Services.GetRequiredService<OrderListProjection>();
-        host.Services.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(orderList);
+        var customerSummary = host.Services.GetRequiredService<CustomerSummaryProjection>();
+        host.Services.GetServices<IEventHandler<OrderPlaced>>()
+            .Should().Contain(orderList).And.Contain(customerSummary);
         var skuToInventory = host.Services.GetRequiredService<SkuToInventoryIdProjection>();
         host.Services.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
         host.Services.GetServices<IProjection>()
-            .Should().Contain(new IProjection[] { orderList, skuToInventory });
+            .Should().Contain(new IProjection[] { orderList, customerSummary, skuToInventory });
 
         // The hosted services land in the container: ProjectionStartupCatchUpService
         // (the IHostedLifecycleService from commit 6), OutboxProcessor (wired by
