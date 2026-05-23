@@ -44,6 +44,28 @@ public interface IOrderListUnitOfWork : IAsyncDisposable
         DateTime lastUpdatedUtc,
         CancellationToken ct);
 
+    // Records the ShipmentId -> OrderId mapping from ShipmentScheduled so a later
+    // ShipmentReturned (which carries only ShipmentId) can resolve its OrderId.
+    // ON CONFLICT DO NOTHING: a redelivered ShipmentScheduled keeps the first row.
+    Task InsertShipmentMappingAsync(
+        Guid shipmentId,
+        Guid orderId,
+        DateTime scheduledUtc,
+        CancellationToken ct);
+
+    // Resolves the OrderId for a returned shipment, or null when no mapping
+    // exists (a shipment scheduled before this projection observed it). The
+    // ShipmentReturned handler no-ops on null. See ADR 0020.
+    Task<Guid?> GetOrderIdByShipmentIdAsync(Guid shipmentId, CancellationToken ct);
+
+    // Marks the order returned: sets is_returned and returned_utc. Touches zero
+    // rows if no order_list row exists, which is harmless.
+    Task MarkReturnedAsync(
+        Guid orderId,
+        DateTime returnedUtc,
+        DateTime lastUpdatedUtc,
+        CancellationToken ct);
+
     // Advances the projection's checkpoint to `position` and commits, both in
     // the transaction the row write above ran in.
     Task CommitAsync(string projectionName, long position, CancellationToken ct);

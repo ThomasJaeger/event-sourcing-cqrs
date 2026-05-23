@@ -1,9 +1,11 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Projections.OrderList;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace EventSourcingCqrs.Projections.Tests;
@@ -18,7 +20,7 @@ public class OrderListProjectionTests
     public async Task OrderPlaced_handler_inserts_a_row_with_the_event_fields()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
         var placed = new OrderPlaced(orderId, customerId, new Money(149.95m, Currency.USD), PlacedAt);
@@ -37,7 +39,7 @@ public class OrderListProjectionTests
     public async Task OrderPlaced_handler_sources_placed_utc_from_the_event_and_last_updated_from_metadata()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
 
@@ -55,7 +57,7 @@ public class OrderListProjectionTests
     public async Task OrderShipped_handler_updates_status_and_last_updated_utc()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
             Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
@@ -78,7 +80,7 @@ public class OrderListProjectionTests
     public async Task OrderCancelled_handler_updates_status_and_last_updated_utc()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
             Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
@@ -99,7 +101,7 @@ public class OrderListProjectionTests
     public async Task OrderCancelled_handler_does_nothing_when_the_order_was_never_placed()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
 
         // The order was cancelled while still a draft: OrderPlaced never fired,
@@ -116,7 +118,7 @@ public class OrderListProjectionTests
     public async Task OrderPlaced_handler_is_idempotent_on_redelivery()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
 
@@ -132,7 +134,7 @@ public class OrderListProjectionTests
     public async Task OrderPlaced_redelivered_after_a_status_change_does_not_clobber_the_status()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         var placed = new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt);
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
@@ -152,7 +154,7 @@ public class OrderListProjectionTests
     public async Task OrderPlaced_handler_skips_when_position_is_at_or_below_checkpoint()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var firstOrderId = Guid.NewGuid();
         var secondOrderId = Guid.NewGuid();
         // First placement advances the checkpoint to position 10.
@@ -181,7 +183,7 @@ public class OrderListProjectionTests
     public async Task OrderShipped_handler_skips_when_position_is_at_or_below_checkpoint()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         // Place the order at position 5, then cancel it at position 20: the
         // checkpoint moves to 20 and the row is Cancelled.
@@ -214,7 +216,7 @@ public class OrderListProjectionTests
     public async Task OrderCancelled_handler_skips_when_position_is_at_or_below_checkpoint()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         var orderId = Guid.NewGuid();
         // Place, then ship at position 20: checkpoint advances past the
         // hypothetical earlier cancel position.
@@ -245,7 +247,7 @@ public class OrderListProjectionTests
     public async Task Handlers_advance_the_checkpoint_under_the_projection_name()
     {
         var store = new InMemoryOrderListStore();
-        var projection = new OrderListProjection(store);
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
         projection.Name.Should().Be("order-list");
         var orderId = Guid.NewGuid();
 
@@ -260,6 +262,108 @@ public class OrderListProjectionTests
             CancellationToken.None);
         store.Checkpoints[projection.Name].Should().Be(12);
     }
+
+    [Fact]
+    public async Task OrderCompleted_handler_sets_status_to_completed()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new OrderCompleted(orderId, ShippedAt), position: 2, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        var row = await store.GetAsync(orderId, CancellationToken.None);
+        row!.Status.Should().Be(OrderStatus.Completed);
+        row.LastUpdatedUtc.Should().Be(ShippedAt);
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_after_its_ShipmentScheduled_marks_the_order_returned()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var shipmentId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+        // ShipmentScheduled records the ShipmentId -> OrderId mapping.
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, SampleAddress(), [], PlacedAt),
+                position: 2),
+            CancellationToken.None);
+
+        // ShipmentReturned carries only ShipmentId; it resolves the order through
+        // the mapping and marks it returned.
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(shipmentId, "damaged", ShippedAt),
+                position: 3, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        var row = await store.GetAsync(orderId, CancellationToken.None);
+        row!.IsReturned.Should().BeTrue();
+        row.ReturnedUtc.Should().Be(ShippedAt);
+        // The Sales status is untouched: a return is a Fulfillment fact (D5).
+        row.Status.Should().Be(OrderStatus.Placed);
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+
+        // No ShipmentScheduled was observed for this shipment, so the mapping is
+        // absent. The handler skips the return-state update but still advances
+        // the checkpoint so the event is not reprocessed.
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(Guid.NewGuid(), "damaged", ShippedAt), position: 5),
+            CancellationToken.None);
+
+        var row = await store.GetAsync(orderId, CancellationToken.None);
+        row!.IsReturned.Should().BeFalse();
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ShipmentScheduled_handler_skips_when_position_is_at_or_below_checkpoint()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var shipmentId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), PlacedAt),
+                position: 10),
+            CancellationToken.None);
+
+        // A ShipmentScheduled at position 10 (at the checkpoint) is a redelivery:
+        // the handler returns early and records no mapping, so a later return for
+        // that shipment finds nothing to resolve.
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, SampleAddress(), [], PlacedAt),
+                position: 10),
+            CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(shipmentId, "damaged", ShippedAt), position: 11),
+            CancellationToken.None);
+
+        (await store.GetAsync(orderId, CancellationToken.None))!.IsReturned.Should().BeFalse();
+    }
+
+    private static Address SampleAddress() => new("1 Main St", "Smalltown", "12345", "US");
 
     private static EventContext<TEvent> Context<TEvent>(
         TEvent @event, long position, DateTime? occurredUtc = null)

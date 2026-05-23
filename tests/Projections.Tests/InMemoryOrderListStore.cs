@@ -17,6 +17,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 internal sealed class InMemoryOrderListStore : IOrderListStore
 {
     private readonly Dictionary<Guid, OrderListRow> _rows = [];
+    private readonly Dictionary<Guid, Guid> _shipmentToOrder = [];
 
     // Exposed so tests can assert the checkpoint advanced with the write.
     public Dictionary<string, long> Checkpoints { get; } = [];
@@ -47,6 +48,7 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
     public Task TruncateAsync(CancellationToken ct)
     {
         _rows.Clear();
+        _shipmentToOrder.Clear();
         return Task.CompletedTask;
     }
 
@@ -73,6 +75,36 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
                 store._rows[orderId] = existing with
                 {
                     Status = status,
+                    LastUpdatedUtc = lastUpdatedUtc,
+                };
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task InsertShipmentMappingAsync(
+            Guid shipmentId, Guid orderId, DateTime scheduledUtc, CancellationToken ct)
+        {
+            // ON CONFLICT DO NOTHING: a redelivered mapping keeps the first row.
+            store._shipmentToOrder.TryAdd(shipmentId, orderId);
+            return Task.CompletedTask;
+        }
+
+        public Task<Guid?> GetOrderIdByShipmentIdAsync(Guid shipmentId, CancellationToken ct)
+            => Task.FromResult(
+                store._shipmentToOrder.TryGetValue(shipmentId, out var orderId)
+                    ? orderId
+                    : (Guid?)null);
+
+        public Task MarkReturnedAsync(
+            Guid orderId, DateTime returnedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
+        {
+            // Absent order_id: no-op, matching the SQL UPDATE touching zero rows.
+            if (store._rows.TryGetValue(orderId, out var existing))
+            {
+                store._rows[orderId] = existing with
+                {
+                    IsReturned = true,
+                    ReturnedUtc = returnedUtc,
                     LastUpdatedUtc = lastUpdatedUtc,
                 };
             }

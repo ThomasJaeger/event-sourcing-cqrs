@@ -46,7 +46,9 @@ public sealed class ListOrdersHandlerTests
             Status: OrderStatus.Placed,
             Total: new Money(50m, Currency.USD),
             PlacedUtc: PlacedAt,
-            LastUpdatedUtc: PlacedAt);
+            LastUpdatedUtc: PlacedAt,
+            IsReturned: false,
+            ReturnedUtc: null);
 
     private sealed class StubStore : IOrderListStore
     {

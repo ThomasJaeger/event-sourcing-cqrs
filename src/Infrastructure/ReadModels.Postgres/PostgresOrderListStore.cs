@@ -49,7 +49,7 @@ public sealed class PostgresOrderListStore : IOrderListStore
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT order_id, customer_id, status, total_amount, total_currency, " +
-            "placed_utc, last_updated_utc " +
+            "placed_utc, last_updated_utc, is_returned, returned_utc " +
             "FROM read_models.order_list WHERE order_id = @order_id";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
 
@@ -66,7 +66,11 @@ public sealed class PostgresOrderListStore : IOrderListStore
             Status: Enum.Parse<OrderStatus>(reader.GetString(2)),
             Total: new Money(reader.GetDecimal(3), new Currency(reader.GetString(4))),
             PlacedUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
-            LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc));
+            LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc),
+            IsReturned: reader.GetBoolean(7),
+            ReturnedUtc: reader.IsDBNull(8)
+                ? null
+                : DateTime.SpecifyKind(reader.GetDateTime(8), DateTimeKind.Utc));
     }
 
     public async Task<IReadOnlyList<OrderListRow>> GetPageAsync(
@@ -86,7 +90,7 @@ public sealed class PostgresOrderListStore : IOrderListStore
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT order_id, customer_id, status, total_amount, total_currency, " +
-            "placed_utc, last_updated_utc " +
+            "placed_utc, last_updated_utc, is_returned, returned_utc " +
             "FROM read_models.order_list " +
             "ORDER BY placed_utc DESC, order_id DESC " +
             "LIMIT @limit OFFSET @offset";
@@ -103,7 +107,11 @@ public sealed class PostgresOrderListStore : IOrderListStore
                 Status: Enum.Parse<OrderStatus>(reader.GetString(2)),
                 Total: new Money(reader.GetDecimal(3), new Currency(reader.GetString(4))),
                 PlacedUtc: DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
-                LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)));
+                LastUpdatedUtc: DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc),
+                IsReturned: reader.GetBoolean(7),
+                ReturnedUtc: reader.IsDBNull(8)
+                    ? null
+                    : DateTime.SpecifyKind(reader.GetDateTime(8), DateTimeKind.Utc)));
         }
         return rows;
     }
@@ -112,7 +120,8 @@ public sealed class PostgresOrderListStore : IOrderListStore
     {
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "TRUNCATE TABLE read_models.order_list";
+        cmd.CommandText =
+            "TRUNCATE TABLE read_models.order_list, read_models.order_list_shipments";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

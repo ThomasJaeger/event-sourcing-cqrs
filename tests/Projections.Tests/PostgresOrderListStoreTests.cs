@@ -205,6 +205,85 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         (await store.GetAsync(second.OrderId, CancellationToken.None)).Should().BeNull();
     }
 
+    [Fact]
+    public async Task InsertShipmentMapping_then_GetOrderIdByShipmentId_round_trips()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var shipmentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.InsertShipmentMappingAsync(shipmentId, orderId, PlacedAt, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+
+        await using var read = await store.BeginAsync(CancellationToken.None);
+        (await read.GetOrderIdByShipmentIdAsync(shipmentId, CancellationToken.None))
+            .Should().Be(orderId);
+    }
+
+    [Fact]
+    public async Task GetOrderIdByShipmentId_returns_null_when_unmapped()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        (await uow.GetOrderIdByShipmentIdAsync(Guid.NewGuid(), CancellationToken.None))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MarkReturned_sets_is_returned_and_returned_utc()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.MarkReturnedAsync(row.OrderId, UpdatedAt, UpdatedAt, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        var updated = await store.GetAsync(row.OrderId, CancellationToken.None);
+        updated!.IsReturned.Should().BeTrue();
+        updated.ReturnedUtc.Should().Be(UpdatedAt);
+        // The Sales status is untouched: a return is a Fulfillment fact (D5).
+        updated.Status.Should().Be(OrderStatus.Placed);
+    }
+
+    [Fact]
+    public async Task Truncate_also_empties_the_shipment_mapping()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var shipmentId = Guid.NewGuid();
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.InsertShipmentMappingAsync(
+                shipmentId, Guid.NewGuid(), PlacedAt, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+
+        await store.TruncateAsync(CancellationToken.None);
+
+        await using var read = await store.BeginAsync(CancellationToken.None);
+        (await read.GetOrderIdByShipmentIdAsync(shipmentId, CancellationToken.None))
+            .Should().BeNull();
+    }
+
     private static async Task InsertAndCommitAsync(
         PostgresOrderListStore store, OrderListRow row, long position)
     {
@@ -220,5 +299,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
             Status: OrderStatus.Placed,
             Total: new Money(149.95m, Currency.USD),
             PlacedUtc: PlacedAt,
-            LastUpdatedUtc: PlacedAt);
+            LastUpdatedUtc: PlacedAt,
+            IsReturned: false,
+            ReturnedUtc: null);
 }

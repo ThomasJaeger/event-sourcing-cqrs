@@ -72,6 +72,56 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task InsertShipmentMappingAsync(
+        Guid shipmentId, Guid orderId, DateTime scheduledUtc, CancellationToken ct)
+    {
+        await using var cmd = _connection.CreateCommand();
+        cmd.Transaction = _transaction;
+        // ON CONFLICT DO NOTHING: a redelivered ShipmentScheduled keeps the first
+        // mapping row, mirroring the order_list insert's idempotency.
+        cmd.CommandText =
+            "INSERT INTO read_models.order_list_shipments " +
+            "(shipment_id, order_id, scheduled_utc) " +
+            "VALUES (@shipment_id, @order_id, @scheduled_utc) " +
+            "ON CONFLICT (shipment_id) DO NOTHING";
+        cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
+        cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("scheduled_utc", NpgsqlDbType.TimestampTz, scheduledUtc);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<Guid?> GetOrderIdByShipmentIdAsync(Guid shipmentId, CancellationToken ct)
+    {
+        await using var cmd = _connection.CreateCommand();
+        cmd.Transaction = _transaction;
+        cmd.CommandText =
+            "SELECT order_id FROM read_models.order_list_shipments " +
+            "WHERE shipment_id = @shipment_id";
+        cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        // No mapping: the shipment was scheduled before this projection observed
+        // it. The handler no-ops on null rather than throwing.
+        return result is null or DBNull ? null : (Guid)result;
+    }
+
+    public async Task MarkReturnedAsync(
+        Guid orderId, DateTime returnedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
+    {
+        await using var cmd = _connection.CreateCommand();
+        cmd.Transaction = _transaction;
+        // No row for orderId means the order_list row was never created; the
+        // update touches zero rows, which is harmless.
+        cmd.CommandText =
+            "UPDATE read_models.order_list " +
+            "SET is_returned = true, returned_utc = @returned_utc, " +
+            "last_updated_utc = @last_updated_utc " +
+            "WHERE order_id = @order_id";
+        cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("returned_utc", NpgsqlDbType.TimestampTz, returnedUtc);
+        cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task CommitAsync(string projectionName, long position, CancellationToken ct)
     {
         // The checkpoint advance runs on this same transaction, so the row

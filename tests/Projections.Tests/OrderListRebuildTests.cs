@@ -1,5 +1,7 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
@@ -11,6 +13,7 @@ using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Xunit;
 
@@ -58,9 +61,12 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         // The live pass produced the expected state, so the equality assertion
         // below is not vacuously true against two empty read models.
         liveA!.Status.Should().Be(OrderStatus.Shipped);
+        // Order A shipped, then its shipment was returned: the status stays
+        // Shipped (a Sales fact) and is_returned composes the Fulfillment fact.
+        liveA.IsReturned.Should().BeTrue();
         liveB!.Status.Should().Be(OrderStatus.Cancelled);
-        liveC!.Status.Should().Be(OrderStatus.Placed);
-        liveCheckpoint.Should().Be(11);
+        liveC!.Status.Should().Be(OrderStatus.Completed);
+        liveCheckpoint.Should().Be(14);
 
         // Truncate the read model and clear the checkpoint, then rebuild from zero.
         await ctx.OrderListStore.TruncateAsync(CancellationToken.None);
@@ -82,16 +88,19 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var ctx = await ArrangeAsync(dataSource);
 
-        // Order A occupies global positions 1-4. Replaying from 4 skips it
-        // entirely and applies only orders B and C.
+        // Order A occupies global positions 1-4. Replaying from 4 skips A's own
+        // events; B, C (with its completion), and A's shipment events still
+        // apply. A's ShipmentReturned resolves order A but finds no row to mark,
+        // because A's OrderPlaced was skipped.
         await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
             .ReplayAsync(4, CancellationToken.None);
 
         (await ctx.OrderListStore.GetAsync(ctx.OrderA, CancellationToken.None)).Should().BeNull();
         (await ctx.OrderListStore.GetAsync(ctx.OrderB, CancellationToken.None))!
             .Status.Should().Be(OrderStatus.Cancelled);
+        // C is placed (9-11) then completed (12); replaying from 4 applies both.
         (await ctx.OrderListStore.GetAsync(ctx.OrderC, CancellationToken.None))!
-            .Status.Should().Be(OrderStatus.Placed);
+            .Status.Should().Be(OrderStatus.Completed);
     }
 
     [Fact]
@@ -119,7 +128,10 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
     // Builds the stores and the projection over the given data source, then
     // appends three orders' worth of events: A (drafted, line added, placed,
     // shipped), B (drafted, line added, placed, cancelled), C (drafted, line
-    // added, placed). Global positions land 1-4, 5-8, 9-11 in that order.
+    // added, placed). Global positions land 1-4, 5-8, 9-11 in that order. Then
+    // C completes (position 12) and order A's shipment is scheduled and returned
+    // on its own stream (positions 13-14), exercising the completion handler and
+    // the ShipmentScheduled-mapping-then-ShipmentReturned-resolve flow.
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
@@ -127,7 +139,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(readModelFactory, checkpointStore);
-        var projection = new OrderListProjection(orderListStore);
+        var projection = new OrderListProjection(orderListStore, NullLogger<OrderListProjection>.Instance);
 
         var orderA = Guid.NewGuid();
         var orderB = Guid.NewGuid();
@@ -165,6 +177,28 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
                 orderC, Guid.NewGuid(), "SKU-C", 2, new Money(49.50m, Currency.USD), BaseTime)),
             Env(streamC, 3, new OrderPlaced(
                 orderC, customer, new Money(99m, Currency.USD), BaseTime.AddHours(1))),
+        ], CancellationToken.None);
+
+        // Order C completes (the PM-orchestrated terminal). Position 12; status
+        // moves Placed -> Completed.
+        await eventStore.AppendAsync(streamC, 3,
+        [
+            Env(streamC, 4, new OrderCompleted(orderC, BaseTime.AddHours(3))),
+        ], CancellationToken.None);
+
+        // Order A's shipment is scheduled then returned, on its own shipment
+        // stream. Positions 13-14. ShipmentScheduled records the ShipmentId ->
+        // OrderId mapping; ShipmentReturned, carrying only ShipmentId, resolves
+        // order A through it and marks it returned (ADR 0020).
+        var shipmentA = Guid.NewGuid();
+        var shipmentStreamA = StreamId.ForAggregate<Shipment>(shipmentA);
+        await eventStore.AppendAsync(shipmentStreamA, 0,
+        [
+            Env(shipmentStreamA, 1, new ShipmentScheduled(
+                shipmentA, orderA,
+                new Address("1 Main St", "Smalltown", "12345", "US"), [],
+                BaseTime.AddHours(2))),
+            Env(shipmentStreamA, 2, new ShipmentReturned(shipmentA, "damaged", BaseTime.AddHours(4))),
         ], CancellationToken.None);
 
         return new RebuildContext(
@@ -220,6 +254,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         services.AddSingleton<IEventHandler<OrderPlaced>>(projection);
         services.AddSingleton<IEventHandler<OrderShipped>>(projection);
         services.AddSingleton<IEventHandler<OrderCancelled>>(projection);
+        services.AddSingleton<IEventHandler<OrderCompleted>>(projection);
+        services.AddSingleton<IEventHandler<ShipmentScheduled>>(projection);
+        services.AddSingleton<IEventHandler<ShipmentReturned>>(projection);
         return new InProcessMessageDispatcher(services.BuildServiceProvider());
     }
 
@@ -243,7 +280,10 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
             .Register<OrderLineAdded>()
             .Register<OrderPlaced>()
             .Register<OrderShipped>()
-            .Register<OrderCancelled>();
+            .Register<OrderCancelled>()
+            .Register<OrderCompleted>()
+            .Register<ShipmentScheduled>()
+            .Register<ShipmentReturned>();
 
     private static ProcessManagerEventTypeRegistry CreatePmRegistry()
         => new();
