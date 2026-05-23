@@ -7,6 +7,7 @@ using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.InventoryDashboard;
+using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
@@ -48,15 +49,16 @@ public class WorkersHostFactoryTests
         // handlers now (OrderList and CustomerSummary), resolved via GetServices.
         var orderList = host.Services.GetRequiredService<OrderListProjection>();
         var customerSummary = host.Services.GetRequiredService<CustomerSummaryProjection>();
+        var orderDetail = host.Services.GetRequiredService<OrderDetailProjection>();
         host.Services.GetServices<IEventHandler<OrderPlaced>>()
-            .Should().Contain(orderList).And.Contain(customerSummary);
+            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail);
         var skuToInventory = host.Services.GetRequiredService<SkuToInventoryIdProjection>();
         var inventoryDashboard = host.Services.GetRequiredService<InventoryDashboardProjection>();
         // InventoryCreated now has two handlers (SkuToInventoryId and InventoryDashboard).
         host.Services.GetServices<IEventHandler<InventoryCreated>>()
             .Should().Contain(skuToInventory).And.Contain(inventoryDashboard);
         host.Services.GetServices<IProjection>()
-            .Should().Contain(new IProjection[] { orderList, customerSummary, inventoryDashboard, skuToInventory });
+            .Should().Contain(new IProjection[] { orderList, customerSummary, inventoryDashboard, skuToInventory, orderDetail });
 
         // The hosted services land in the container: ProjectionStartupCatchUpService
         // (the IHostedLifecycleService from commit 6), OutboxProcessor (wired by

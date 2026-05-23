@@ -8,6 +8,7 @@ using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.InventoryDashboard;
+using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
@@ -49,13 +50,19 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         // singleton. Four projections now, so the IProjection set holds all.
         var orderList = provider.GetRequiredService<OrderListProjection>();
         var customerSummary = provider.GetRequiredService<CustomerSummaryProjection>();
-        // OrderPlaced and OrderCancelled now have two handlers (OrderList and
-        // CustomerSummary); the dispatcher fans out to both via GetServices.
+        var orderDetail = provider.GetRequiredService<OrderDetailProjection>();
+        // OrderPlaced and OrderCancelled now have three handlers (OrderList,
+        // CustomerSummary, OrderDetail); the dispatcher fans out to all three via
+        // GetServices.
         provider.GetServices<IEventHandler<OrderPlaced>>()
-            .Should().Contain(orderList).And.Contain(customerSummary);
+            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail);
         provider.GetServices<IEventHandler<OrderCancelled>>()
-            .Should().Contain(orderList).And.Contain(customerSummary);
-        provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(orderList);
+            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail);
+        // OrderShipped now has two handlers (OrderList and OrderDetail); OrderDrafted
+        // and the other line and address events are OrderDetail-only.
+        provider.GetServices<IEventHandler<OrderShipped>>()
+            .Should().Contain(orderList).And.Contain(orderDetail);
+        provider.GetRequiredService<IEventHandler<OrderDrafted>>().Should().BeSameAs(orderDetail);
 
         var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
         var inventoryDashboard = provider.GetRequiredService<InventoryDashboardProjection>();
@@ -72,12 +79,13 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<PaymentAuthorized>>().Should().BeSameAs(orderToPayment);
 
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(5);
+        projections.Should().HaveCount(6);
         projections.Should().Contain(orderList);
         projections.Should().Contain(customerSummary);
         projections.Should().Contain(inventoryDashboard);
         projections.Should().Contain(skuToInventory);
         projections.Should().Contain(orderToPayment);
+        projections.Should().Contain(orderDetail);
 
         // AddReadModels composes with AddPostgresEventStore: the event-store
         // side still resolves, because AddReadModels does not register an
