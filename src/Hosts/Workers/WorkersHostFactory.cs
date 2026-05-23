@@ -5,7 +5,9 @@ using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.ProcessManagers;
 using EventSourcingCqrs.ProcessManagers.OrderFulfillment;
+using EventSourcingCqrs.ProcessManagers.Returns;
 using EventSourcingCqrs.Projections.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -34,6 +36,10 @@ public static class WorkersHostFactory
         // Process-manager event types resolve through the separate PM registry
         // (ADR 0013); AddPostgresEventStore walks every IProcessManagerEventTypeProvider.
         builder.Services.AddSingleton<IProcessManagerEventTypeProvider, OrderFulfillmentEventTypeProvider>();
+        builder.Services.AddSingleton<IProcessManagerEventTypeProvider, ReturnEventTypeProvider>();
+        // The OrderFulfillment timeout commands round-trip through the delay queue,
+        // so their types register in CommandTypeRegistry (ADR 0017).
+        builder.Services.AddSingleton<ICommandTypeProvider, OrderFulfillmentCommandTypeProvider>();
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
         builder.Services.AddApplication();
@@ -42,6 +48,20 @@ public static class WorkersHostFactory
         builder.Services.AddPostgresDelayQueueProcessor();
         builder.Services.AddReadModels(opts =>
             opts.ConnectionString = readModelConnectionString);
+
+        // Process-manager handlers and their collaborators. The outbox dispatcher
+        // resolves them by IProcessManagerHandler<T> (commit 27); they are scoped
+        // because they depend on the scoped aggregate and PM repositories. The
+        // timeout command handlers live outside the Application assembly
+        // AddApplication scans, so they register explicitly.
+        builder.Services.AddScoped<OrderFulfillmentCompensation>();
+        builder.Services.AddProcessManagerHandler<OrderFulfillmentProcessManagerHandler>();
+        builder.Services.AddProcessManagerHandler<ReturnProcessManagerHandler>();
+        builder.Services.AddScoped<ICommandHandler<TimeoutAwaitingPaymentForOrder>,
+            TimeoutAwaitingPaymentForOrderHandler>();
+        builder.Services.AddScoped<ICommandHandler<TimeoutAwaitingDispatchForOrder>,
+            TimeoutAwaitingDispatchForOrderHandler>();
+
         builder.Services.AddHostedService<ProjectionStartupCatchUpService>();
         return builder.Build();
     }

@@ -16,6 +16,7 @@
     <ProjectReference Include="..\..\src\Hosts\Workers\Workers.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\ProcessManagers\ProcessManagers.csproj" />
     <ProjectReference Include="..\..\src\Projections\Projections.csproj" />
     <ProjectReference Include="..\TestInfrastructure\TestInfrastructure.csproj" />
   </ItemGroup>

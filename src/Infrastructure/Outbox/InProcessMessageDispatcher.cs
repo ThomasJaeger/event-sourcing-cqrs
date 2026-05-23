@@ -5,12 +5,16 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EventSourcingCqrs.Infrastructure.Outbox;
 
-// Pattern from Chapter 8: outbox-to-bus dispatch. The in-process variant
-// resolves zero-to-many IEventHandler<TEvent> registered in DI and invokes
-// them in container order. Engine-agnostic; per-adapter OutboxProcessor
-// implementations (PostgreSQL today, SQL Server next) both dispatch through
-// this one class. ADR 0004's per-adapter principle covers engine-specific
-// outbox mechanics, not this consumer-side resolver.
+// Pattern from Chapter 8: outbox-to-bus dispatch. The in-process variant opens a
+// DI scope per message and resolves, in container order, zero-to-many
+// IEventHandler<TEvent> (projections, singletons) then zero-to-many
+// IProcessManagerHandler<TEvent> (process managers, scoped). The scope is what
+// lets the scoped PM handlers and their scoped repositories resolve, the same
+// shape CommandBus uses per command; projections run before process managers so a
+// read model a PM might read on this event is updated first. Engine-agnostic;
+// per-adapter OutboxProcessor implementations dispatch through this one class. ADR
+// 0004's per-adapter principle covers engine-specific outbox mechanics, not this
+// consumer-side resolver.
 public sealed class InProcessMessageDispatcher : IMessageDispatcher
 {
     // One invoker per event type: the closed IEventHandler<TEvent> to resolve,
@@ -36,26 +40,42 @@ public sealed class InProcessMessageDispatcher : IMessageDispatcher
         var context = invoker.ContextConstructor.Invoke(
             new object[] { message.Event, message.Metadata, message.GlobalPosition });
 
-        foreach (var handler in _services.GetServices(invoker.HandlerType))
+        // A DI scope per message so scoped consumers resolve. A handler that throws
+        // propagates so the OutboxProcessor retries the whole message; idempotent
+        // projections and keyed PM dispatches make the retry safe.
+        using var scope = _services.CreateScope();
+        var sp = scope.ServiceProvider;
+
+        foreach (var handler in sp.GetServices(invoker.EventHandlerType))
         {
             await (Task)invoker.HandleMethod.Invoke(handler, new object[] { context, ct })!;
+        }
+        foreach (var handler in sp.GetServices(invoker.ProcessManagerHandlerType))
+        {
+            await (Task)invoker.ProcessManagerHandleMethod.Invoke(handler, new object[] { context, ct })!;
         }
     }
 
     private static HandlerInvoker BuildInvoker(Type eventType)
     {
-        var handlerType = typeof(IEventHandler<>).MakeGenericType(eventType);
+        var eventHandlerType = typeof(IEventHandler<>).MakeGenericType(eventType);
+        var pmHandlerType = typeof(IProcessManagerHandler<>).MakeGenericType(eventType);
         var contextType = typeof(EventContext<>).MakeGenericType(eventType);
         return new HandlerInvoker(
-            HandlerType: handlerType,
-            HandleMethod: handlerType.GetMethod(nameof(IEventHandler<IDomainEvent>.HandleAsync))!,
+            EventHandlerType: eventHandlerType,
+            HandleMethod: eventHandlerType.GetMethod(nameof(IEventHandler<IDomainEvent>.HandleAsync))!,
+            ProcessManagerHandlerType: pmHandlerType,
+            ProcessManagerHandleMethod:
+                pmHandlerType.GetMethod(nameof(IProcessManagerHandler<IDomainEvent>.HandleAsync))!,
             // A sealed record exposes exactly one public constructor, the
             // primary one: (TEvent Event, EventMetadata Metadata, long GlobalPosition).
             ContextConstructor: contextType.GetConstructors().Single());
     }
 
     private sealed record HandlerInvoker(
-        Type HandlerType,
+        Type EventHandlerType,
         MethodInfo HandleMethod,
+        Type ProcessManagerHandlerType,
+        MethodInfo ProcessManagerHandleMethod,
         ConstructorInfo ContextConstructor);
 }
