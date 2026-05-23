@@ -7,6 +7,7 @@ using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.CustomerSummary;
+using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
@@ -57,15 +58,24 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(orderList);
 
         var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
-        provider.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
+        var inventoryDashboard = provider.GetRequiredService<InventoryDashboardProjection>();
+        // InventoryCreated now has two handlers (SkuToInventoryId and
+        // InventoryDashboard); the other three Inventory events are
+        // InventoryDashboard-only and stay on GetRequiredService.
+        provider.GetServices<IEventHandler<InventoryCreated>>()
+            .Should().Contain(skuToInventory).And.Contain(inventoryDashboard);
+        provider.GetRequiredService<IEventHandler<InventoryAdjusted>>().Should().BeSameAs(inventoryDashboard);
+        provider.GetRequiredService<IEventHandler<InventoryReserved>>().Should().BeSameAs(inventoryDashboard);
+        provider.GetRequiredService<IEventHandler<InventoryReleased>>().Should().BeSameAs(inventoryDashboard);
 
         var orderToPayment = provider.GetRequiredService<OrderIdToPaymentIdProjection>();
         provider.GetRequiredService<IEventHandler<PaymentAuthorized>>().Should().BeSameAs(orderToPayment);
 
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(4);
+        projections.Should().HaveCount(5);
         projections.Should().Contain(orderList);
         projections.Should().Contain(customerSummary);
+        projections.Should().Contain(inventoryDashboard);
         projections.Should().Contain(skuToInventory);
         projections.Should().Contain(orderToPayment);
 

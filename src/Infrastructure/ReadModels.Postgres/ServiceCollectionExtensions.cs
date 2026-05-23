@@ -4,6 +4,7 @@ using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
+using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
@@ -60,6 +61,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ICustomerSummaryStore, PostgresCustomerSummaryStore>();
         services.AddProjection<CustomerSummaryProjection>();
+
+        services.AddSingleton<IInventoryDashboardStore, PostgresInventoryDashboardStore>();
+        services.AddProjection<InventoryDashboardProjection>();
 
         return services;
     }
