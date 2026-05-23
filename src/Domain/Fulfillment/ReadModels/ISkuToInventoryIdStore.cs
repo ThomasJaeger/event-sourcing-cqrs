@@ -5,7 +5,7 @@ namespace EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 // read-side ports are bounded-context-owned (ADR 0008), even though the contract
 // uses primitives rather than Fulfillment types. SkuToInventoryIdProjection
 // writes it from InventoryCreated; the OrderFulfillment process manager reads it
-// (commit 22) before each ReserveInventory dispatch to resolve a line's SKU to
+// (commit 21) before each ReserveInventory dispatch to resolve a line's SKU to
 // the Inventory aggregate's Guid id.
 public interface ISkuToInventoryIdStore
 {
