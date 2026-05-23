@@ -1,10 +1,12 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
@@ -42,7 +44,7 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
 
         // Each projection is one instance surfaced under every interface its
         // consumers resolve; the forwarding registrations hand back the same
-        // singleton. Two projections now, so the IProjection set holds both.
+        // singleton. Three projections now, so the IProjection set holds all.
         var orderList = provider.GetRequiredService<OrderListProjection>();
         provider.GetRequiredService<IEventHandler<OrderPlaced>>().Should().BeSameAs(orderList);
         provider.GetRequiredService<IEventHandler<OrderShipped>>().Should().BeSameAs(orderList);
@@ -51,10 +53,14 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
         provider.GetRequiredService<IEventHandler<InventoryCreated>>().Should().BeSameAs(skuToInventory);
 
+        var orderToPayment = provider.GetRequiredService<OrderIdToPaymentIdProjection>();
+        provider.GetRequiredService<IEventHandler<PaymentAuthorized>>().Should().BeSameAs(orderToPayment);
+
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(2);
+        projections.Should().HaveCount(3);
         projections.Should().Contain(orderList);
         projections.Should().Contain(skuToInventory);
+        projections.Should().Contain(orderToPayment);
 
         // AddReadModels composes with AddPostgresEventStore: the event-store
         // side still resolves, because AddReadModels does not register an

@@ -1,7 +1,9 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Billing.ReadModels;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Projections.Infrastructure;
+using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +53,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ISkuToInventoryIdStore, PostgresSkuToInventoryIdStore>();
         services.AddProjection<SkuToInventoryIdProjection>();
+
+        services.AddSingleton<IOrderIdToPaymentIdStore, PostgresOrderIdToPaymentIdStore>();
+        services.AddProjection<OrderIdToPaymentIdProjection>();
 
         return services;
     }
