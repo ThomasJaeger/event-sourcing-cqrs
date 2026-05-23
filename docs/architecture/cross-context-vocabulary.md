@@ -10,13 +10,13 @@ The dominant pattern is Customer-Supplier from Chapter 7. Sales publishes events
 
 ## The four contexts
 
-**Sales** (`src/Domain/Sales/`). Owns `Order` and `OrderLine`. Publishes `OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderShipped`, `OrderCancelled`. Sales is the source of order identity (`OrderId`), customer identity (`CustomerId`), and per-order pricing (`Money UnitPrice`).
+**Sales** (`src/Domain/Sales/`). Owns `Order` and `OrderLine`. Publishes `OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderShipped`, `OrderCancelled`, `OrderCompleted`. Sales is the source of order identity (`OrderId`), customer identity (`CustomerId`), and per-order pricing (`Money UnitPrice`).
 
 **Fulfillment** (`src/Domain/Fulfillment/`). Owns `Inventory` and `Shipment`. Publishes `InventoryCreated`, `InventoryAdjusted`, `InventoryReserved`, `InventoryReleased`, `ShipmentScheduled`, `ShipmentDispatched`, `ShipmentDelivered`, `ShipmentReturned`. Fulfillment cares about SKUs and quantities. It does not care about pricing.
 
 **Billing** (`src/Domain/Billing/`). Owns `Payment`. Publishes `PaymentAuthorized`, `PaymentCaptured`, `PaymentRefunded`, `PaymentVoided`. Billing cares about amounts and payment-method references. It does not care about line items or shipping.
 
-**Customer Support** (Phase 6+). No own aggregates. Reads from the projections published by the other three contexts. Its model is a read-only composite view; the Phase 6 work fleshes this out.
+**Customer Support**. No own aggregates. Reads from the projections the other three contexts' events feed: the four Phase 6 read models (`OrderListProjection`, `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`) plus the two Session-0009 cross-PM lookups (`SkuToInventoryId`, `OrderIdToPaymentId`). Its model is a read-only composite view; it adds no write-side dependency.
 
 ## The shared kernel
 
@@ -58,7 +58,7 @@ No direct flow: Fulfillment and Billing remain unaware of each other, and the pr
 
 ### Everything to Customer Support
 
-Phase 6+. Customer Support consumes projections published by the other three contexts. The read-side store interfaces follow ADR 0008: each store lives with the bounded context whose events it consumes, not in `Domain.Abstractions`. Customer Support is a read-only composite; the Phase 6 work confirms it adds no write-side dependencies.
+Customer Support consumes the projections the other three contexts' events feed. Phase 6 shipped the four read models it reads: `OrderListProjection`, `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`. The read-side store interfaces follow ADR 0008: each store lives with the bounded context whose events it consumes, not in `Domain.Abstractions` (`IOrderListStore`, `IOrderDetailStore`, `ICustomerSummaryStore` in `Domain.Sales.ReadModels`; `IInventoryDashboardStore` in `Domain.Fulfillment.ReadModels`). Customer Support is a read-only composite, confirmed to add no write-side dependency.
 
 ## What does NOT cross
 
@@ -85,6 +85,8 @@ A process manager acquires data and effects change in exactly three ways:
 1. **Load an aggregate, read-only, through `IEventStoreRepository<TAggregate>`.** When the orchestration needs data the triggering event does not carry, the PM loads the aggregate and reads it. `OrderFulfillmentProcessManager` loads the `Order` for its lines; `ReturnProcessManager` loads the `Shipment` for its `OrderId` and returned lines. The load is read-only and bounded by the aggregate's event count.
 2. **Consult a read model for cross-context identifier translation.** A PM never reads another context's aggregate state for identifier translation, and never reads another process manager's state or stream. It consults a projection-maintained lookup: `SkuToInventoryId` to translate a Sales `Sku` into a Fulfillment `InventoryId`, `OrderIdToPaymentId` to translate a Sales `OrderId` into a Billing `PaymentId`. The lookup is a read model like any other (ADR 0008 places each store with the context whose events feed it).
 3. **Dispatch a command through `ICausedCommandBus`.** A PM effects change only by sending commands, never by mutating an aggregate. The bus stamps causation so each command traces back to the event that triggered it, and idempotency keys make redelivery safe.
+
+The read side has its own parallel rule for the same problem. A projection that needs an identifier the event payload does not carry maintains its own projection-private lookup table, populated by the event carrying both identifiers and queried by the event carrying one, and never resolves identity by loading an aggregate (ADR 0020). The write-side PM consults a shared read model (access pattern 2 above); the read-side projection maintains its own lookup, keyed to its own checkpoint so a rebuild cannot race a separate lookup projection. Both rules keep each layer off the aggregates it does not own. The worked cases: `order_list_shipments`, `order_detail_shipments`, and `order_detail_payments` resolve `OrderId` from shipment and payment events that carry only their own aggregate's id.
 
 This is why the boundary crossings above all name a process manager: the translation cost the contexts refuse to carry concentrates here, in code that exists to coordinate.
 
