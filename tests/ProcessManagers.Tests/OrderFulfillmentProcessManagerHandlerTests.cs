@@ -213,6 +213,86 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
     }
 
+    [Fact]
+    public async Task Partial_reservation_releases_the_reserved_line_voids_and_cancels()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        var reserved = Guid.NewGuid();
+        var failed = Guid.NewGuid();
+        harness.MapSku("SKU-OK", Guid.NewGuid());
+        // SKU-MISSING is unmapped, so its line fails to reserve.
+        await harness.SeedOrder(BuildOrder(orderId, (reserved, "SKU-OK", 1), (failed, "SKU-MISSING", 2)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(40m), Now));
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(40m), "card", Now));
+
+        var stream = PmStream(orderId);
+        harness.Dispatched.Where(d => d.Command is ReleaseInventory).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:release:{reserved:N}");
+        harness.Dispatched.Where(d => d.Command is VoidPayment).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:void-payment");
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:cancel-order");
+        harness.Dispatched.Should().NotContain(d => d.Command is ScheduleShipment);
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task ScheduleShipment_failure_releases_all_lines_voids_and_cancels()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        harness.Bus.OutcomeFor = cmd => cmd is ScheduleShipment
+            ? CommandOutcome.Failed(new DomainException("carrier rejected the shipment"))
+            : CommandOutcome.Success();
+        var orderId = Guid.NewGuid();
+        var lineA = Guid.NewGuid();
+        var lineB = Guid.NewGuid();
+        harness.MapSku("SKU-A", Guid.NewGuid());
+        harness.MapSku("SKU-B", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (lineA, "SKU-A", 1), (lineB, "SKU-B", 2)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(60m), Now));
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(60m), "card", Now));
+
+        var stream = PmStream(orderId);
+        // Both reserved lines released; the failed ScheduleShipment dispatched once.
+        harness.Dispatched.Where(d => d.Command is ReleaseInventory).Select(d => d.IdempotencyKey)
+            .Should().BeEquivalentTo(new[]
+            {
+                $"{stream.Value}:release:{lineA:N}",
+                $"{stream.Value}:release:{lineB:N}"
+            });
+        harness.Dispatched.Where(d => d.Command is ScheduleShipment).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is VoidPayment).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle();
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task Partial_reservation_redelivery_stays_terminal_without_re_dispatching()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        harness.MapSku("SKU-OK", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-OK", 1), (Guid.NewGuid(), "SKU-MISSING", 2)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(40m), Now));
+        var auth = new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(40m), "card", Now);
+        await harness.Receive(auth);
+        var versionAfterFirst = (await harness.LoadPm(orderId))!.Version;
+        await harness.Receive(auth);
+        var pm = await harness.LoadPm(orderId);
+
+        // Cancelled is terminal: the second delivery guards out, no re-record and
+        // no re-dispatch of the compensation commands.
+        pm!.State.Should().Be(OrderFulfillmentState.Cancelled);
+        pm.Version.Should().Be(versionAfterFirst);
+        harness.Dispatched.Where(d => d.Command is ReleaseInventory).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is VoidPayment).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle();
+    }
+
     private static Order BuildOrder(Guid orderId, params (Guid LineId, string Sku, int Qty)[] lines)
     {
         var order = Order.Draft(orderId, Guid.NewGuid(), Now);

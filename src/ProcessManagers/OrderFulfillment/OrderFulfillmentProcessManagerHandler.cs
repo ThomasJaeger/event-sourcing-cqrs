@@ -20,7 +20,8 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 // CommandOutcome, not from InventoryReserved (Decision 10, F-0009-M).
 //
 // Not DI-registered here; registration and dispatcher routing land at commit 27.
-// Compensation (branches 1-3) lands at commits 23-24; MarkOrderCompleted at 25.
+// Compensation branches land at commits 22-23; the two timeout triggers at 24;
+// MarkOrderCompleted at 25.
 public sealed class OrderFulfillmentProcessManagerHandler :
     IProcessManagerHandler<OrderPlaced>,
     IProcessManagerHandler<PaymentAuthorized>,
@@ -42,6 +43,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         public const string ScheduleShipment = "schedule-shipment";
         public const string VoidPayment = "void-payment";
         public const string CancelOrder = "cancel-order";
+        public const string Release = "release";
     }
 
     private readonly ICausedCommandBus _bus;
@@ -149,8 +151,17 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 await CompensateAfterAllReservationsFailedAsync(
                     pm, e.OrderId, stream, context.Metadata, ct);
             }
-            // else: partial reservation (some lines reserved) routes to branch 3
-            // (commit 23). The PM rests at AwaitingInventory until then.
+            else
+            {
+                // Branch 3 (partial reservation): some lines reserved, some
+                // failed. Release the reserved lines, void the authorization,
+                // cancel the order.
+                await CompensateWithReleasesAsync(
+                    pm, e.OrderId, stream, context.Metadata,
+                    pmReason: $"Some inventory reservations failed for order {e.OrderId}.",
+                    cancelReason: "Order fulfillment cancelled after partial inventory reservation.",
+                    ct);
+            }
         }
 
         if (pm.State == OrderFulfillmentState.AwaitingDispatch)
@@ -158,12 +169,25 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             var lines = order!.Lines
                 .Select(l => new ShipmentLine(e.OrderId, l.LineId, l.Sku, l.Quantity))
                 .ToList();
-            await _bus.TrySendAsync(
+            var outcome = await _bus.TrySendAsync(
                 new ScheduleShipment(pm.ShipmentId, e.OrderId, order.ShippingAddress!, lines),
                 context.Metadata,
                 Actor,
                 IdempotencyKeys.ForProcessManager(stream, Steps.ScheduleShipment),
                 ct);
+            if (!outcome.IsSuccess)
+            {
+                // Branch 3 (shipment-scheduling failure): all lines were reserved
+                // to reach AwaitingDispatch, so release them all, void the
+                // authorization, cancel the order. The AwaitingDispatch timeout
+                // (commit 24) routes the no-event-arrives case into the same
+                // routine.
+                await CompensateWithReleasesAsync(
+                    pm, e.OrderId, stream, context.Metadata,
+                    pmReason: outcome.Failure!.Message,
+                    cancelReason: "Order fulfillment cancelled after shipment scheduling failed.",
+                    ct);
+            }
         }
     }
 
@@ -297,6 +321,50 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             new CancelOrder(orderId, "Order fulfillment cancelled after all reservations failed.", Actor.Id),
             causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.CancelOrder), ct);
         pm.CompleteAsCancelled();   // -> Cancelled
+        await _pms.SaveAsync(pm, ct);
+    }
+
+    // Branch 3 (and branch-4-collapsed): some or all lines reserved, then a
+    // partial fan-out or a ScheduleShipment failure. Release the reserved lines,
+    // void the authorization, cancel the order, release-before-void-before-cancel
+    // per Decision 11. Pattern A like the other branches: record and dispatch
+    // inside the guard, terminal save last. The release set is captured before the
+    // ReleaseReservation calls flip line statuses, and the dispatch reads that
+    // captured list, so the save need not precede the dispatch and no
+    // post-save-pre-dispatch orphan window opens.
+    private async Task CompensateWithReleasesAsync(
+        OrderFulfillmentProcessManager pm,
+        Guid orderId,
+        StreamId stream,
+        EventMetadata causing,
+        string pmReason,
+        string cancelReason,
+        CancellationToken ct)
+    {
+        var linesToRelease = pm.Reservations
+            .Where(r => r.Value.Status == ReservationLineStatus.Reserved)
+            .Select(r => (LineId: r.Key, InventoryId: r.Value.InventoryId!.Value))
+            .ToList();
+
+        pm.StartCancellation(pmReason);
+        foreach (var (lineId, _) in linesToRelease)
+        {
+            pm.ReleaseReservation(lineId);   // -> ReleasingInventory
+        }
+        pm.RequestVoid(pmReason);            // -> VoidingPayment
+        pm.CompleteAsCancelled();            // -> Cancelled
+
+        await Task.WhenAll(linesToRelease.Select(line => _bus.TrySendAsync(
+            new ReleaseInventory(
+                line.InventoryId, line.LineId, "Order fulfillment released the reservation during compensation."),
+            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.Release, line.LineId), ct)));
+        await _bus.TrySendAsync(
+            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
+            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.VoidPayment), ct);
+        await _bus.TrySendAsync(
+            new CancelOrder(orderId, cancelReason, Actor.Id),
+            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.CancelOrder), ct);
+
         await _pms.SaveAsync(pm, ct);
     }
 
