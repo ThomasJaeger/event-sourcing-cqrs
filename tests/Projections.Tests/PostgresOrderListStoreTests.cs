@@ -284,6 +284,31 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
             .Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetPageAsync_surfaces_return_state_for_a_returned_row()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory));
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.MarkReturnedAsync(row.OrderId, UpdatedAt, UpdatedAt, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        var page = await store.GetPageAsync(offset: 0, limit: 50, CancellationToken.None);
+
+        // The page-read path maps is_returned/returned_utc, not just the
+        // single-row GetAsync; the other GetPageAsync tests exercise the
+        // IsReturned = false default only, so this locks the true/non-null case.
+        page.Should().ContainSingle();
+        page[0].IsReturned.Should().BeTrue();
+        page[0].ReturnedUtc.Should().Be(UpdatedAt);
+    }
+
     private static async Task InsertAndCommitAsync(
         PostgresOrderListStore store, OrderListRow row, long position)
     {
