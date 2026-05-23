@@ -14,11 +14,11 @@ delay queue is the infrastructure that makes that a reliable primitive: schedule
 a command to dispatch at a future time, cancel it if the awaited event arrives
 first, and let it fire if it does not.
 
-Phase 5's process managers need this for every awaiting state (AwaitingPayment,
-AwaitingInventory, AwaitingShipment, AwaitingDispatch). Nothing built so far
-dispatches future work: the command bus dispatches now, and the outbox
-dispatches a row as soon as it is visible. A timeout is the first piece of
-infrastructure that dispatches later.
+Phase 5's process managers need this for the awaiting states where the PM rests
+for an asynchronous event that may never arrive. Nothing built so far dispatches
+future work: the command bus dispatches now, and the outbox dispatches a row as
+soon as it is visible. A timeout is the first piece of infrastructure that
+dispatches later.
 
 The mechanism is a PostgreSQL table plus a polling background service, the same
 shape the outbox already uses (Sessions 0004 and 0006). The reference
@@ -167,16 +167,24 @@ paralleling `EventTypeRegistry`. That registry lands in commit 16 alongside the
 
 ### Typed timeout commands
 
-Each timeout kind is its own command type (`TimeoutAwaitingPaymentForOrder`,
-`TimeoutAwaitingInventoryForOrder`, `TimeoutAwaitingShipmentForOrder`,
-`TimeoutAwaitingDispatchForOrder`), each with its own `ICommandHandler` that
-loads the process manager, applies the timeout transition under a state guard,
-and dispatches compensation. The alternative, one generic timeout command with a
-kind discriminator and a routing dispatcher, costs one class instead of N but
-reintroduces magic-string routing the typed command bus exists to avoid. The
-typed cost is bounded by the timeout-kind count (four today) and the type-safety
-benefit scales with the codebase's lifetime, so typed is the clearer
-demonstration for a reference implementation.
+Each timeout kind is its own command type, each with its own `ICommandHandler`
+that loads the process manager, guards on the awaited state, and routes into the
+shared compensation. Two ship: `TimeoutAwaitingPaymentForOrder` and
+`TimeoutAwaitingDispatchForOrder`. The alternative, one generic timeout command
+with a kind discriminator and a routing dispatcher, costs one class instead of N
+but reintroduces magic-string routing the typed command bus exists to avoid. The
+typed cost is bounded by the timeout-kind count and the type-safety benefit scales
+with the codebase's lifetime, so typed is the clearer demonstration for a
+reference implementation.
+
+This Decision originally named four timeout commands, one per awaiting state. The
+synchronous reservation fan-out the OrderFulfillment PM shipped (Decision 10)
+makes `AwaitingInventory` and `AwaitingShipment` transient: the PM passes through
+them inside one `PaymentAuthorized` handler invocation rather than resting there
+for an external event. Only `AwaitingPayment` (awaiting `PaymentAuthorized`) and
+`AwaitingDispatch` (awaiting `ShipmentDispatched`) are genuine wait states a
+timeout protects, so the set is two, not four. A timeout for a state the PM never
+rests in would be dead infrastructure.
 
 ### Cancellation: active by default, state guard as the safety net
 

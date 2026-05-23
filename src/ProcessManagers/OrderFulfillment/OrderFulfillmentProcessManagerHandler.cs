@@ -1,6 +1,5 @@
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
-using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -11,117 +10,114 @@ using EventSourcingCqrs.Domain.Sales.Events;
 
 namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 
-// Drives OrderFulfillmentProcessManager across its four observed events. Each
-// handler follows the R2 ordering (ADR 0015 editorial, F-0009-N): record the
-// transition and save before dispatching the command that carries any minted id,
-// so a redelivery reloads the same id and re-dispatches idempotently. Reservation
-// outcomes are the exception, recorded after dispatch because the outcome is the
-// dispatch result. The PM learns reservation results from the fan-out's
-// CommandOutcome, not from InventoryReserved (Decision 10, F-0009-M).
+// Drives OrderFulfillmentProcessManager across its four observed events. Forward
+// dispatches follow R2 ordering (ADR 0015 editorial, F-0009-N): record-and-save a
+// minted id before the command that carries it dispatches. Reservation outcomes
+// are recorded after dispatch, since the outcome is the dispatch result; the PM
+// learns them from the fan-out's CommandOutcome, not from InventoryReserved
+// (Decision 10, F-0009-M). Compensation lives in OrderFulfillmentCompensation, a
+// collaborator shared with the timeout command handlers (commit 24).
+//
+// Timeout scheduling and cancellation follow the asymmetry the hook table makes
+// legible: schedule inside the state-guarded transition (it opens with the
+// recorded transition and persists with its save, one per state per PM lifetime);
+// cancel unconditional on every delivery (idempotent, and outside-the-guard
+// placement closes the crash-between-save-and-cancel window).
 //
 // Not DI-registered here; registration and dispatcher routing land at commit 27.
-// Compensation branches land at commits 22-23; the two timeout triggers at 24;
-// MarkOrderCompleted at 25.
 public sealed class OrderFulfillmentProcessManagerHandler :
     IProcessManagerHandler<OrderPlaced>,
     IProcessManagerHandler<PaymentAuthorized>,
     IProcessManagerHandler<ShipmentDispatched>,
     IProcessManagerHandler<ShipmentDelivered>
 {
-    // Phase 7's UI replaces this with the customer's real payment-method
-    // reference. Payment.Authorize rejects null/whitespace, so the placeholder
-    // must be non-empty; this satisfies it. No IValidator<AuthorizePayment> is
-    // registered, so nothing else constrains it.
+    // Phase 7's UI replaces this with the customer's real payment-method reference.
+    // Payment.Authorize rejects null/whitespace, so the placeholder must be
+    // non-empty; this satisfies it.
     private const string SystemOrchestratedPaymentMethod = "system-orchestrated";
 
-    private static readonly SystemActor Actor = SystemActors.OrderFulfillment;
+    // Illustrative timeout windows. A real deployment would configure these.
+    // fireAt derives from the inbound event's OccurredUtc, so no clock is injected.
+    private static readonly TimeSpan AwaitingPaymentTimeout = TimeSpan.FromHours(1);
+    private static readonly TimeSpan AwaitingDispatchTimeout = TimeSpan.FromDays(2);
 
-    private static class Steps
-    {
-        public const string AuthorizePayment = "authorize-payment";
-        public const string Reserve = "reserve";
-        public const string ScheduleShipment = "schedule-shipment";
-        public const string VoidPayment = "void-payment";
-        public const string CancelOrder = "cancel-order";
-        public const string Release = "release";
-    }
+    private static readonly SystemActor Actor = SystemActors.OrderFulfillment;
 
     private readonly ICausedCommandBus _bus;
     private readonly IProcessManagerRepository<OrderFulfillmentProcessManager> _pms;
     private readonly IEventStoreRepository<Order> _orders;
     private readonly IEventStoreRepository<Shipment> _shipments;
     private readonly ISkuToInventoryIdStore _skuLookup;
+    private readonly OrderFulfillmentCompensation _compensation;
+    private readonly IDelayQueue _delayQueue;
 
     public OrderFulfillmentProcessManagerHandler(
         ICausedCommandBus bus,
         IProcessManagerRepository<OrderFulfillmentProcessManager> pms,
         IEventStoreRepository<Order> orders,
         IEventStoreRepository<Shipment> shipments,
-        ISkuToInventoryIdStore skuLookup)
+        ISkuToInventoryIdStore skuLookup,
+        OrderFulfillmentCompensation compensation,
+        IDelayQueue delayQueue)
     {
         _bus = bus;
         _pms = pms;
         _orders = orders;
         _shipments = shipments;
         _skuLookup = skuLookup;
+        _compensation = compensation;
+        _delayQueue = delayQueue;
     }
 
-    private static StreamId PmStream(Guid orderId) =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, orderId);
-
-    private static OrderFulfillmentProcessManager Factory(StreamId streamId) => new(streamId);
-
-    // OrderPlaced opens the workflow and asks Billing to authorize payment.
+    // OrderPlaced opens the workflow: schedule the payment timeout and ask Billing
+    // to authorize payment.
     public async Task HandleAsync(EventContext<OrderPlaced> context, CancellationToken ct)
     {
         var e = context.Event;
-        var stream = PmStream(e.OrderId);
-        var pm = await _pms.LoadOrNewAsync(stream, Factory, ct);
+        var stream = OrderFulfillmentStreams.For(e.OrderId);
+        var pm = await _pms.LoadOrNewAsync(stream, OrderFulfillmentStreams.New, ct);
 
         if (pm.State == OrderFulfillmentState.NotStarted)
         {
-            // Mint the PaymentId and persist it before the command that carries
-            // it dispatches: a redelivery reloads it rather than minting anew.
             pm.Start(e.OrderId, e.Total, Guid.NewGuid());
+            await ScheduleTimeoutAsync(
+                stream, new TimeoutAwaitingPaymentForOrder(e.OrderId),
+                OrderFulfillmentSteps.AwaitPaymentTimeout, context.Metadata, AwaitingPaymentTimeout, ct);
             await _pms.SaveAsync(pm, ct);
         }
 
-        // Guarded by AwaitingPayment so a redelivery after the workflow advanced,
-        // or after branch-1 cancellation reached the Cancelled terminal, no-ops.
-        // The same terminal-guard shape ShipmentDelivered uses. While the PM is
-        // still AwaitingPayment, R2 re-dispatches and the pipeline dedups.
         if (pm.State == OrderFulfillmentState.AwaitingPayment)
         {
             var outcome = await _bus.TrySendAsync(
                 new AuthorizePayment(pm.PaymentId, e.OrderId, pm.OrderTotal!, SystemOrchestratedPaymentMethod),
-                context.Metadata,
-                Actor,
-                IdempotencyKeys.ForProcessManager(stream, Steps.AuthorizePayment),
-                ct);
+                context.Metadata, Actor,
+                IdempotencyKeys.ForProcessManager(stream, OrderFulfillmentSteps.AuthorizePayment), ct);
             if (!outcome.IsSuccess)
             {
-                // Branch 1: the payment was never authorized, so compensation
-                // cancels the order with no payment reversal.
-                await CompensateAfterAuthorizationFailureAsync(
-                    pm, e.OrderId, outcome.Failure!, stream, context.Metadata, ct);
+                // Branch 1: the payment was never authorized.
+                await _compensation.CompensateAuthorizeFailureAsync(
+                    pm, outcome.Failure!.Message, context.Metadata, ct);
             }
-            // Success leaves the PM AwaitingPayment, awaiting PaymentAuthorized.
         }
     }
 
-    // PaymentAuthorized records the authorization, fans out one ReserveInventory
-    // per order line, and on full success requests shipment scheduling.
+    // PaymentAuthorized cancels the payment timeout, records the authorization,
+    // fans out one ReserveInventory per line, and on full success schedules the
+    // dispatch timeout and asks for shipment scheduling.
     public async Task HandleAsync(EventContext<PaymentAuthorized> context, CancellationToken ct)
     {
         var e = context.Event;
-        var stream = PmStream(e.OrderId);
-        var pm = await _pms.LoadAsync(stream, Factory, ct)
+        var stream = OrderFulfillmentStreams.For(e.OrderId);
+        var pm = await _pms.LoadAsync(stream, OrderFulfillmentStreams.New, ct)
             ?? throw new InvalidOperationException(
                 $"OrderFulfillment PM {stream} not found handling PaymentAuthorized for order {e.OrderId}.");
 
+        await _delayQueue.CancelAsync(
+            stream, OrderFulfillmentSteps.AwaitPaymentTimeout, "Payment authorized.", ct);
+
         if (pm.State == OrderFulfillmentState.AwaitingPayment)
         {
-            pm.RecordPaymentAuthorized();   // -> AwaitingInventory
+            pm.RecordPaymentAuthorized();
             await _pms.SaveAsync(pm, ct);
         }
 
@@ -139,28 +135,21 @@ public sealed class OrderFulfillmentProcessManagerHandler :
 
             if (AllLinesReserved(pm, order!))
             {
-                pm.CompleteReservations();                     // -> AwaitingShipment
-                pm.RequestShipmentScheduling(Guid.NewGuid());  // mint+persist ShipmentId, -> AwaitingDispatch
-                await _pms.SaveAsync(pm, ct);                  // saved BEFORE the ScheduleShipment dispatch
-            }
-            else if (NoLinesReserved(pm))
-            {
-                // Branch 2: every line failed to reserve. The authorized payment
-                // is voided and the order cancelled; nothing was reserved, so
-                // there is nothing to release.
-                await CompensateAfterAllReservationsFailedAsync(
-                    pm, e.OrderId, stream, context.Metadata, ct);
+                pm.CompleteReservations();
+                pm.RequestShipmentScheduling(Guid.NewGuid());
+                await ScheduleTimeoutAsync(
+                    stream, new TimeoutAwaitingDispatchForOrder(e.OrderId),
+                    OrderFulfillmentSteps.AwaitDispatchTimeout, context.Metadata, AwaitingDispatchTimeout, ct);
+                await _pms.SaveAsync(pm, ct);
             }
             else
             {
-                // Branch 3 (partial reservation): some lines reserved, some
-                // failed. Release the reserved lines, void the authorization,
-                // cancel the order.
-                await CompensateWithReleasesAsync(
-                    pm, e.OrderId, stream, context.Metadata,
-                    pmReason: $"Some inventory reservations failed for order {e.OrderId}.",
-                    cancelReason: "Order fulfillment cancelled after partial inventory reservation.",
-                    ct);
+                // Branches 2/3: zero or partial reservation. CompensateWithReleases
+                // releases whatever reserved (none for the all-failed case), voids,
+                // cancels.
+                await _compensation.CompensateWithReleasesAsync(
+                    pm, $"Inventory reservations could not be completed for order {e.OrderId}.",
+                    context.Metadata, ct);
             }
         }
 
@@ -171,37 +160,28 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 .ToList();
             var outcome = await _bus.TrySendAsync(
                 new ScheduleShipment(pm.ShipmentId, e.OrderId, order.ShippingAddress!, lines),
-                context.Metadata,
-                Actor,
-                IdempotencyKeys.ForProcessManager(stream, Steps.ScheduleShipment),
-                ct);
+                context.Metadata, Actor,
+                IdempotencyKeys.ForProcessManager(stream, OrderFulfillmentSteps.ScheduleShipment), ct);
             if (!outcome.IsSuccess)
             {
-                // Branch 3 (shipment-scheduling failure): all lines were reserved
-                // to reach AwaitingDispatch, so release them all, void the
-                // authorization, cancel the order. The AwaitingDispatch timeout
-                // (commit 24) routes the no-event-arrives case into the same
-                // routine.
-                await CompensateWithReleasesAsync(
-                    pm, e.OrderId, stream, context.Metadata,
-                    pmReason: outcome.Failure!.Message,
-                    cancelReason: "Order fulfillment cancelled after shipment scheduling failed.",
-                    ct);
+                // Branch 3 (shipment-scheduling failure): release the reserved
+                // lines, void, cancel.
+                await _compensation.CompensateWithReleasesAsync(
+                    pm, outcome.Failure!.Message, context.Metadata, ct);
             }
         }
     }
 
-    // ShipmentDispatched carries no OrderId, so the Shipment is loaded to recover
-    // it (ADR 0015 cross-aggregate read), then the PM is found and advanced.
     public async Task HandleAsync(EventContext<ShipmentDispatched> context, CancellationToken ct)
     {
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, ct);
+        await _delayQueue.CancelAsync(
+            pm.StreamId, OrderFulfillmentSteps.AwaitDispatchTimeout, "Shipment dispatched.", ct);
         if (pm.State == OrderFulfillmentState.AwaitingDispatch)
         {
             pm.RecordShipmentDispatched();  // -> AwaitingDelivery
             await _pms.SaveAsync(pm, ct);
         }
-        // No command dispatch.
     }
 
     public async Task HandleAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
@@ -217,6 +197,14 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             await _pms.SaveAsync(pm, ct);
         }
     }
+
+    private Task ScheduleTimeoutAsync(
+        StreamId stream, ICommand command, string step, EventMetadata causing, TimeSpan after, CancellationToken ct)
+        => _delayQueue.ScheduleAsync(
+            command,
+            new DateTimeOffset(causing.OccurredUtc, TimeSpan.Zero) + after,
+            stream, step, causing, Actor,
+            IdempotencyKeys.ForProcessManager(stream, step), ct);
 
     private async Task FanOutReservationsAsync(
         OrderFulfillmentProcessManager pm,
@@ -239,7 +227,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 new ReserveInventory(inventoryId.Value, order.Id, line.LineId, line.Quantity),
                 causing,
                 Actor,
-                IdempotencyKeys.ForProcessManager(stream, Steps.Reserve, line.LineId),
+                IdempotencyKeys.ForProcessManager(stream, OrderFulfillmentSteps.Reserve, line.LineId),
                 ct);
             return (line, inventoryId, outcome: (CommandOutcome?)outcome);
         }));
@@ -277,108 +265,17 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         pm.Reservations.Count == order.Lines.Count
         && pm.Reservations.Values.All(r => r.Status == ReservationLineStatus.Reserved);
 
-    private static bool NoLinesReserved(OrderFulfillmentProcessManager pm) =>
-        pm.Reservations.Count > 0
-        && pm.Reservations.Values.All(r => r.Status != ReservationLineStatus.Reserved);
-
-    // Branch 1: AuthorizePayment failed, so the payment was never authorized.
-    // Cancel the order; there is nothing to void. One terminal save makes the
-    // branch atomic on replay, and the CancelOrder key dedups a re-dispatch.
-    private async Task CompensateAfterAuthorizationFailureAsync(
-        OrderFulfillmentProcessManager pm,
-        Guid orderId,
-        Exception failure,
-        StreamId stream,
-        EventMetadata causing,
-        CancellationToken ct)
-    {
-        pm.StartCancellation(failure.Message);
-        await _bus.TrySendAsync(
-            new CancelOrder(orderId, "Order fulfillment cancelled after authorize-payment failure.", Actor.Id),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.CancelOrder), ct);
-        pm.CompleteAsCancelled();
-        await _pms.SaveAsync(pm, ct);
-    }
-
-    // Branch 2: the payment is authorized but no line reserved. Void the
-    // authorization (the workflow never captures, so void rather than refund) and
-    // cancel the order, void-before-cancel per Decision 11. One terminal save, as
-    // branch 1.
-    private async Task CompensateAfterAllReservationsFailedAsync(
-        OrderFulfillmentProcessManager pm,
-        Guid orderId,
-        StreamId stream,
-        EventMetadata causing,
-        CancellationToken ct)
-    {
-        var reason = $"All inventory reservations failed for order {orderId}.";
-        pm.StartCancellation(reason);
-        pm.RequestVoid(reason);   // -> VoidingPayment
-        await _bus.TrySendAsync(
-            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment after all reservations failed."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.VoidPayment), ct);
-        await _bus.TrySendAsync(
-            new CancelOrder(orderId, "Order fulfillment cancelled after all reservations failed.", Actor.Id),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.CancelOrder), ct);
-        pm.CompleteAsCancelled();   // -> Cancelled
-        await _pms.SaveAsync(pm, ct);
-    }
-
-    // Branch 3 (and branch-4-collapsed): some or all lines reserved, then a
-    // partial fan-out or a ScheduleShipment failure. Release the reserved lines,
-    // void the authorization, cancel the order, release-before-void-before-cancel
-    // per Decision 11. Pattern A like the other branches: record and dispatch
-    // inside the guard, terminal save last. The release set is captured before the
-    // ReleaseReservation calls flip line statuses, and the dispatch reads that
-    // captured list, so the save need not precede the dispatch and no
-    // post-save-pre-dispatch orphan window opens.
-    private async Task CompensateWithReleasesAsync(
-        OrderFulfillmentProcessManager pm,
-        Guid orderId,
-        StreamId stream,
-        EventMetadata causing,
-        string pmReason,
-        string cancelReason,
-        CancellationToken ct)
-    {
-        var linesToRelease = pm.Reservations
-            .Where(r => r.Value.Status == ReservationLineStatus.Reserved)
-            .Select(r => (LineId: r.Key, InventoryId: r.Value.InventoryId!.Value))
-            .ToList();
-
-        pm.StartCancellation(pmReason);
-        foreach (var (lineId, _) in linesToRelease)
-        {
-            pm.ReleaseReservation(lineId);   // -> ReleasingInventory
-        }
-        pm.RequestVoid(pmReason);            // -> VoidingPayment
-        pm.CompleteAsCancelled();            // -> Cancelled
-
-        await Task.WhenAll(linesToRelease.Select(line => _bus.TrySendAsync(
-            new ReleaseInventory(
-                line.InventoryId, line.LineId, "Order fulfillment released the reservation during compensation."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.Release, line.LineId), ct)));
-        await _bus.TrySendAsync(
-            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.VoidPayment), ct);
-        await _bus.TrySendAsync(
-            new CancelOrder(orderId, cancelReason, Actor.Id),
-            causing, Actor, IdempotencyKeys.ForProcessManager(stream, Steps.CancelOrder), ct);
-
-        await _pms.SaveAsync(pm, ct);
-    }
-
-    // The shipment events carry no OrderId. Loading the Shipment recovers it,
-    // and the PM's tracked ShipmentId guards against an event for a shipment this
-    // PM does not own. A clear error on that anomaly beats a silent no-op.
+    // The shipment events carry no OrderId. Loading the Shipment recovers it, and
+    // the PM's tracked ShipmentId guards against an event for a shipment this PM
+    // does not own. A clear error on that anomaly beats a silent no-op.
     private async Task<(OrderFulfillmentProcessManager Pm, Shipment Shipment)> CorrelateByShipmentAsync(
         Guid shipmentId, CancellationToken ct)
     {
         var shipment = await _shipments.LoadAsync(shipmentId, ct)
             ?? throw new InvalidOperationException(
                 $"Shipment {shipmentId} not found correlating a shipment event.");
-        var stream = PmStream(shipment.OrderId);
-        var pm = await _pms.LoadAsync(stream, Factory, ct)
+        var stream = OrderFulfillmentStreams.For(shipment.OrderId);
+        var pm = await _pms.LoadAsync(stream, OrderFulfillmentStreams.New, ct)
             ?? throw new InvalidOperationException(
                 $"OrderFulfillment PM {stream} not found for shipment {shipmentId}.");
         if (pm.ShipmentId != shipmentId)

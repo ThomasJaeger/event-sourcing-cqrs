@@ -293,6 +293,121 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Schedules_on_enter_and_cancels_on_leave_through_the_happy_path()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        var line = Guid.NewGuid();
+        harness.MapSku("SKU-1", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (line, "SKU-1", 1)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        harness.DelayQueue.Scheduled.Where(s => s.Step == "await-payment-timeout").Should().ContainSingle();
+
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(30m), "card", Now));
+        harness.DelayQueue.Cancelled.Where(c => c.Step == "await-payment-timeout").Should().ContainSingle();
+        harness.DelayQueue.Scheduled.Where(s => s.Step == "await-dispatch-timeout").Should().ContainSingle();
+
+        var shipmentId = (await harness.LoadPm(orderId))!.ShipmentId;
+        await harness.SeedShipment(Shipment.Schedule(
+            shipmentId, orderId, Destination, [new ShipmentLine(orderId, line, "SKU-1", 1)], Now));
+        await harness.Receive(new ShipmentDispatched(shipmentId, "carrier-ref", Now));
+        harness.DelayQueue.Cancelled.Where(c => c.Step == "await-dispatch-timeout").Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AwaitingPayment_timeout_cancels_the_order()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        await harness.DispatchTimeoutAwaitingPayment(orderId);
+
+        var stream = PmStream(orderId);
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:cancel-order");
+        harness.Dispatched.Should().NotContain(d => d.Command is VoidPayment);
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task AwaitingPayment_timeout_after_payment_authorized_is_a_no_op()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        harness.MapSku("SKU-1", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(30m), "card", Now));
+        var stateBefore = (await harness.LoadPm(orderId))!.State;
+        var dispatchedBefore = harness.Dispatched.Count;
+
+        await harness.DispatchTimeoutAwaitingPayment(orderId);
+
+        // The PM advanced past AwaitingPayment; the late timeout state-guards and no-ops.
+        (await harness.LoadPm(orderId))!.State.Should().Be(stateBefore);
+        harness.Dispatched.Count.Should().Be(dispatchedBefore);
+    }
+
+    [Fact]
+    public async Task AwaitingDispatch_timeout_releases_voids_and_cancels()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        var line = Guid.NewGuid();
+        harness.MapSku("SKU-1", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (line, "SKU-1", 2)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(30m), "card", Now));
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.AwaitingDispatch);
+
+        await harness.DispatchTimeoutAwaitingDispatch(orderId);
+
+        var stream = PmStream(orderId);
+        harness.Dispatched.Where(d => d.Command is ReleaseInventory).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:release:{line:N}");
+        harness.Dispatched.Where(d => d.Command is VoidPayment).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle();
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task PaymentAuthorized_redelivery_cancels_the_payment_timeout_on_every_delivery()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        harness.MapSku("SKU-1", Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        var auth = new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(30m), "card", Now);
+        await harness.Receive(auth);
+        await harness.Receive(auth);
+
+        // Cancel is unconditional on every delivery (Pattern C), so it fires twice.
+        harness.DelayQueue.Cancelled.Where(c => c.Step == "await-payment-timeout").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task OrderPlaced_redelivery_schedules_the_payment_timeout_exactly_once()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        var placed = new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now);
+        await harness.Receive(placed);
+        await harness.Receive(placed);
+
+        // Schedule is inside the NotStarted guard (Pattern S), so it fires only once.
+        harness.DelayQueue.Scheduled.Where(s => s.Step == "await-payment-timeout").Should().ContainSingle();
+    }
+
     private static Order BuildOrder(Guid orderId, params (Guid LineId, string Sku, int Qty)[] lines)
     {
         var order = Order.Draft(orderId, Guid.NewGuid(), Now);
