@@ -21,5 +21,6 @@ public sealed class SalesEventTypeProvider : IEventTypeProvider
         typeof(OrderPlaced),
         typeof(OrderShipped),
         typeof(OrderCancelled),
+        typeof(OrderCompleted),
     ];
 }

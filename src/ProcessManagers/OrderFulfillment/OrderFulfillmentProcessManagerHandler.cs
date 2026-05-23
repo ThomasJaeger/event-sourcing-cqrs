@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
+using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -189,10 +190,16 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, ct);
         if (pm.State == OrderFulfillmentState.AwaitingDelivery)
         {
-            // Commit 21 records delivery and completes in one transition pair.
-            // Commit 25 splits this: record delivery, save, dispatch
-            // MarkOrderCompleted, then Complete and save.
+            // Pattern A with an internal dispatch: record delivery, dispatch
+            // MarkOrderCompleted, record the terminal, one save. MarkOrderCompleted
+            // carries OrderId from the loaded Shipment, not a PM-minted id, so no
+            // save-before-dispatch (R2) is needed; the single save closes the orphan
+            // window and a redelivery re-dispatches on the mark-completed key.
             pm.RecordShipmentDelivered();
+            await _bus.TrySendAsync(
+                new MarkOrderCompleted(pm.OrderId),
+                context.Metadata, Actor,
+                IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.MarkCompleted), ct);
             pm.Complete();                  // -> Completed
             await _pms.SaveAsync(pm, ct);
         }

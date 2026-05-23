@@ -94,6 +94,10 @@ public sealed class Order : AggregateRoot
         {
             throw new DomainException($"Cannot cancel order {Id}: already shipped.");
         }
+        if (_status == OrderStatus.Completed)
+        {
+            throw new DomainException($"Cannot cancel order {Id}: already completed.");
+        }
         Raise(new OrderCancelled(Id, reason, issuedByUserId, utcNow));
     }
 
@@ -104,6 +108,19 @@ public sealed class Order : AggregateRoot
             throw new DomainException($"Cannot ship order {Id}: order is {_status}.");
         }
         Raise(new OrderShipped(Id, carrier, trackingNumber, utcNow));
+    }
+
+    // The OrderFulfillment process manager marks the order completed when its
+    // shipment is delivered (Decision 13). The order is Placed at that point, not
+    // Shipped: shipping is the Shipment aggregate's lifecycle, not the Order's, so
+    // the Order's own status goes Placed -> Completed with no Shipped step.
+    public void Complete(DateTime utcNow)
+    {
+        if (_status != OrderStatus.Placed)
+        {
+            throw new DomainException($"Cannot complete order {Id}: order is {_status}.");
+        }
+        Raise(new OrderCompleted(Id, utcNow));
     }
 
     protected override void Apply(IDomainEvent @event)
@@ -138,6 +155,10 @@ public sealed class Order : AggregateRoot
 
             case OrderShipped:
                 _status = OrderStatus.Shipped;
+                break;
+
+            case OrderCompleted:
+                _status = OrderStatus.Completed;
                 break;
 
             default:

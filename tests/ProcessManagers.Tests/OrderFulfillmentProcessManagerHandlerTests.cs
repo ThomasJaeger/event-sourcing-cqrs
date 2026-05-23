@@ -55,6 +55,8 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
                 new[] { $"{stream.Value}:reserve:{line1:N}", $"{stream.Value}:reserve:{line2:N}" });
         harness.Dispatched.Where(d => d.Command is ScheduleShipment).Should().ContainSingle()
             .Which.IdempotencyKey.Should().Be($"{stream.Value}:schedule-shipment");
+        harness.Dispatched.Where(d => d.Command is MarkOrderCompleted).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:mark-completed");
         (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Completed);
     }
 

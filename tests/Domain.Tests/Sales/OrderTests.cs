@@ -281,4 +281,72 @@ public class OrderTests
             .ThenThrows<DomainException>()
             .WithMessage("*order is Shipped*");
     }
+
+    [Fact]
+    public void Complete_transitions_to_Completed_from_Placed()
+    {
+        new AggregateTest<Order>()
+            .Given(
+                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
+                new ShippingAddressSet(OrderId, Shipping, At),
+                new OrderPlaced(OrderId, CustomerId, TenUsd, At))
+            .When(o => o.Complete(At))
+            .Then(new OrderCompleted(OrderId, At));
+    }
+
+    [Fact]
+    public void Complete_throws_when_order_is_Draft()
+    {
+        new AggregateTest<Order>()
+            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .When(o => o.Complete(At))
+            .ThenThrows<DomainException>()
+            .WithMessage("*order is Draft*");
+    }
+
+    [Fact]
+    public void Complete_throws_when_order_is_Shipped()
+    {
+        new AggregateTest<Order>()
+            .Given(
+                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
+                new ShippingAddressSet(OrderId, Shipping, At),
+                new OrderPlaced(OrderId, CustomerId, TenUsd, At),
+                new OrderShipped(OrderId, "UPS", "1Z999", At))
+            .When(o => o.Complete(At))
+            .ThenThrows<DomainException>()
+            .WithMessage("*order is Shipped*");
+    }
+
+    [Fact]
+    public void Complete_throws_when_already_Completed()
+    {
+        new AggregateTest<Order>()
+            .Given(
+                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
+                new ShippingAddressSet(OrderId, Shipping, At),
+                new OrderPlaced(OrderId, CustomerId, TenUsd, At),
+                new OrderCompleted(OrderId, At))
+            .When(o => o.Complete(At))
+            .ThenThrows<DomainException>()
+            .WithMessage("*order is Completed*");
+    }
+
+    [Fact]
+    public void Cancel_throws_when_Completed()
+    {
+        new AggregateTest<Order>()
+            .Given(
+                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
+                new ShippingAddressSet(OrderId, Shipping, At),
+                new OrderPlaced(OrderId, CustomerId, TenUsd, At),
+                new OrderCompleted(OrderId, At))
+            .When(o => o.Cancel("Reason", UserId, At))
+            .ThenThrows<DomainException>()
+            .WithMessage("*already completed*");
+    }
 }

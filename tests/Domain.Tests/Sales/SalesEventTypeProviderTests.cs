@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.Domain.Tests.Sales;
 public class SalesEventTypeProviderTests
 {
     [Fact]
-    public void GetEventTypes_returns_the_seven_Order_events_in_canonical_order()
+    public void GetEventTypes_returns_the_eight_Order_events_in_canonical_order()
     {
         var provider = new SalesEventTypeProvider();
 
@@ -19,6 +19,7 @@ public class SalesEventTypeProviderTests
             typeof(ShippingAddressSet),
             typeof(OrderPlaced),
             typeof(OrderShipped),
-            typeof(OrderCancelled));
+            typeof(OrderCancelled),
+            typeof(OrderCompleted));
     }
 }

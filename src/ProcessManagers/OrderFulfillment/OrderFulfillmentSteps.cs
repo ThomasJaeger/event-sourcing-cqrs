@@ -15,4 +15,5 @@ internal static class OrderFulfillmentSteps
     public const string Release = "release";
     public const string AwaitPaymentTimeout = "await-payment-timeout";
     public const string AwaitDispatchTimeout = "await-dispatch-timeout";
+    public const string MarkCompleted = "mark-completed";
 }

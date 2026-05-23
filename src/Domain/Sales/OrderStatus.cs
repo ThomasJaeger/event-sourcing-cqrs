@@ -5,5 +5,6 @@ public enum OrderStatus
     Draft,
     Placed,
     Cancelled,
-    Shipped
+    Shipped,
+    Completed
 }
