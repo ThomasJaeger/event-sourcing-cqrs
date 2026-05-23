@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
+using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -145,6 +146,71 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         await harness.Receive(new ShipmentDispatched(shipmentId, "carrier-ref", Now));
 
         (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.AwaitingDelivery);
+    }
+
+    [Fact]
+    public async Task AuthorizePayment_failure_cancels_the_order_and_voids_nothing()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        harness.Bus.OutcomeFor = cmd => cmd is AuthorizePayment
+            ? CommandOutcome.Failed(new DomainException("payment declined"))
+            : CommandOutcome.Success();
+        var orderId = Guid.NewGuid();
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+
+        var stream = PmStream(orderId);
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:cancel-order");
+        // Branch 1 voids nothing: the payment was never authorized.
+        harness.Dispatched.Should().NotContain(d => d.Command is VoidPayment);
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task AuthorizePayment_failure_redelivery_stays_terminal_without_re_dispatching()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        harness.Bus.OutcomeFor = cmd => cmd is AuthorizePayment
+            ? CommandOutcome.Failed(new DomainException("payment declined"))
+            : CommandOutcome.Success();
+        var orderId = Guid.NewGuid();
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+
+        var placed = new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now);
+        await harness.Receive(placed);
+        var versionAfterFirst = (await harness.LoadPm(orderId))!.Version;
+        await harness.Receive(placed);
+        var pm = await harness.LoadPm(orderId);
+
+        // The Cancelled terminal makes the second delivery a no-op: the
+        // AwaitingPayment guard fails, so no re-record and no re-dispatch.
+        pm!.State.Should().Be(OrderFulfillmentState.Cancelled);
+        pm.Version.Should().Be(versionAfterFirst);
+        harness.Dispatched.Where(d => d.Command is AuthorizePayment).Should().ContainSingle();
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task All_reservations_failing_voids_the_payment_and_cancels_the_order()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        // No MapSku: every SKU lookup returns null, so every line fails to reserve.
+        var orderId = Guid.NewGuid();
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1), (Guid.NewGuid(), "SKU-2", 2)));
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(40m), Now));
+        await harness.Receive(new PaymentAuthorized(Guid.NewGuid(), orderId, Usd(40m), "card", Now));
+
+        var stream = PmStream(orderId);
+        harness.Dispatched.Where(d => d.Command is VoidPayment).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:void-payment");
+        harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle()
+            .Which.IdempotencyKey.Should().Be($"{stream.Value}:cancel-order");
+        // The workflow never reached AwaitingDispatch, so no shipment is scheduled.
+        harness.Dispatched.Should().NotContain(d => d.Command is ScheduleShipment);
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
     }
 
     private static Order BuildOrder(Guid orderId, params (Guid LineId, string Sku, int Qty)[] lines)

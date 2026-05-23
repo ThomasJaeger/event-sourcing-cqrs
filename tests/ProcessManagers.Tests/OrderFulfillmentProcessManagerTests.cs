@@ -177,15 +177,15 @@ public sealed class OrderFulfillmentProcessManagerTests
     }
 
     [Fact]
-    public void RequestRefund_enters_refunding_payment()
+    public void RequestVoid_enters_voiding_payment()
     {
         var pm = ThroughPayment();
-        pm.StartCancellation("shipment dispatch failed");
+        pm.StartCancellation("all reservations failed");
 
-        pm.RequestRefund("compensating refund");
+        pm.RequestVoid("voiding the authorized payment");
 
-        pm.State.Should().Be(OrderFulfillmentState.RefundingPayment);
-        pm.GetUncommittedEvents().Last().Should().BeOfType<RefundRequested>();
+        pm.State.Should().Be(OrderFulfillmentState.VoidingPayment);
+        pm.GetUncommittedEvents().Last().Should().BeOfType<PaymentVoidRequested>();
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class OrderFulfillmentProcessManagerTests
 
         var compensated = ThroughPayment();
         compensated.StartCancellation("all reservations failed");
-        compensated.RequestRefund("compensating refund");
+        compensated.RequestVoid("voiding the authorized payment");
         compensated.CompleteAsCancelled();
         compensated.State.Should().Be(OrderFulfillmentState.Cancelled);
         compensated.GetUncommittedEvents().Last().Should().BeOfType<OrderFulfillmentCompleted>()

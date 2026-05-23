@@ -23,7 +23,7 @@ public sealed class OrderFulfillmentEventTypeProvider : IProcessManagerEventType
         typeof(ShipmentDeliveryRecorded),
         typeof(OrderFulfillmentCancellationStarted),
         typeof(ReservationReleased),
-        typeof(RefundRequested),
+        typeof(PaymentVoidRequested),
         typeof(OrderFulfillmentCompleted),
     ];
 }

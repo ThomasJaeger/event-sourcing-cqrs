@@ -72,8 +72,8 @@ public sealed class OrderFulfillmentProcessManager : ProcessManager
     public void ReleaseReservation(Guid lineId) =>
         RecordTransition(new ReservationReleased(lineId));
 
-    public void RequestRefund(string reason) =>
-        RecordTransition(new RefundRequested(reason));
+    public void RequestVoid(string reason) =>
+        RecordTransition(new PaymentVoidRequested(reason));
 
     public void Complete() =>
         RecordTransition(new OrderFulfillmentCompleted(OrderFulfillmentOutcome.Completed));
@@ -136,8 +136,8 @@ public sealed class OrderFulfillmentProcessManager : ProcessManager
                 _state = OrderFulfillmentState.ReleasingInventory;
                 break;
 
-            case RefundRequested:
-                _state = OrderFulfillmentState.RefundingPayment;
+            case PaymentVoidRequested:
+                _state = OrderFulfillmentState.VoidingPayment;
                 break;
 
             case OrderFulfillmentCompleted e:

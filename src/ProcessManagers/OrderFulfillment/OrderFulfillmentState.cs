@@ -15,7 +15,7 @@ public enum OrderFulfillmentState
     AwaitingDispatch,
     AwaitingDelivery,
     ReleasingInventory,
-    RefundingPayment,
+    VoidingPayment,
     Completed,
     Cancelled
 }
