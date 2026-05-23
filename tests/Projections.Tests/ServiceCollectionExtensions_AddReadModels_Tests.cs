@@ -76,7 +76,19 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<InventoryReleased>>().Should().BeSameAs(inventoryDashboard);
 
         var orderToPayment = provider.GetRequiredService<OrderIdToPaymentIdProjection>();
-        provider.GetRequiredService<IEventHandler<PaymentAuthorized>>().Should().BeSameAs(orderToPayment);
+        // PaymentAuthorized now has two handlers (OrderIdToPaymentId and OrderDetail,
+        // which records the payment-to-order mapping); ShipmentReturned now has two
+        // (OrderList and OrderDetail). The five OrderDetail-only events the projection
+        // gained at commit 17 stay single-handler.
+        provider.GetServices<IEventHandler<PaymentAuthorized>>()
+            .Should().Contain(orderToPayment).And.Contain(orderDetail);
+        provider.GetServices<IEventHandler<ShipmentReturned>>()
+            .Should().Contain(orderList).And.Contain(orderDetail);
+        provider.GetRequiredService<IEventHandler<ShipmentDispatched>>().Should().BeSameAs(orderDetail);
+        provider.GetRequiredService<IEventHandler<ShipmentDelivered>>().Should().BeSameAs(orderDetail);
+        provider.GetRequiredService<IEventHandler<PaymentCaptured>>().Should().BeSameAs(orderDetail);
+        provider.GetRequiredService<IEventHandler<PaymentRefunded>>().Should().BeSameAs(orderDetail);
+        provider.GetRequiredService<IEventHandler<PaymentVoided>>().Should().BeSameAs(orderDetail);
 
         var projections = provider.GetServices<IProjection>().ToList();
         projections.Should().HaveCount(6);

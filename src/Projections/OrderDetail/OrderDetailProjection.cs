@@ -1,21 +1,26 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
+using Microsoft.Extensions.Logging;
 
 namespace EventSourcingCqrs.Projections.OrderDetail;
 
-// Pattern from Chapter 13: the order detail read model. Subscribes across three
-// contexts and maintains a header row, line items, and a JSONB event timeline with
-// one entry per observed event. This commit ships the eight Sales handlers plus the
-// ShipmentScheduled mapping populator (nine of the sixteen subscriptions); the three
-// shipment-update handlers and the four Billing handlers land in commit 17.
+// Pattern from Chapter 13: the order detail read model. Subscribes to all sixteen
+// events across three contexts (eight Sales, four Fulfillment shipment, four Billing)
+// and maintains a header row, line items, and a JSONB event timeline with one entry
+// per observed event.
 //
-// Every handler reads the checkpoint, applies its writes, appends one timeline
-// entry, and commits in one transaction; the skip-guard makes redelivery a no-op.
-// All nine events here carry OrderId on the payload, so no cross-aggregate lookup is
-// needed (that is commit 17, for the shipment-update and payment follow-on events).
+// Every handler reads the checkpoint, applies its writes, appends one timeline entry,
+// and commits in one transaction; the skip-guard makes redelivery a no-op. The events
+// that carry OrderId on the payload (the eight Sales events, ShipmentScheduled, and
+// PaymentAuthorized) key the read model directly. The six that carry only their own
+// aggregate's id (the three shipment-update events and the three OrderId-less payment
+// events) resolve OrderId through the projection-private lookups recorded by
+// ShipmentScheduled and PaymentAuthorized; a missing mapping no-ops with a debug log
+// and still advances the checkpoint. See ADR 0020.
 public sealed class OrderDetailProjection
     : IProjection,
       IEventHandler<OrderDrafted>,
@@ -26,23 +31,35 @@ public sealed class OrderDetailProjection
       IEventHandler<OrderShipped>,
       IEventHandler<OrderCancelled>,
       IEventHandler<OrderCompleted>,
-      IEventHandler<ShipmentScheduled>
+      IEventHandler<ShipmentScheduled>,
+      IEventHandler<ShipmentDispatched>,
+      IEventHandler<ShipmentDelivered>,
+      IEventHandler<ShipmentReturned>,
+      IEventHandler<PaymentAuthorized>,
+      IEventHandler<PaymentCaptured>,
+      IEventHandler<PaymentRefunded>,
+      IEventHandler<PaymentVoided>
 {
     public string Name => "order-detail";
 
     private readonly IOrderDetailStore _store;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ILogger<OrderDetailProjection> _logger;
 
     // The shared JsonSerializerOptions singleton (registered by AddPostgresEventStore)
     // is injected so the timeline payload serialises byte-identically to the event
-    // store's own payload column. ILogger arrives in commit 17 with the not-found
-    // handlers that use it.
-    public OrderDetailProjection(IOrderDetailStore store, JsonSerializerOptions jsonOptions)
+    // store's own payload column. The logger backs the six not-found debug branches.
+    public OrderDetailProjection(
+        IOrderDetailStore store,
+        JsonSerializerOptions jsonOptions,
+        ILogger<OrderDetailProjection> logger)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(jsonOptions);
+        ArgumentNullException.ThrowIfNull(logger);
         _store = store;
         _jsonOptions = jsonOptions;
+        _logger = logger;
     }
 
     public async Task HandleAsync(EventContext<OrderDrafted> context, CancellationToken ct)
@@ -176,6 +193,177 @@ public sealed class OrderDetailProjection
         await uow.InsertShipmentMappingAsync(
             new OrderDetailShipmentRow(e.ShipmentId, e.OrderId, e.ScheduledUtc), ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    // ShipmentDispatched carries only ShipmentId. Resolve OrderId through the mapping
+    // ShipmentScheduled recorded, then append the timeline entry. It owns no header
+    // column. An unmapped shipment no-ops with a debug log; the checkpoint advances.
+    public async Task HandleAsync(EventContext<ShipmentDispatched> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByShipmentIdAsync(e.ShipmentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "ShipmentDispatched for shipment {ShipmentId} has no order_detail_shipments " +
+                "mapping; skipping timeline append.",
+                e.ShipmentId);
+        }
+        else
+        {
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    public async Task HandleAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByShipmentIdAsync(e.ShipmentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "ShipmentDelivered for shipment {ShipmentId} has no order_detail_shipments " +
+                "mapping; skipping timeline append.",
+                e.ShipmentId);
+        }
+        else
+        {
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    // ShipmentReturned resolves OrderId through the mapping, marks the header
+    // returned (returned_utc only; the Sales status stays as it was, D5), and appends
+    // the timeline entry. An unmapped shipment no-ops with a debug log.
+    public async Task HandleAsync(EventContext<ShipmentReturned> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByShipmentIdAsync(e.ShipmentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "ShipmentReturned for shipment {ShipmentId} has no order_detail_shipments " +
+                "mapping; skipping return-state update.",
+                e.ShipmentId);
+        }
+        else
+        {
+            await uow.MarkReturnedAsync(
+                orderId.Value, e.ReturnedUtc, context.Metadata.OccurredUtc, ct);
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    // PaymentAuthorized carries both PaymentId and OrderId. Record the mapping so the
+    // three OrderId-less payment events can resolve their order, then append the
+    // timeline entry. Payment state lives in the timeline only for v1; no header
+    // column changes.
+    public async Task HandleAsync(EventContext<PaymentAuthorized> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        await uow.InsertPaymentMappingAsync(
+            new OrderDetailPaymentRow(e.PaymentId, e.OrderId, e.AuthorizedUtc), ct);
+        await AppendTimelineAsync(uow, e.OrderId, context, ct);
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    public async Task HandleAsync(EventContext<PaymentCaptured> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByPaymentIdAsync(e.PaymentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "PaymentCaptured for payment {PaymentId} has no order_detail_payments " +
+                "mapping; skipping timeline append.",
+                e.PaymentId);
+        }
+        else
+        {
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    public async Task HandleAsync(EventContext<PaymentRefunded> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByPaymentIdAsync(e.PaymentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "PaymentRefunded for payment {PaymentId} has no order_detail_payments " +
+                "mapping; skipping timeline append.",
+                e.PaymentId);
+        }
+        else
+        {
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
+        await uow.CommitAsync(Name, context.GlobalPosition, ct);
+    }
+
+    public async Task HandleAsync(EventContext<PaymentVoided> context, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await using var uow = await _store.BeginAsync(ct);
+        if (await uow.GetCheckpointAsync(Name, ct) >= context.GlobalPosition)
+        {
+            return;
+        }
+        var e = context.Event;
+        var orderId = await uow.GetOrderIdByPaymentIdAsync(e.PaymentId, ct);
+        if (orderId is null)
+        {
+            _logger.LogDebug(
+                "PaymentVoided for payment {PaymentId} has no order_detail_payments " +
+                "mapping; skipping timeline append.",
+                e.PaymentId);
+        }
+        else
+        {
+            await AppendTimelineAsync(uow, orderId.Value, context, ct);
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 

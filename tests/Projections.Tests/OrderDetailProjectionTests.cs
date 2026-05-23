@@ -1,11 +1,13 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Projections.OrderDetail;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace EventSourcingCqrs.Projections.Tests;
@@ -18,6 +20,7 @@ public class OrderDetailProjectionTests
 {
     private static readonly DateTime At = new(2026, 5, 20, 9, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime SystemAt = new(2026, 5, 20, 9, 0, 5, DateTimeKind.Utc);
+    private static readonly Address Addr = new("12 Main St", "Portland", "97201", "US");
 
     [Fact]
     public async Task OrderDrafted_creates_header_as_draft_and_appends_timeline()
@@ -367,8 +370,250 @@ public class OrderDetailProjectionTests
         (await store.GetLinesAsync(orderId, CancellationToken.None)).Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ShipmentDispatched_appends_timeline_when_the_shipment_is_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var shipmentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, Addr, [], At), position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new ShipmentDispatched(shipmentId, "1Z-REF", At), position: 2), CancellationToken.None);
+
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(ShipmentDispatched));
+    }
+
+    [Fact]
+    public async Task ShipmentDelivered_appends_timeline_when_the_shipment_is_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var shipmentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, Addr, [], At), position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new ShipmentDelivered(shipmentId, At), position: 2), CancellationToken.None);
+
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(ShipmentDelivered));
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_marks_returned_and_appends_timeline_when_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var shipmentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, Addr, [], At), position: 2),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(shipmentId, "damaged", At), position: 3), CancellationToken.None);
+
+        var header = (await store.GetHeaderAsync(orderId, CancellationToken.None))!;
+        header.ReturnedUtc.Should().Be(At);
+        header.Status.Should().Be(OrderStatus.Draft);
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(ShipmentReturned));
+    }
+
+    [Fact]
+    public async Task PaymentAuthorized_records_the_mapping_and_appends_timeline()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 1),
+            CancellationToken.None);
+
+        await using var read = await store.BeginAsync(CancellationToken.None);
+        (await read.GetOrderIdByPaymentIdAsync(paymentId, CancellationToken.None)).Should().Be(orderId);
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(PaymentAuthorized));
+    }
+
+    [Fact]
+    public async Task PaymentCaptured_appends_timeline_when_the_payment_is_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new PaymentCaptured(paymentId, new Money(50m, Currency.USD), At), position: 2),
+            CancellationToken.None);
+
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(PaymentCaptured));
+    }
+
+    [Fact]
+    public async Task PaymentRefunded_appends_timeline_when_the_payment_is_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new PaymentRefunded(paymentId, new Money(50m, Currency.USD), "returned", At), position: 2),
+            CancellationToken.None);
+
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(PaymentRefunded));
+    }
+
+    [Fact]
+    public async Task PaymentVoided_appends_timeline_when_the_payment_is_mapped()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new PaymentVoided(paymentId, "expired", At), position: 2), CancellationToken.None);
+
+        (await store.GetTimelineAsync(orderId, CancellationToken.None))
+            .Should().Contain(t => t.EventType == nameof(PaymentVoided));
+    }
+
+    [Fact]
+    public async Task ShipmentDispatched_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new ShipmentDispatched(Guid.NewGuid(), "1Z-REF", At), position: 5),
+            CancellationToken.None);
+
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ShipmentDelivered_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new ShipmentDelivered(Guid.NewGuid(), At), position: 5), CancellationToken.None);
+
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_with_no_mapping_leaves_the_header_unmarked()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+
+        // No ShipmentScheduled recorded the mapping, so the return cannot resolve an
+        // order; the header's returned_utc stays null and the checkpoint advances.
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(Guid.NewGuid(), "damaged", At), position: 2),
+            CancellationToken.None);
+
+        (await store.GetHeaderAsync(orderId, CancellationToken.None))!.ReturnedUtc.Should().BeNull();
+        store.Checkpoints[projection.Name].Should().Be(2);
+    }
+
+    [Fact]
+    public async Task PaymentCaptured_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new PaymentCaptured(Guid.NewGuid(), new Money(50m, Currency.USD), At), position: 5),
+            CancellationToken.None);
+
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task PaymentRefunded_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new PaymentRefunded(Guid.NewGuid(), new Money(50m, Currency.USD), "returned", At),
+                position: 5),
+            CancellationToken.None);
+
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task PaymentVoided_with_no_mapping_no_ops_and_advances_the_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new PaymentVoided(Guid.NewGuid(), "expired", At), position: 5), CancellationToken.None);
+
+        store.Checkpoints[projection.Name].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task PaymentAuthorized_skips_when_position_is_at_or_below_checkpoint()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        // The draft commits at position 10, so the checkpoint sits at 10.
+        await projection.HandleAsync(
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 10), CancellationToken.None);
+
+        // PaymentAuthorized redelivered at position 10 returns early, so the
+        // payment-to-order mapping is never recorded.
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 10),
+            CancellationToken.None);
+
+        await using var read = await store.BeginAsync(CancellationToken.None);
+        (await read.GetOrderIdByPaymentIdAsync(paymentId, CancellationToken.None)).Should().BeNull();
+    }
+
     private static OrderDetailProjection Projection(InMemoryOrderDetailStore store)
-        => new(store, JsonOptions);
+        => new(store, JsonOptions, NullLogger<OrderDetailProjection>.Instance);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
