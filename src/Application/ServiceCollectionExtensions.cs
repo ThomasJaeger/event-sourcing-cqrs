@@ -39,6 +39,26 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IQueryBus, QueryBus>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
 
+        // Query types resolve through QueryTypeRegistry for the /queries HTTP
+        // endpoint's type-discriminator dispatch (ADR 0022). Populated from
+        // IQueryTypeProvider exactly as the event-store registries are populated
+        // from their providers in AddPostgresEventStore, walked lazily at first
+        // resolution. TryAddSingleton so a host can pre-register a populated
+        // registry and win. Empty until a host registers query providers (the Api
+        // and Web hosts do; the Workers host registers none and never resolves it).
+        services.TryAddSingleton<QueryTypeRegistry>(sp =>
+        {
+            var registry = new QueryTypeRegistry();
+            foreach (var provider in sp.GetServices<IQueryTypeProvider>())
+            {
+                foreach (var queryType in provider.GetQueryTypes())
+                {
+                    registry.Register(queryType);
+                }
+            }
+            return registry;
+        });
+
         // Logging is outermost so its one-log-line-per-command guarantee covers
         // short-circuited validation failures and deduplicated duplicates alike.
         // Idempotency sits inside logging and before validation (ADR 0016): a

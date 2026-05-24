@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Application.Queries.Fulfillment;
+using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.InMemory;
 using FluentAssertions;
@@ -20,6 +22,26 @@ public class AddApplicationTests
 
         scope.ServiceProvider.GetRequiredService<IProcessManagerRepository<TestPm>>()
             .Should().BeOfType<ProcessManagerRepository<TestPm>>();
+    }
+
+    [Fact]
+    public void AddApplication_populates_QueryTypeRegistry_from_registered_providers()
+    {
+        var services = new ServiceCollection();
+        // Providers may land after AddApplication: the walk enumerates
+        // GetServices<IQueryTypeProvider>() at first resolution, not at
+        // registration time, mirroring the event-store registry walks.
+        services.AddApplication();
+        services.AddSingleton<IQueryTypeProvider, SalesQueryTypeProvider>();
+        services.AddSingleton<IQueryTypeProvider, FulfillmentQueryTypeProvider>();
+
+        using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<QueryTypeRegistry>();
+
+        registry.TypeFor(nameof(ListOrders)).Should().Be(typeof(ListOrders));
+        registry.TypeFor(nameof(GetAllInventoryDashboard))
+            .Should().Be(typeof(GetAllInventoryDashboard));
+        registry.EnumerateQueries().Should().HaveCount(5);
     }
 
     private sealed class TestPm : ProcessManager
