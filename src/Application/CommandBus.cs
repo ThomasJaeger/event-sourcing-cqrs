@@ -30,7 +30,7 @@ public sealed class CommandBus : ICommandBus
     }
 
     public Task SendAsync(ICommand command, CancellationToken ct)
-        => SendInternal(command, Guid.NewGuid(), ct);
+        => SendInternal(command, Guid.NewGuid(), idempotencyKey: null, ct);
 
     // Overload for callers that already have a correlation ID (HTTP middleware
     // forwarding an X-Correlation-Id header, a process manager continuing an
@@ -39,12 +39,23 @@ public sealed class CommandBus : ICommandBus
     // directly or push a pre-built context onto the accessor before calling
     // the interface form.
     public Task SendAsync(ICommand command, Guid correlationId, CancellationToken ct)
-        => SendInternal(command, correlationId, ct);
+        => SendInternal(command, correlationId, idempotencyKey: null, ct);
 
-    private Task SendInternal(ICommand command, Guid correlationId, CancellationToken ct)
+    // User-dispatch with a caller-supplied idempotency key (ADR 0021). Mints a
+    // fresh context exactly like the bare overload and threads the key into it,
+    // so IdempotencyBehavior can dedupe a retried command. The PM seam stays the
+    // place where a caller supplies all of the context; this path only adds a
+    // key to the otherwise-minted user context.
+    public Task SendAsync(ICommand command, string? idempotencyKey, CancellationToken ct)
+        => SendInternal(command, Guid.NewGuid(), idempotencyKey, ct);
+
+    private Task SendInternal(
+        ICommand command, Guid correlationId, string? idempotencyKey, CancellationToken ct)
         // ActorId stays Guid.Empty until Phase 7's HTTP middleware maps an
         // authenticated principal. ServiceName reads from ApplicationOptions,
         // defaulting to "Workers" when the host has not configured it.
+        // IdempotencyKey is null on the bare and correlation-id paths and carries
+        // the caller's key on the idempotency overload (ADR 0021).
         => DispatchAsync(
             command,
             (timeProvider, options) => new CommandContext(timeProvider)
@@ -52,7 +63,8 @@ public sealed class CommandBus : ICommandBus
                 CorrelationId = correlationId,
                 CausationCommandId = Guid.NewGuid(),
                 ActorId = Guid.Empty,
-                ServiceName = options.ServiceName
+                ServiceName = options.ServiceName,
+                IdempotencyKey = idempotencyKey
             },
             ct);
 

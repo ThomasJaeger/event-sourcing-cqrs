@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Context;
+using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,7 @@ public sealed class CommandBusContextTests
         capture.Observed.CausationCommandId.Should().NotBe(Guid.Empty);
         capture.Observed.ActorId.Should().Be(Guid.Empty);
         capture.Observed.ServiceName.Should().Be("Workers");
+        capture.Observed.IdempotencyKey.Should().BeNull();
     }
 
     [Fact]
@@ -77,6 +79,69 @@ public sealed class CommandBusContextTests
         capture.Observed!.CorrelationId.Should().Be(expected);
     }
 
+    [Fact]
+    public async Task SendAsync_with_an_idempotency_key_threads_it_onto_the_context_for_the_handler()
+    {
+        const string key = "11111111-1111-1111-1111-111111111111";
+        var accessor = new AsyncLocalCommandContextAccessor();
+        var capture = new ContextCapturingHandler(accessor);
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(capture)
+            .AddSingleton<ICommandContextAccessor>(accessor)
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+
+        await bus.SendAsync(new DoThing(), key, CancellationToken.None);
+
+        capture.Observed!.IdempotencyKey.Should().Be(key);
+    }
+
+    [Fact]
+    public async Task SendAsync_with_a_null_idempotency_key_mints_the_same_context_as_the_bare_overload()
+    {
+        var accessor = new AsyncLocalCommandContextAccessor();
+        var capture = new ContextCapturingHandler(accessor);
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(capture)
+            .AddSingleton<ICommandContextAccessor>(accessor)
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+
+        await bus.SendAsync(new DoThing(), idempotencyKey: null, CancellationToken.None);
+
+        capture.Observed!.IdempotencyKey.Should().BeNull();
+        capture.Observed.CorrelationId.Should().NotBe(Guid.Empty);
+        capture.Observed.CausationCommandId.Should().NotBe(Guid.Empty);
+        capture.Observed.ActorId.Should().Be(Guid.Empty);
+        capture.Observed.ServiceName.Should().Be("Workers");
+    }
+
+    [Fact]
+    public async Task SendAsync_with_the_same_idempotency_key_twice_dispatches_the_handler_once()
+    {
+        // End-to-end: the key the bus threads onto the context is the key the real
+        // IdempotencyBehavior reads from the accessor at runtime, so the second
+        // dispatch dedupes. This is the wiring neither CommandBusContextTests (no
+        // behavior) nor IdempotencyBehaviorTests (no bus) covers on its own.
+        const string key = "22222222-2222-2222-2222-222222222222";
+        var accessor = new AsyncLocalCommandContextAccessor();
+        var capture = new ContextCapturingHandler(accessor);
+        var store = new RecordingIdempotencyStore();
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(capture)
+            .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<IIdempotencyStore>(store)
+            .AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>))
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+
+        await bus.SendAsync(new DoThing(), key, CancellationToken.None);
+        await bus.SendAsync(new DoThing(), key, CancellationToken.None);
+
+        store.Recorded.Should().ContainSingle().Which.Should().Be(key);
+        capture.Invocations.Should().Be(1);
+    }
+
     private sealed record DoThing : ICommand;
 
     private sealed class ContextCapturingHandler : ICommandHandler<DoThing>
@@ -86,9 +151,11 @@ public sealed class CommandBusContextTests
         public ContextCapturingHandler(ICommandContextAccessor accessor) => _accessor = accessor;
 
         public ICommandContext? Observed { get; private set; }
+        public int Invocations { get; private set; }
 
         public Task HandleAsync(DoThing command, CancellationToken ct)
         {
+            Invocations++;
             Observed = _accessor.Current;
             return Task.CompletedTask;
         }
@@ -98,5 +165,19 @@ public sealed class CommandBusContextTests
     {
         public Task HandleAsync(DoThing command, CancellationToken ct)
             => throw new InvalidOperationException("handler failed");
+    }
+
+    private sealed class RecordingIdempotencyStore : IIdempotencyStore
+    {
+        public List<string> Recorded { get; } = new();
+
+        public Task<bool> ExistsAsync(string idempotencyKey, CancellationToken ct)
+            => Task.FromResult(Recorded.Contains(idempotencyKey));
+
+        public Task<bool> TryRecordAsync(string idempotencyKey, string commandType, CancellationToken ct)
+        {
+            Recorded.Add(idempotencyKey);
+            return Task.FromResult(true);
+        }
     }
 }
