@@ -8,6 +8,8 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Hosts.Api;
+using EventSourcingCqrs.Hosts.Api.Endpoints;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 
@@ -57,7 +59,13 @@ builder.Services.AddReadModels(opts =>
 
 var app = builder.Build();
 
-// Endpoints and the exception-mapping middleware land at Commits 10-12
-// (POST /commands, POST /queries, the GET introspection endpoints).
+app.UseMiddleware<ExceptionMappingMiddleware>();
+app.MapPost("/commands", CommandsEndpoint.HandleAsync);
+
+// POST /queries and the GET introspection endpoints land at Commits 13-14.
 
 app.Run();
+
+// Exposed so the IntegrationTests project's WebApplicationFactory<Program> can
+// boot this composition in-memory against a Testcontainer Postgres.
+public partial class Program { }
