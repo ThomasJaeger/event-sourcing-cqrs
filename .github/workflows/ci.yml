@@ -28,4 +28,13 @@ jobs:
         run: dotnet build EventSourcingCqrs.slnx --no-restore
 
       - name: Test
+        # Disable the Testcontainers resource reaper (Ryuk) in CI. Its type
+        # initializer (ResourceReaper.GetDefaultSessionId) intermittently times
+        # out a regex under runner CPU contention, faulting the type and failing
+        # every container-backed test in the process. GitHub-hosted runners are
+        # ephemeral, so Ryuk's leaked-container cleanup is not load-bearing here,
+        # and Testcontainers' own disposal covers the normal path. Local runs do
+        # not set this, so Ryuk stays enabled outside CI.
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: dotnet test EventSourcingCqrs.slnx --no-build --verbosity normal
