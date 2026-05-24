@@ -1,4 +1,7 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Commands.Billing;
+using EventSourcingCqrs.Application.Commands.Fulfillment;
+using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
@@ -33,6 +36,14 @@ builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
 // discriminator to a CLR query type through QueryTypeRegistry (ADR 0022).
 builder.Services.AddSingleton<IQueryTypeProvider, SalesQueryTypeProvider>();
 builder.Services.AddSingleton<IQueryTypeProvider, FulfillmentQueryTypeProvider>();
+
+// User-dispatched command types so the /commands endpoint (Commit 12)
+// resolves an envelope discriminator to a CLR command type through
+// CommandTypeRegistry (ADR 0023). The Api host registers no delay-queue
+// command provider; it dispatches user commands, not timeouts.
+builder.Services.AddSingleton<ICommandTypeProvider, SalesCommandTypeProvider>();
+builder.Services.AddSingleton<ICommandTypeProvider, FulfillmentCommandTypeProvider>();
+builder.Services.AddSingleton<ICommandTypeProvider, BillingCommandTypeProvider>();
 
 // AddPostgresEventStore without AddPostgresOutboxProcessor (Commit 8's split): the
 // Api host writes events but does not drain the outbox. The Workers host owns the
