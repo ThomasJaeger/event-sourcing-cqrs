@@ -48,6 +48,23 @@ public sealed class QueryBusTests
         handler.ReceivedToken.Should().Be(cts.Token);
     }
 
+    [Fact]
+    public async Task AskAsync_resolves_a_scoped_handler_under_scope_validation()
+    {
+        // ADR 0024: the bus is a singleton over the root provider and handlers
+        // register scoped, so AskAsync must open a scope. A validating provider, the
+        // shape WebApplicationFactory enables, throws if the scoped handler resolves
+        // from the root. This locks the scope-per-dispatch fix.
+        var services = new ServiceCollection()
+            .AddScoped<IQueryHandler<Echo, string>, EchoHandler>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var bus = new QueryBus(services);
+
+        var result = await bus.AskAsync(new Echo("ping"), CancellationToken.None);
+
+        result.Should().Be("ping");
+    }
+
     private sealed record Echo(string Payload) : IQuery<string>;
 
     private sealed class EchoHandler : IQueryHandler<Echo, string>

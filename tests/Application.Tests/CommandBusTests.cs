@@ -54,6 +54,22 @@ public sealed class CommandBusTests
         handler.ReceivedToken.Should().Be(cts.Token);
     }
 
+    [Fact]
+    public async Task SendAsync_resolves_a_scoped_handler_under_scope_validation()
+    {
+        // ADR 0024: scope-per-dispatch holds on the command bus too. Locks the
+        // already-established pattern against regression under a validating provider.
+        var services = new ServiceCollection()
+            .AddScoped<ICommandHandler<DoThing>, RecordingHandler>()
+            .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var bus = new CommandBus(services);
+
+        var act = async () => await bus.SendAsync(new DoThing("x"), CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+    }
+
     private sealed record DoThing(string Payload) : ICommand;
 
     private sealed class RecordingHandler : ICommandHandler<DoThing>

@@ -6,10 +6,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EventSourcingCqrs.Application;
 
-// Symmetric to CommandBus. The cache key is the concrete query type alone: a
-// type can only implement IQuery<TResult> once (closing the same generic with
-// two different TResults on one class is a compile error), so the cached
-// invoker safely covers every AskAsync call against that query type.
+// Symmetric to CommandBus, including scope-per-dispatch: each AskAsync opens a
+// service scope and resolves the handler from it, because the handlers register
+// scoped and this bus is a singleton holding the root provider, which cannot
+// resolve a scoped service under scope validation (ADR 0024). The cache key is
+// the concrete query type alone: a type can only implement IQuery<TResult> once
+// (closing the same generic with two different TResults on one class is a compile
+// error), so the cached invoker safely covers every AskAsync call against that
+// query type.
 public sealed class QueryBus : IQueryBus
 {
     private static readonly ConcurrentDictionary<Type, QueryInvoker> InvokerCache = new();
@@ -21,15 +25,20 @@ public sealed class QueryBus : IQueryBus
         _services = services;
     }
 
-    public Task<TResult> AskAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
+    public async Task<TResult> AskAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
+        // Open a scope and resolve from it, awaiting the pipeline inside the using so
+        // the scope outlives the dispatch (ADR 0024). Returning pipeline() directly
+        // would dispose the scope before the handler ran.
+        using var scope = _services.CreateScope();
+        var sp = scope.ServiceProvider;
         var invoker = InvokerCache.GetOrAdd(query.GetType(), t => BuildInvoker(t, typeof(TResult)));
-        var handler = _services.GetRequiredService(invoker.HandlerType);
-        var behaviors = _services.GetServices(invoker.BehaviorType).ToArray();
+        var handler = sp.GetRequiredService(invoker.HandlerType);
+        var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
         var pipeline = QueryPipelineBuilder.Build<TResult>(
             behaviors, handler, query, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
-        return pipeline();
+        return await pipeline();
     }
 
     private static QueryInvoker BuildInvoker(Type queryType, Type resultType)
