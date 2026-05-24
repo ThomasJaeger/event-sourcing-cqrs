@@ -18,7 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Connection strings come from configuration: the same EVENT_STORE_CONNECTION_STRING
 // and READ_MODEL_CONNECTION_STRING keys the Workers host reads as environment
 // variables, here through IConfiguration so a WebApplicationFactory test can
-// override them with a Testcontainer connection (Commit 10). The Api host does not
+// override them with a Testcontainer connection (Commit 12). The Api host does not
 // run migrations; the Workers host owns migration orchestration, so two hosts
 // never race to migrate the same database.
 var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
@@ -34,7 +34,7 @@ builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
 
-// Query types so the /queries endpoint (Commit 11) resolves an envelope
+// Query types so the /queries endpoint (Commit 14) resolves an envelope
 // discriminator to a CLR query type through QueryTypeRegistry (ADR 0022).
 builder.Services.AddSingleton<IQueryTypeProvider, SalesQueryTypeProvider>();
 builder.Services.AddSingleton<IQueryTypeProvider, FulfillmentQueryTypeProvider>();
@@ -61,8 +61,9 @@ var app = builder.Build();
 
 app.UseMiddleware<ExceptionMappingMiddleware>();
 app.MapPost("/commands", CommandsEndpoint.HandleAsync);
+app.MapPost("/queries", QueriesEndpoint.HandleAsync);
 
-// POST /queries and the GET introspection endpoints land at Commits 13-14.
+// The GET introspection endpoints (GET /commands, GET /queries) land at Commit 15.
 
 app.Run();
 
