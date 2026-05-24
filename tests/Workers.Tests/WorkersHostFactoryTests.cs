@@ -62,7 +62,7 @@ public class WorkersHostFactoryTests
 
         // The hosted services land in the container: ProjectionStartupCatchUpService
         // (the IHostedLifecycleService from commit 6), OutboxProcessor (wired by
-        // AddPostgresEventStore), and DelayQueueProcessor (wired by
+        // AddPostgresOutboxProcessor), and DelayQueueProcessor (wired by
         // AddPostgresDelayQueueProcessor after AddApplication).
         var hosted = host.Services.GetServices<IHostedService>().ToList();
         hosted.OfType<ProjectionStartupCatchUpService>().Should().ContainSingle();

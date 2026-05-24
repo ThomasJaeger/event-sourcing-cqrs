@@ -18,7 +18,6 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         services.Configure(configure);
-        services.AddOptions<OutboxProcessorOptions>();
 
         // Defaults a host can pre-empt. A host that needs custom data-source
         // wiring (logging integration, custom type mappings, connection
@@ -109,18 +108,28 @@ public static class ServiceCollectionExtensions
         // service registered in commit 17.
         services.AddSingleton<IDelayQueue, PostgresDelayQueue>();
 
-        // Factory delegate so the policy picks up OutboxProcessorOptions
-        // overrides at first resolution. The singleton is constructed once;
-        // a services.Configure<OutboxProcessorOptions>(...) call AFTER
-        // AddPostgresEventStore has no effect on the policy because the
-        // snapshot is taken at the first GetService<OutboxRetryPolicy>().
-        // Configure outbox options before calling this extension.
+        return services;
+    }
+
+    // The outbox processor is registered separately from AddPostgresEventStore so a
+    // host that writes events but does not drain the outbox composes the event
+    // store without it. The Api host dispatches commands over HTTP and lets the
+    // Workers host own background processing; if it ran its own OutboxProcessor,
+    // that processor would claim outbox rows and dispatch them to its empty handler
+    // set (InProcessMessageDispatcher no-ops on zero handlers), mark them processed,
+    // and drop the projection and process-manager updates the Workers host should
+    // run. Background processors are composed by the host, mirroring
+    // AddPostgresDelayQueueProcessor; AddPostgresEventStore stays free of them.
+    public static IServiceCollection AddPostgresOutboxProcessor(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<OutboxProcessorOptions>();
         services.AddSingleton<OutboxRetryPolicy>(sp =>
         {
             var opts = sp.GetRequiredService<IOptions<OutboxProcessorOptions>>().Value;
             return new OutboxRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
         });
-
         services.AddSingleton<IMessageDispatcher, InProcessMessageDispatcher>();
         services.AddHostedService<OutboxProcessor>();
 

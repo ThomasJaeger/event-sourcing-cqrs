@@ -4,7 +4,6 @@ using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
-using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.InventoryDashboard;
@@ -14,7 +13,6 @@ using EventSourcingCqrs.Projections.OrderList;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -103,10 +101,6 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         // side still resolves, because AddReadModels does not register an
         // NpgsqlDataSource and so cannot collide with the event store's.
         provider.GetRequiredService<IEventStore>().Should().BeOfType<PostgresEventStore>();
-        provider.GetRequiredService<IMessageDispatcher>()
-            .Should().BeOfType<InProcessMessageDispatcher>();
-        provider.GetServices<IHostedService>().OfType<OutboxProcessor>()
-            .Should().ContainSingle();
     }
 
     [Fact]

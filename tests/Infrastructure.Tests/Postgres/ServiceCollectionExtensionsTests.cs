@@ -29,6 +29,26 @@ public class ServiceCollectionExtensionsTests
         provider.GetRequiredService<EventTypeRegistry>().Should().NotBeNull();
         provider.GetRequiredService<JsonSerializerOptions>().Should().NotBeNull();
         provider.GetRequiredService<IEventStore>().Should().BeOfType<PostgresEventStore>();
+        provider.GetService<IMessageDispatcher>().Should().BeNull(
+            "AddPostgresEventStore does not register the outbox dispatcher; "
+            + "AddPostgresOutboxProcessor does (split rationale in commit history).");
+        provider.GetServices<IHostedService>().OfType<OutboxProcessor>()
+            .Should().BeEmpty(
+                "AddPostgresEventStore does not register the outbox processor; "
+                + "AddPostgresOutboxProcessor does.");
+    }
+
+    [Fact]
+    public void AddPostgresOutboxProcessor_registers_the_dispatcher_and_hosted_service()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddPostgresEventStore(opts =>
+            opts.ConnectionString = "Host=localhost;Database=stub");
+        services.AddPostgresOutboxProcessor();
+
+        using var provider = services.BuildServiceProvider();
+
         provider.GetRequiredService<OutboxRetryPolicy>().Should().NotBeNull();
         provider.GetRequiredService<IMessageDispatcher>()
             .Should().BeOfType<InProcessMessageDispatcher>();

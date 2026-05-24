@@ -42,6 +42,11 @@ public static class WorkersHostFactory
         builder.Services.AddSingleton<ICommandTypeProvider, OrderFulfillmentCommandTypeProvider>();
         builder.Services.AddPostgresEventStore(opts =>
             opts.ConnectionString = eventStoreConnectionString);
+        // The outbox processor drains events to the in-process dispatcher and needs
+        // no command bus, so it composes right after the event store (the
+        // delay-queue processor below needs AddApplication first; the outbox does
+        // not). AddPostgresEventStore no longer bundles it.
+        builder.Services.AddPostgresOutboxProcessor();
         builder.Services.AddApplication();
         // After AddApplication so the delay-queue processor's ICausedCommandBus
         // dependency is resolvable (ADR 0017).
