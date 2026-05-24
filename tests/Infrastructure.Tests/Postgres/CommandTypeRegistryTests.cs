@@ -109,6 +109,17 @@ public class CommandTypeRegistryTests
             .WithMessage("*NotACommand*does not implement ICommand*");
     }
 
+    [Fact]
+    public void EnumerateCommands_returns_all_registered_types()
+    {
+        var registry = new CommandTypeRegistry()
+            .Register<CommandA>()
+            .Register<CommandB>();
+
+        registry.EnumerateCommands().Should().BeEquivalentTo(
+            new[] { typeof(CommandA), typeof(CommandB) });
+    }
+
     private sealed record CommandA : ICommand;
     private sealed record CommandB : ICommand;
     private sealed class NotACommand;

@@ -78,4 +78,12 @@ public sealed class CommandTypeRegistry
         }
         return type;
     }
+
+    // The GET /commands introspection endpoint reads the registered command
+    // catalog and maps each type to its token through NameFor. This registry now
+    // serves two consumers: the delay queue persists command_type tokens (ADR
+    // 0017), and the introspection endpoint publishes the by-name dispatch
+    // surface (ADR 0023). The registry is built once at startup and not mutated
+    // after, so returning the live key view is safe.
+    public IReadOnlyCollection<Type> EnumerateCommands() => _byType.Keys;
 }

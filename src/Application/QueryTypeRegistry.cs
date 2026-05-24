@@ -9,9 +9,11 @@ namespace EventSourcingCqrs.Application;
 // persist (ADR 0022). Same two-ordinal-dictionary, throw-on-duplicate,
 // throw-on-unknown shape as the event and command registries. Two places the
 // parallel is shape-only: IQuery<TResult> has no non-generic marker, so the
-// type-family guard is a reflection check rather than IsAssignableFrom; and the
-// GET /queries introspection endpoint needs the catalog, so EnumerateQueries is
-// exposed where the persistence registries need no enumeration.
+// type-family guard is a reflection check rather than IsAssignableFrom; and this
+// registry exposes EnumerateQueries for the GET /queries introspection endpoint,
+// the same transport-catalog need CommandTypeRegistry meets with EnumerateCommands.
+// The event-store type registries expose no enumeration because no transport
+// endpoint publishes the event catalog.
 public sealed class QueryTypeRegistry
 {
     private readonly Dictionary<string, Type> _byName = new(StringComparer.Ordinal);
@@ -79,10 +81,11 @@ public sealed class QueryTypeRegistry
     }
 
     // The GET /queries introspection endpoint reads the registered query catalog
-    // and maps each type to its token through NameFor (ADR 0022). The three
-    // persistence registries expose no equivalent because no persistence consumer
-    // needs the catalog. The registry is built once at startup and not mutated
-    // after, so returning the live key view is safe.
+    // and maps each type to its token through NameFor (ADR 0022). CommandTypeRegistry
+    // exposes the same EnumerateCommands for GET /commands; the event-store type
+    // registries expose no enumeration because no transport endpoint publishes the
+    // event catalog. The registry is built once at startup and not mutated after, so
+    // returning the live key view is safe.
     public IReadOnlyCollection<Type> EnumerateQueries() => _byType.Keys;
 
     private static bool ImplementsQueryInterface(Type type)

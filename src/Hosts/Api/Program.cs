@@ -62,8 +62,8 @@ var app = builder.Build();
 app.UseMiddleware<ExceptionMappingMiddleware>();
 app.MapPost("/commands", CommandsEndpoint.HandleAsync);
 app.MapPost("/queries", QueriesEndpoint.HandleAsync);
-
-// The GET introspection endpoints (GET /commands, GET /queries) land at Commit 15.
+app.MapGet("/commands", IntrospectionEndpoint.ListCommands);
+app.MapGet("/queries", IntrospectionEndpoint.ListQueries);
 
 app.Run();
 
