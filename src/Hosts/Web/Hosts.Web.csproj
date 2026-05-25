@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>EventSourcingCqrs.Hosts.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\Application.csproj" />
+    <ProjectReference Include="..\..\Domain\Domain.csproj" />
+  </ItemGroup>
+
+</Project>

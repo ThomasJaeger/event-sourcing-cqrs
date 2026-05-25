@@ -13,6 +13,7 @@
     <Project Path="src/Infrastructure/ReadModels.Postgres/ReadModels.Postgres.csproj" />
     <Project Path="src/Hosts/Workers/Workers.csproj" />
     <Project Path="src/Hosts/Api/Hosts.Api.csproj" />
+    <Project Path="src/Hosts/Web/Hosts.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Application.Tests/Application.Tests.csproj" />
