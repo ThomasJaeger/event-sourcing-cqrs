@@ -6,7 +6,7 @@ This file instructs Claude Code on how to work in this repository. Read it befor
 
 This is the reference implementation for the book *Event Sourcing & CQRS: A Comprehensive and Practical Guide to Deeper Insights in Your Software Solutions* by Thomas Jaeger. The codebase exists to make the book's patterns concrete and runnable. Every chapter that teaches a pattern has corresponding code here that demonstrates it.
 
-This is a teaching artifact, not a production framework. Readers clone it, run it, study it, and use it as a reference for their own systems. They do not deploy it.
+This is a production-grade reference implementation. Readers clone it, run it, study it, and adapt it for their own systems, including commercial and production services. The repository does not ship as a redistributable framework, and the orchestrator's own services adopt the patterns and code shown here. Every line of code is written as if it were already running in a production service that the reader operates.
 
 ## Source-of-truth hierarchy
 
@@ -26,9 +26,25 @@ This rule applies symmetrically across both Claude Code instances and the Claude
 
 ## What "good" looks like in this repository
 
-Code in this repo must reflect the patterns the book teaches. The book is opinionated. The code must be opinionated in the same direction. When there is a choice between idiomatic .NET and the book's pattern, the book's pattern wins. A reader who copies a snippet from the book and a snippet from the repo should see the same shape.
+Code in this repo must reflect the patterns the book teaches. The book is opinionated. The code must be opinionated in the same direction. A reader who copies a snippet from the book and a snippet from the repo should see the same shape. When the chapter prose depicts a teaching-friendly shortcut and production practice would do it differently, the code ships the production version and the chapter prose updates to match (manuscript reconciliation tracks the divergence as an F-NNNN candidate).
 
-The code should be readable as a study text, not just runnable. Long methods are worse than smaller ones with clear names. Generic abstractions that hide the pattern are worse than concrete code that shows it. Comments that explain the why are valuable. Comments that restate the what are noise.
+The code should be readable. Long methods are worse than smaller ones with clear names. Methods named for their behavior over methods named for their structure. Concrete code over premature abstraction. Comments that explain the why are valuable; comments that restate the what are noise. These are production virtues, not teaching virtues; they govern this code because production-grade .NET reads this way, not because a textbook would.
+
+## Production quality is non-negotiable
+
+Production-grade correctness, rigor, and operational hygiene govern every line of code in this repository. There is no axis on which a teaching-friendly shortcut wins. When a teaching-friendly version of a piece of code and the production version diverge, the production version ships and the chapter prose updates to depict it. This rule overrides any framing elsewhere in this file or in any ADR that suggests teaching clarity competes with production rigor.
+
+Concretely:
+
+* Configuration validates at startup. Required dependencies throw on missing input with named exception types. No silent defaults. No downstream surprises.
+* Failures surface as named exceptions at the boundary that owns them. A defect in the Web host's dispatch surfaces in the Web host's logs, not as a 400 from the Api host. Where a registry, validator, or guard can catch a defect in-process at the originating boundary, it does.
+* Cancellation propagates through async chains. No fire-and-forget. No swallowed cancellation tokens. Long-running loops check the token at every iteration boundary.
+* Lifecycles are managed. `IAsyncDisposable` is awaited. Scoped services resolve in scopes. Singletons are stateless or guarded with explicit synchronization.
+* Logging is structured. Secrets never appear in logs or in exception messages that get logged. TLS is the default for any cross-host transport.
+* Error handling is intentional. `catch (Exception)` either rethrows, translates to a named exception type, or surfaces a documented failure mode. None of them swallow.
+* Tests assert on real behavior the production caller depends on. Integration tests exercise the wire format. Unit tests exercise the contract, not the incidental implementation.
+
+Two architectural decisions on disk (the self-contained event-store-adapter rule and the process-manager type-hierarchy rule) were originally justified on pedagogical-transparency grounds. The decisions themselves survive on production-quality reasoning. The justifications get updated at the next ADR touching them, or at an explicit supersession ADR; the architectural rules stay in force in the meantime.
 
 ## Stack and constraints
 
@@ -226,6 +242,8 @@ Do not pull patterns from later phases into the current phase. The phase boundar
 Do not target a .NET version other than 10. The repo is pinned via `global.json`. If the build fails because the .NET 10 SDK is not installed, surface the error rather than falling back to a different SDK.
 
 ## What Claude Code should do
+
+Hold every line to production-grade correctness, rigor, and operational hygiene. See "Production quality is non-negotiable" above. When in doubt, write what a production team would write, not what a textbook would show.
 
 Refer to the book's chapter explicitly when generating code. A comment like `// Pattern from Chapter 11: Upcasting` makes the mapping clear.
 
