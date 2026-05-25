@@ -1,6 +1,4 @@
-using EventSourcingCqrs.Domain.Abstractions;
-
-namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+namespace EventSourcingCqrs.Domain.Abstractions;
 
 // Maps storage-side command type names to CLR types and back, parallel to
 // EventTypeRegistry but constrained to ICommand. The delay queue stores a

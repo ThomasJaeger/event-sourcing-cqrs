@@ -1,9 +1,8 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using FluentAssertions;
 using Xunit;
 
-namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
+namespace EventSourcingCqrs.Domain.Tests;
 
 public class CommandTypeRegistryTests
 {

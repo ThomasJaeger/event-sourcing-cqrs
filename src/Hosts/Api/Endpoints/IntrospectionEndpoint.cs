@@ -1,5 +1,5 @@
 using EventSourcingCqrs.Application;
-using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Domain.Abstractions;
 
 namespace EventSourcingCqrs.Hosts.Api.Endpoints;
 

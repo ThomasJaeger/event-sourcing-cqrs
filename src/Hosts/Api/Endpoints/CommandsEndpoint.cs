@@ -1,7 +1,6 @@
 using System.Text.Json;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using JsonOptions = Microsoft.AspNetCore.Http.Json.JsonOptions;

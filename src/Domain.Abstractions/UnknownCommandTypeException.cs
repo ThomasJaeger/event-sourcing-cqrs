@@ -1,4 +1,4 @@
-namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+namespace EventSourcingCqrs.Domain.Abstractions;
 
 // Thrown when CommandTypeRegistry cannot map a command type name to a CLR type,
 // or a CLR type to a name. Parallel to UnknownEventTypeException but distinct so
