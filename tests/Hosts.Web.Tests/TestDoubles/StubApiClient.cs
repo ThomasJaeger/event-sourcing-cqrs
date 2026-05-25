@@ -10,12 +10,15 @@ namespace EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
 /// in FIFO order. Captures every invocation for assertion. Throws explicit
 /// failures when a test invokes a path the test did not seed, surfacing the
 /// test gap at the boundary that owns it rather than returning a silent
-/// default.
+/// default. SeedCommandFailure seeds a dispatch failure; a seeded failure for
+/// a command type takes precedence over a seeded success result for the same
+/// type.
 /// </summary>
 internal sealed class StubApiClient : IApiClient
 {
     private readonly Dictionary<Type, Queue<object?>> queryResults = new();
     private readonly Dictionary<Type, Queue<CommandAcceptedResponse>> commandResults = new();
+    private readonly Dictionary<Type, Queue<Exception>> commandFailures = new();
 
     public List<object> CapturedQueries { get; } = new();
     public List<(ICommand Command, string IdempotencyKey)> CapturedCommands { get; } = new();
@@ -42,6 +45,17 @@ internal sealed class StubApiClient : IApiClient
         queue.Enqueue(response);
     }
 
+    public void SeedCommandFailure<TCommand>(Exception exception)
+        where TCommand : ICommand
+    {
+        if (!commandFailures.TryGetValue(typeof(TCommand), out var queue))
+        {
+            queue = new Queue<Exception>();
+            commandFailures[typeof(TCommand)] = queue;
+        }
+        queue.Enqueue(exception);
+    }
+
     public Task<TResult?> QueryAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
     {
         CapturedQueries.Add(query);
@@ -64,6 +78,10 @@ internal sealed class StubApiClient : IApiClient
     {
         CapturedCommands.Add((command, idempotencyKey));
         var key = command.GetType();
+        if (commandFailures.TryGetValue(key, out var failures) && failures.Count > 0)
+        {
+            throw failures.Dequeue();
+        }
         if (!commandResults.TryGetValue(key, out var queue) || queue.Count == 0)
         {
             throw new InvalidOperationException(

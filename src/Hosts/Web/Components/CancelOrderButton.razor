@@ -1,0 +1,97 @@
+@using EventSourcingCqrs.Application.Commands.Sales
+@inject IApiClient ApiClient
+
+@if (state != BadgeState.Settled)
+{
+    <div class="inline-flex items-center">
+        <button class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                disabled="@(state == BadgeState.Pending)"
+                @onclick="HandleClick">
+            Cancel Order
+        </button>
+        <PendingBadge State="@state" Message="@badgeMessage" />
+    </div>
+    @if (state == BadgeState.Failed && failureMessage is not null)
+    {
+        <p class="text-sm text-red-700 mt-1">@failureMessage</p>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid OrderId { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnDispatched { get; set; }
+
+    private BadgeState state = BadgeState.Idle;
+    private string badgeMessage = string.Empty;
+    private string? failureMessage;
+
+    private async Task HandleClick()
+    {
+        state = BadgeState.Pending;
+        badgeMessage = "Cancelling...";
+        failureMessage = null;
+
+        try
+        {
+            // The user-id is Guid.Empty pending auth (out of scope per
+            // PLAN). Auth lands later; every Guid.Empty here becomes a
+            // real user-id at that point.
+            var command = new CancelOrder(OrderId, "User cancelled via UI", Guid.Empty);
+            var idempotencyKey = Guid.NewGuid().ToString();
+
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+
+            // Dispatch accepted; the parent page begins polling for the
+            // read-model settlement.
+            await OnDispatched.InvokeAsync();
+        }
+        catch (ApiValidationException ex)
+        {
+            state = BadgeState.Failed;
+            badgeMessage = "Cancel failed";
+            var firstError = ex.Errors.SelectMany(e => e.Value).FirstOrDefault();
+            failureMessage = firstError ?? "The cancel request was invalid.";
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            state = BadgeState.Failed;
+            badgeMessage = "Cancel failed";
+            failureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            state = BadgeState.Failed;
+            badgeMessage = "Cancel failed";
+            failureMessage = "The order was updated by someone else. Refresh and try again.";
+        }
+        catch (ApiInfrastructureException)
+        {
+            state = BadgeState.Failed;
+            badgeMessage = "Cancel failed";
+            failureMessage = "Something went wrong. Try again.";
+        }
+    }
+
+    /// <summary>
+    /// Called by the parent page when polling sees the order Cancelled in
+    /// the read model. Transitions the button to Settled, which hides it.
+    /// </summary>
+    public void MarkSettled()
+    {
+        state = BadgeState.Settled;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Called by the parent page if polling times out (the 30s window
+    /// elapsed without the read model reflecting Cancelled). Transitions
+    /// the button to Failed.
+    /// </summary>
+    public void MarkPollingTimeout()
+    {
+        state = BadgeState.Failed;
+        badgeMessage = "Cancel may still be processing";
+        failureMessage = "The cancel was accepted but is taking longer than expected. Refresh to check status.";
+        StateHasChanged();
+    }
+}

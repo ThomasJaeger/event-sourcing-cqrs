@@ -13,6 +13,13 @@ namespace EventSourcingCqrs.Hosts.Web;
 // the test-only HttpClientCommandExtensions/HttpClientQueryExtensions in
 // IntegrationTests; the test helpers prove the wire format, this production type
 // consumes it with DI and lifetime management.
+//
+// Non-2xx responses map to the ApiClientException hierarchy by status code: 400 to
+// ApiValidationException, 422 to ApiBusinessRuleException, 409 to
+// ApiConcurrencyException, everything else (500, the rare command-path 404, and any
+// unrecognized status) to ApiInfrastructureException. The structured error body the
+// Api host's ExceptionMappingMiddleware emits is read into ApiErrorBody and carried
+// onto the thrown exception so the Web UI can render a category-specific message.
 internal sealed class ApiClient : IApiClient
 {
     private readonly HttpClient _httpClient;
@@ -49,7 +56,7 @@ internal sealed class ApiClient : IApiClient
         };
         request.Headers.Add("Idempotency-Key", idempotencyKey);
         var response = await _httpClient.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        await ThrowMappedAsync(response, ct);
         var accepted = await response.Content.ReadFromJsonAsync<CommandAcceptedResponse>(
             JsonSerializerOptions.Web, ct);
         return accepted ?? throw new InvalidOperationException(
@@ -73,8 +80,60 @@ internal sealed class ApiClient : IApiClient
         {
             return default;
         }
-        response.EnsureSuccessStatusCode();
+        await ThrowMappedAsync(response, ct);
         return await response.Content.ReadFromJsonAsync<TResult>(
             JsonSerializerOptions.Web, ct);
+    }
+
+    // Maps a non-success response to the matching ApiClientException; returns without
+    // throwing on a 2xx. The command-path 404 reaches here (the query path handles its
+    // own 404 as a null result before calling this) and folds into infrastructure: a
+    // 404 on dispatch is the rare race where the aggregate vanished between the page
+    // render and the button click.
+    private static async Task ThrowMappedAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var status = (int)response.StatusCode;
+        var body = await TryParseErrorBodyAsync(response, ct);
+
+        switch (status)
+        {
+            case 400:
+                throw new ApiValidationException(
+                    body?.Errors ?? new Dictionary<string, IReadOnlyList<string>>());
+            case 422:
+                throw new ApiBusinessRuleException(
+                    body?.Code ?? "BUSINESS_RULE_VIOLATION",
+                    body?.Message ?? "The command violated a business rule.");
+            case 409:
+                throw new ApiConcurrencyException(body?.ExpectedVersion ?? -1);
+            default:
+                throw new ApiInfrastructureException(
+                    body?.Message ?? $"Api request failed with status {status}.",
+                    statusCode: status,
+                    code: body?.Code);
+        }
+    }
+
+    private static async Task<ApiErrorBody?> TryParseErrorBodyAsync(
+        HttpResponseMessage response,
+        CancellationToken ct)
+    {
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            return await JsonSerializer.DeserializeAsync<ApiErrorBody>(
+                stream, JsonSerializerOptions.Web, ct);
+        }
+        catch (JsonException)
+        {
+            // The response body was not JSON or did not match ApiErrorBody. Return
+            // null; the caller substitutes a generic message.
+            return null;
+        }
     }
 }

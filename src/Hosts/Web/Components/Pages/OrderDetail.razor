@@ -1,0 +1,162 @@
+@page "/orders/{OrderId:guid}"
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Sales
+@using EventSourcingCqrs.Hosts.Web.Components
+@inject IApiClient ApiClient
+@implements IAsyncDisposable
+
+<PageTitle>Order @OrderId</PageTitle>
+
+@if (loading)
+{
+    <p class="text-gray-500">Loading...</p>
+}
+else if (detail is null)
+{
+    <p class="text-gray-500">Order not found.</p>
+}
+else
+{
+    <h1 class="text-2xl font-bold mb-4">Order @detail.Header.OrderId</h1>
+
+    <div class="mb-6 grid grid-cols-2 gap-4">
+        <div>
+            <p class="text-sm text-gray-600">Customer</p>
+            <p class="font-mono">@detail.Header.CustomerId</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Status</p>
+            <p class="font-semibold">@detail.Header.Status</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Total</p>
+            <p>@(detail.Header.Total?.ToString() ?? "N/A")</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Last Updated</p>
+            <p>@detail.Header.LastUpdatedUtc.ToString("u")</p>
+        </div>
+    </div>
+
+    @if (detail.Header.Status == OrderStatus.Placed)
+    {
+        <div class="mb-6">
+            <CancelOrderButton @ref="cancelButton" OrderId="@detail.Header.OrderId" OnDispatched="StartPolling" />
+        </div>
+    }
+
+    <h2 class="text-xl font-bold mb-2">Line Items</h2>
+    @if (detail.Lines.Count == 0)
+    {
+        <p class="text-gray-500 mb-6">No line items.</p>
+    }
+    else
+    {
+        <table class="min-w-full border border-gray-300 mb-6">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">SKU</th>
+                    <th class="px-4 py-2 text-right">Quantity</th>
+                    <th class="px-4 py-2 text-right">Unit Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var line in detail.Lines)
+                {
+                    <tr class="border-t border-gray-200">
+                        <td class="px-4 py-2 font-mono text-sm">@line.Sku</td>
+                        <td class="px-4 py-2 text-right">@line.Quantity</td>
+                        <td class="px-4 py-2 text-right">@line.UnitPrice</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h2 class="text-xl font-bold mb-2">Timeline</h2>
+    <ul class="space-y-2">
+        @foreach (var entry in detail.Timeline)
+        {
+            <li class="border-l-2 border-gray-300 pl-4">
+                <p class="font-semibold">@entry.EventType</p>
+                <p class="text-sm text-gray-600">@entry.OccurredUtc.ToString("u")</p>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public Guid OrderId { get; set; }
+
+    private OrderDetailView? detail;
+    private bool loading = true;
+    private CancelOrderButton? cancelButton;
+    private CancellationTokenSource? pollingCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(CancellationToken.None);
+        loading = false;
+    }
+
+    private async Task LoadAsync(CancellationToken ct)
+    {
+        detail = await ApiClient.QueryAsync(new GetOrderDetail(OrderId), ct);
+    }
+
+    private async Task StartPolling()
+    {
+        // Cancel any prior polling session for this page.
+        pollingCts?.Cancel();
+        pollingCts = new CancellationTokenSource();
+        var token = pollingCts.Token;
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var transientFailures = 0;
+
+        while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), token);
+                await LoadAsync(token);
+                StateHasChanged();
+                transientFailures = 0;
+
+                if (detail?.Header.Status == OrderStatus.Cancelled)
+                {
+                    cancelButton?.MarkSettled();
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (ApiInfrastructureException)
+            {
+                // Transient: keep polling up to a small retry limit before
+                // giving up. The 30s deadline is the outer guard.
+                transientFailures++;
+                if (transientFailures >= 5)
+                {
+                    cancelButton?.MarkPollingTimeout();
+                    return;
+                }
+            }
+        }
+
+        // Deadline elapsed without settlement.
+        if (!token.IsCancellationRequested)
+        {
+            cancelButton?.MarkPollingTimeout();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        pollingCts?.Cancel();
+        pollingCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}
