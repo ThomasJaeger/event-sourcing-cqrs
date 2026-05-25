@@ -27,16 +27,11 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
 
     public QueriesEndpointTests(ApiFixture fixture) => _fixture = fixture;
 
-    private async Task<HttpResponseMessage> PostQueryAsync(string type, object payload)
-    {
-        var client = _fixture.Factory.CreateClient();
-        return await client.PostAsJsonAsync("/queries", new { type, payload });
-    }
-
     [Fact]
     public async Task Posting_an_unknown_query_type_returns_400()
     {
-        var response = await PostQueryAsync("NotAQuery", new { anything = 1 });
+        var client = _fixture.Factory.CreateClient();
+        var response = await client.PostQueryAsync("NotAQuery", new { anything = 1 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -44,7 +39,8 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task Posting_a_payload_that_fails_to_deserialize_returns_400()
     {
-        var response = await PostQueryAsync("GetOrderDetail", new { orderId = "not-a-guid" });
+        var client = _fixture.Factory.CreateClient();
+        var response = await client.PostQueryAsync("GetOrderDetail", new { orderId = "not-a-guid" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -52,9 +48,11 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetAllInventoryDashboard_on_an_empty_read_model_returns_200_with_an_empty_array()
     {
+        var client = _fixture.Factory.CreateClient();
+
         // No seed: the empty read model is the Api host's natural state, and a list
         // query returns 200 with [] rather than 404.
-        var response = await PostQueryAsync("GetAllInventoryDashboard", new { });
+        var response = await client.PostQueryAsync("GetAllInventoryDashboard", new { });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var rows = await response.Content.ReadFromJsonAsync<List<InventoryDashboardRow>>();
@@ -65,6 +63,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task ListOrders_returns_seeded_rows_newest_first()
     {
+        var client = _fixture.Factory.CreateClient();
         var older = SampleOrderRow(Guid.NewGuid()) with { PlacedUtc = SeededAt.AddDays(-1) };
         var newer = SampleOrderRow(Guid.NewGuid()) with { PlacedUtc = SeededAt };
         var store = _fixture.Factory.Services.GetRequiredService<IOrderListStore>();
@@ -75,7 +74,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
             await uow.CommitAsync("seed-order-list", 1, CancellationToken.None);
         }
 
-        var response = await PostQueryAsync("ListOrders", new { offset = 0, limit = 50 });
+        var response = await client.PostQueryAsync("ListOrders", new { offset = 0, limit = 50 });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var rows = await response.Content.ReadFromJsonAsync<List<OrderListRow>>();
@@ -86,7 +85,8 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetOrderDetail_for_an_unknown_order_returns_404()
     {
-        var response = await PostQueryAsync("GetOrderDetail", new { orderId = Guid.NewGuid() });
+        var client = _fixture.Factory.CreateClient();
+        var response = await client.PostQueryAsync("GetOrderDetail", new { orderId = Guid.NewGuid() });
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -94,6 +94,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetOrderDetail_for_a_seeded_order_returns_200_with_the_header()
     {
+        var client = _fixture.Factory.CreateClient();
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
         var store = _fixture.Factory.Services.GetRequiredService<IOrderDetailStore>();
@@ -106,7 +107,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
             await uow.CommitAsync("seed-order-detail", 1, CancellationToken.None);
         }
 
-        var response = await PostQueryAsync("GetOrderDetail", new { orderId });
+        var response = await client.PostQueryAsync("GetOrderDetail", new { orderId });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var view = await response.Content.ReadFromJsonAsync<OrderDetailView>();
@@ -119,6 +120,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetCustomerSummary_for_a_seeded_customer_returns_200_with_the_summary()
     {
+        var client = _fixture.Factory.CreateClient();
         var customerId = Guid.NewGuid();
         var total = new Money(149.95m, Currency.USD);
         var store = _fixture.Factory.Services.GetRequiredService<ICustomerSummaryStore>();
@@ -131,7 +133,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
             await uow.CommitAsync("seed-customer-summary", 1, CancellationToken.None);
         }
 
-        var response = await PostQueryAsync("GetCustomerSummary", new { customerId });
+        var response = await client.PostQueryAsync("GetCustomerSummary", new { customerId });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var summary = await response.Content.ReadFromJsonAsync<CustomerSummaryRow>();
@@ -144,7 +146,8 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetCustomerSummary_for_an_unknown_customer_returns_404()
     {
-        var response = await PostQueryAsync("GetCustomerSummary", new { customerId = Guid.NewGuid() });
+        var client = _fixture.Factory.CreateClient();
+        var response = await client.PostQueryAsync("GetCustomerSummary", new { customerId = Guid.NewGuid() });
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -152,6 +155,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task GetInventoryDashboardBySku_for_a_seeded_sku_returns_200_with_the_row()
     {
+        var client = _fixture.Factory.CreateClient();
         var inventoryId = Guid.NewGuid();
         var sku = $"SKU-{Guid.NewGuid():N}";
         var store = _fixture.Factory.Services.GetRequiredService<IInventoryDashboardStore>();
@@ -164,7 +168,7 @@ public class QueriesEndpointTests : IClassFixture<ApiFixture>
             await uow.CommitAsync("seed-inventory-dashboard", 1, CancellationToken.None);
         }
 
-        var response = await PostQueryAsync("GetInventoryDashboardBySku", new { sku });
+        var response = await client.PostQueryAsync("GetInventoryDashboardBySku", new { sku });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var row = await response.Content.ReadFromJsonAsync<InventoryDashboardRow>();
