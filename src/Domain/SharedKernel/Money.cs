@@ -1,3 +1,4 @@
+using System.Globalization;
 using EventSourcingCqrs.Domain.Abstractions;
 
 namespace EventSourcingCqrs.Domain.SharedKernel;
@@ -8,6 +9,17 @@ public sealed record Money(decimal Amount, Currency Currency)
 
     public bool IsNegative => Amount < 0m;
     public bool IsZero => Amount == 0m;
+
+    public override string ToString()
+    {
+        // USD renders as "$100.00"; other currencies render as "100.00 EUR".
+        // Currency.DecimalPlaces drives precision so JPY (0 decimal places)
+        // renders without trailing zeros and BHD (3) renders to three.
+        var amount = Amount.ToString("N" + Currency.DecimalPlaces, CultureInfo.InvariantCulture);
+        return Currency.Code == "USD"
+            ? "$" + amount
+            : amount + " " + Currency.Code;
+    }
 
     public static Money operator +(Money left, Money right)
     {

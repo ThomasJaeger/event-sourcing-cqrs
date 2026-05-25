@@ -1,3 +1,4 @@
+using System.Globalization;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.SharedKernel;
 using FluentAssertions;
@@ -153,5 +154,55 @@ public class MoneyTests
     {
         var parts = new Money(10m, Currency.USD).Allocate(new[] { 5 });
         parts.Should().Equal(new Money(10m, Currency.USD));
+    }
+
+    [Fact]
+    public void ToString_renders_USD_with_dollar_sign_and_two_decimals()
+    {
+        var money = new Money(100.50m, Currency.USD);
+
+        money.ToString().Should().Be("$100.50");
+    }
+
+    [Fact]
+    public void ToString_renders_USD_thousands_with_comma_separator()
+    {
+        var money = new Money(1_234_567.89m, Currency.USD);
+
+        money.ToString().Should().Be("$1,234,567.89");
+    }
+
+    [Fact]
+    public void ToString_renders_non_USD_with_code_suffix()
+    {
+        var money = new Money(50m, Currency.EUR);
+
+        money.ToString().Should().Be("50.00 EUR");
+    }
+
+    [Fact]
+    public void ToString_respects_decimal_places_from_currency()
+    {
+        var money = new Money(1000m, Currency.JPY);
+
+        money.ToString().Should().Be("1,000 JPY");
+    }
+
+    [Fact]
+    public void ToString_uses_invariant_culture_regardless_of_thread_culture()
+    {
+        var originalCulture = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+
+            var money = new Money(1234.56m, Currency.USD);
+
+            money.ToString().Should().Be("$1,234.56");
+        }
+        finally
+        {
+            Thread.CurrentThread.CurrentCulture = originalCulture;
+        }
     }
 }
