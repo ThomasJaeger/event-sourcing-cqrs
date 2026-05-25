@@ -1,0 +1,75 @@
+using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Hosts.Web;
+
+namespace EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
+
+/// <summary>
+/// Hand-rolled IApiClient stub for component tests. Tests seed results by
+/// query type or command type via Enqueue; the stub returns seeded results
+/// in FIFO order. Captures every invocation for assertion. Throws explicit
+/// failures when a test invokes a path the test did not seed, surfacing the
+/// test gap at the boundary that owns it rather than returning a silent
+/// default.
+/// </summary>
+internal sealed class StubApiClient : IApiClient
+{
+    private readonly Dictionary<Type, Queue<object?>> queryResults = new();
+    private readonly Dictionary<Type, Queue<CommandAcceptedResponse>> commandResults = new();
+
+    public List<object> CapturedQueries { get; } = new();
+    public List<(ICommand Command, string IdempotencyKey)> CapturedCommands { get; } = new();
+
+    public void EnqueueQueryResult<TQuery, TResult>(TResult result)
+        where TQuery : IQuery<TResult>
+    {
+        var key = typeof(TQuery);
+        if (!queryResults.TryGetValue(key, out var queue))
+        {
+            queue = new Queue<object?>();
+            queryResults[key] = queue;
+        }
+        queue.Enqueue(result);
+    }
+
+    public void EnqueueCommandResult(Type commandType, CommandAcceptedResponse response)
+    {
+        if (!commandResults.TryGetValue(commandType, out var queue))
+        {
+            queue = new Queue<CommandAcceptedResponse>();
+            commandResults[commandType] = queue;
+        }
+        queue.Enqueue(response);
+    }
+
+    public Task<TResult?> QueryAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
+    {
+        CapturedQueries.Add(query);
+        var key = query.GetType();
+        if (!queryResults.TryGetValue(key, out var queue) || queue.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"StubApiClient has no seeded result for query type {key.Name}. " +
+                $"Call EnqueueQueryResult<{key.Name}, {typeof(TResult).Name}>(...) " +
+                $"before the component renders.");
+        }
+        var result = (TResult?)queue.Dequeue();
+        return Task.FromResult(result);
+    }
+
+    public Task<CommandAcceptedResponse> SendCommandAsync(
+        ICommand command,
+        string idempotencyKey,
+        CancellationToken ct)
+    {
+        CapturedCommands.Add((command, idempotencyKey));
+        var key = command.GetType();
+        if (!commandResults.TryGetValue(key, out var queue) || queue.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"StubApiClient has no seeded result for command type {key.Name}. " +
+                $"Call EnqueueCommandResult(typeof({key.Name}), ...) before dispatch.");
+        }
+        return Task.FromResult(queue.Dequeue());
+    }
+}
