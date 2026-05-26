@@ -1,0 +1,47 @@
+@* The first dialog pattern in Hosts.Web: a modal overlay rendered conditionally
+   by the parent page. Presentation only: it collects a SKU and raises OnSubmit or
+   OnCancel. The page owns the dispatch, polling, and badge state. *@
+
+<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h2 class="text-lg font-semibold mb-4">Create Inventory</h2>
+
+        <label class="block text-sm font-medium text-gray-600 mb-1" for="skuInput">SKU</label>
+        <input id="skuInput"
+               type="text"
+               class="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+               @bind="sku"
+               @bind:event="oninput" />
+
+        <div class="flex justify-end gap-3">
+            <button id="dialogCancelButton"
+                    type="button"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                    @onclick="HandleCancel">
+                Cancel
+            </button>
+            <button id="dialogCreateButton"
+                    type="button"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="HandleSubmit"
+                    disabled="@(!CanSubmit)">
+                Create
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EventCallback<string> OnSubmit { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnCancel { get; set; }
+
+    private string sku = string.Empty;
+
+    // Client gate mirroring the aggregate's non-empty-SKU rule; the server stays
+    // the authority and a business-rule failure surfaces on the page's badge.
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(sku);
+
+    private Task HandleSubmit() => OnSubmit.InvokeAsync(sku);
+
+    private Task HandleCancel() => OnCancel.InvokeAsync();
+}

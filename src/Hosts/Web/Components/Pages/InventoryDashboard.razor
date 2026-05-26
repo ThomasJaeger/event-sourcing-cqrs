@@ -1,0 +1,211 @@
+@page "/inventory"
+@using EventSourcingCqrs.Application.Commands.Fulfillment
+@using EventSourcingCqrs.Application.Queries.Fulfillment
+@using EventSourcingCqrs.Domain.Fulfillment.ReadModels
+@using EventSourcingCqrs.Hosts.Web.Components.Inventory
+@inject IApiClient ApiClient
+@inject TimeProvider TimeProvider
+@implements IAsyncDisposable
+
+<PageTitle>Inventory</PageTitle>
+
+<div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Inventory</h1>
+    <button id="createInventoryButton"
+            type="button"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+            @onclick="OpenCreateDialog">
+        Create Inventory
+    </button>
+</div>
+
+@if (createBadge != BadgeState.Idle)
+{
+    <div class="mb-4">
+        <PendingBadge State="@createBadge" Message="@createBadgeMessage" />
+        @if (createBadge == BadgeState.Failed && createFailureMessage is not null)
+        {
+            <p class="text-sm text-red-700 mt-1">@createFailureMessage</p>
+        }
+    </div>
+}
+
+@if (rows is null)
+{
+    <p class="text-gray-500">Loading...</p>
+}
+else if (rows.Count == 0)
+{
+    <p class="text-gray-500">No inventory yet.</p>
+}
+else
+{
+    <table class="min-w-full border border-gray-300">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">SKU</th>
+                <th class="px-4 py-2 text-right">On Hand</th>
+                <th class="px-4 py-2 text-right">Reserved</th>
+                <th class="px-4 py-2 text-left">Last Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in rows)
+            {
+                <tr class="border-t border-gray-200">
+                    <td class="px-4 py-2 font-mono text-sm">@row.Sku</td>
+                    <td class="px-4 py-2 text-right">@row.OnHandQuantity</td>
+                    <td class="px-4 py-2 text-right">@row.ReservedQuantity</td>
+                    <td class="px-4 py-2">@row.LastUpdatedUtc.ToString("u")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (showCreateDialog)
+{
+    <CreateInventoryDialog OnSubmit="HandleCreate" OnCancel="CloseCreateDialog" />
+}
+
+@code {
+    private IReadOnlyList<InventoryDashboardRow>? rows;
+    private bool showCreateDialog;
+    private BadgeState createBadge = BadgeState.Idle;
+    private string createBadgeMessage = string.Empty;
+    private string? createFailureMessage;
+    private CancellationTokenSource? pollingCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(CancellationToken.None);
+    }
+
+    private async Task LoadAsync(CancellationToken ct)
+    {
+        rows = await ApiClient.QueryAsync(new GetAllInventoryDashboard(), ct);
+    }
+
+    private void OpenCreateDialog() => showCreateDialog = true;
+
+    private void CloseCreateDialog() => showCreateDialog = false;
+
+    private async Task HandleCreate(string sku)
+    {
+        showCreateDialog = false;
+        createBadge = BadgeState.Pending;
+        createBadgeMessage = "Creating...";
+        createFailureMessage = null;
+
+        try
+        {
+            // A fresh InventoryId per click; the entered SKU is the only operator
+            // input. Idempotency key minted at click time per ADR 0021.
+            var command = new CreateInventory(Guid.NewGuid(), sku);
+            var idempotencyKey = Guid.NewGuid().ToString();
+
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+
+            // Dispatch accepted; poll for the new SKU's row to appear.
+            await StartCreatePolling(sku);
+        }
+        catch (ApiValidationException ex)
+        {
+            createBadge = BadgeState.Failed;
+            createBadgeMessage = "Create failed";
+            var firstError = ex.Errors.SelectMany(e => e.Value).FirstOrDefault();
+            createFailureMessage = firstError
+                ?? (string.IsNullOrWhiteSpace(ex.Message) || ex.Message == "The request was invalid."
+                    ? "The create request was invalid."
+                    : ex.Message);
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            createBadge = BadgeState.Failed;
+            createBadgeMessage = "Create failed";
+            createFailureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            createBadge = BadgeState.Failed;
+            createBadgeMessage = "Create failed";
+            createFailureMessage = "This inventory already exists. Refresh and try again.";
+        }
+        catch (ApiInfrastructureException)
+        {
+            createBadge = BadgeState.Failed;
+            createBadgeMessage = "Create failed";
+            createFailureMessage = "Something went wrong. Try again.";
+        }
+    }
+
+    // Delay-first polling for the new SKU's dashboard row, matching
+    // OrderDetail.StartPolling: a 30-second deadline and a five-failure transient
+    // cap on the read-side query. On settlement the table refreshes in place; the
+    // operator stays on the dashboard rather than redirecting.
+    private async Task StartCreatePolling(string sku)
+    {
+        pollingCts?.Cancel();
+        pollingCts = new CancellationTokenSource();
+        var token = pollingCts.Token;
+
+        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
+        var transientFailures = 0;
+
+        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
+                var row = await ApiClient.QueryAsync(new GetInventoryDashboardBySku(sku), token);
+                transientFailures = 0;
+
+                if (row is not null)
+                {
+                    await LoadAsync(token);
+                    createBadge = BadgeState.Settled;
+                    createBadgeMessage = "Created";
+                    StateHasChanged();
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (ApiInfrastructureException)
+            {
+                // Transient: keep polling up to a small retry limit before giving
+                // up. The 30s deadline is the outer guard.
+                transientFailures++;
+                if (transientFailures >= 5)
+                {
+                    MarkPollingTimeout();
+                    return;
+                }
+            }
+        }
+
+        // Deadline elapsed without the row appearing.
+        if (!token.IsCancellationRequested)
+        {
+            MarkPollingTimeout();
+        }
+    }
+
+    private void MarkPollingTimeout()
+    {
+        createBadge = BadgeState.Failed;
+        createBadgeMessage = "Create may still be processing";
+        createFailureMessage =
+            "The create was accepted but is taking longer than expected. Refresh to check status.";
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        pollingCts?.Cancel();
+        pollingCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}
