@@ -104,7 +104,9 @@ internal sealed class ApiClient : IApiClient
         {
             case 400:
                 throw new ApiValidationException(
-                    body?.Errors ?? new Dictionary<string, IReadOnlyList<string>>());
+                    body?.Errors ?? new Dictionary<string, IReadOnlyList<string>>(),
+                    body?.Code,
+                    body?.Message);
             case 422:
                 throw new ApiBusinessRuleException(
                     body?.Code ?? "BUSINESS_RULE_VIOLATION",

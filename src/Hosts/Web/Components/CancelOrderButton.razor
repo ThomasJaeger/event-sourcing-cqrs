@@ -49,8 +49,14 @@
         {
             state = BadgeState.Failed;
             badgeMessage = "Cancel failed";
+            // Prefer a field-level validation message; fall back to the server's
+            // structured message for a pre-dispatch 400 (which carries no field
+            // errors); fall back to the generic literal when neither is present.
             var firstError = ex.Errors.SelectMany(e => e.Value).FirstOrDefault();
-            failureMessage = firstError ?? "The cancel request was invalid.";
+            failureMessage = firstError
+                ?? (string.IsNullOrWhiteSpace(ex.Message) || ex.Message == "The request was invalid."
+                    ? "The cancel request was invalid."
+                    : ex.Message);
         }
         catch (ApiBusinessRuleException ex)
         {

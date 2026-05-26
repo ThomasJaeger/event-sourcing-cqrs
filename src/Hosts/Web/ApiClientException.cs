@@ -15,13 +15,24 @@ public abstract class ApiClientException : Exception
 
 public sealed class ApiValidationException : ApiClientException
 {
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> Errors { get; }
-
-    public ApiValidationException(IReadOnlyDictionary<string, IReadOnlyList<string>> errors)
-        : base("The command failed validation.")
+    // Errors carries the field-to-messages map from a dispatch-time validation
+    // failure (the Api host's HttpValidationProblemDetails 400). Code and Message
+    // carry the structured body of a pre-dispatch endpoint 400 (a missing header,
+    // an unknown type discriminator, a malformed payload), which has no Errors map.
+    // One arm of the two is populated per 400; the other stays empty.
+    public ApiValidationException(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> errors,
+        string? code = null,
+        string? message = null)
+        : base(message ?? "The request was invalid.")
     {
         Errors = errors;
+        Code = code;
     }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Errors { get; }
+
+    public string? Code { get; }
 }
 
 public sealed class ApiBusinessRuleException : ApiClientException

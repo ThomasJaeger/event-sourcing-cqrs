@@ -23,6 +23,10 @@ var apiBaseUrl = builder.Configuration["API_BASE_URL"]
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// TimeProvider for the optimistic-UI polling loop's delays and deadline. Tests
+// register a FakeTimeProvider to drive the loop deterministically.
+builder.Services.AddSingleton(TimeProvider.System);
+
 // Type-provider registration mirrors the Api host's set: the Web host's IApiClient
 // builds envelope discriminators for every command and query it dispatches, so the
 // providers it registers must cover the same surface the Api host accepts. No
@@ -82,7 +86,3 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
-
-// Exposed so the Hosts.Web.Tests project's WebApplicationFactory<Program> at
-// Commit 22 can boot this composition against an in-memory Api test server.
-public partial class Program { }

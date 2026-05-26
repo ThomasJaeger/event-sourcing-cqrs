@@ -19,6 +19,9 @@ public class OrderDetailPageTests : BunitContext
     public OrderDetailPageTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
+        // The page injects TimeProvider for its polling loop. These render-only
+        // tests never start polling, so the system clock satisfies the dependency.
+        Services.AddSingleton(TimeProvider.System);
     }
 
     [Fact]

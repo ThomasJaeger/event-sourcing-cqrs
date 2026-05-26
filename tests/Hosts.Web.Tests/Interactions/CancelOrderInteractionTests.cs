@@ -153,4 +153,26 @@ public class CancelOrderInteractionTests : BunitContext
         cut.Markup.Should().Contain("Cancel failed");
         cut.Markup.Should().Contain("Something went wrong");
     }
+
+    [Fact]
+    public void Validation_failure_with_only_a_server_message_surfaces_that_message()
+    {
+        // A pre-dispatch endpoint 400 (a missing header, an unknown type, a
+        // malformed payload) carries a structured code and message but no field
+        // errors. The button renders the server's message rather than the generic
+        // fallback it shows when neither field errors nor a server message exist.
+        stubApiClient.SeedCommandFailure<CancelOrder>(new ApiValidationException(
+            new Dictionary<string, IReadOnlyList<string>>(),
+            "MISSING_IDEMPOTENCY_KEY",
+            "The Idempotency-Key header is required."));
+
+        var cut = Render<CancelOrderButton>(p => p
+            .Add(x => x.OrderId, Guid.NewGuid())
+            .Add(x => x.OnDispatched, () => Task.CompletedTask));
+
+        cut.Find("button").Click();
+
+        cut.Markup.Should().Contain("Cancel failed");
+        cut.Markup.Should().Contain("The Idempotency-Key header is required.");
+    }
 }

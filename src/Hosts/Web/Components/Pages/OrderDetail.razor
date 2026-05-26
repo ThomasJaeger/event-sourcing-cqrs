@@ -3,6 +3,7 @@
 @using EventSourcingCqrs.Domain.Sales
 @using EventSourcingCqrs.Hosts.Web.Components
 @inject IApiClient ApiClient
+@inject TimeProvider TimeProvider
 @implements IAsyncDisposable
 
 <PageTitle>Order @OrderId</PageTitle>
@@ -111,14 +112,14 @@ else
         pollingCts = new CancellationTokenSource();
         var token = pollingCts.Token;
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
         var transientFailures = 0;
 
-        while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(1), token);
+                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
                 await LoadAsync(token);
                 StateHasChanged();
                 transientFailures = 0;
