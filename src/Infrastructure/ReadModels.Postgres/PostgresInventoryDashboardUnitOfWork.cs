@@ -33,12 +33,19 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // ON CONFLICT DO NOTHING: a redelivered InventoryCreated keeps the first
-        // row. on_hand_quantity and reserved_quantity take their DDL defaults of 0.
+        // Untargeted ON CONFLICT DO NOTHING, covering both unique constraints on
+        // the table: a redelivered InventoryCreated conflicts on the inventory_id
+        // PK, and a duplicate-SKU create under a different InventoryId conflicts on
+        // the sku UNIQUE constraint (migration 0013). Both no-op, so a duplicate SKU
+        // never faults the projection, mirroring SkuToInventoryIdUnitOfWork.
+        // RecordAsync. The first SKU owner keeps its row; a conflicting create
+        // leaves an orphan aggregate with no dashboard row, the read-side stance of
+        // ADR 0020. on_hand_quantity and reserved_quantity take their DDL defaults
+        // of 0.
         cmd.CommandText =
             "INSERT INTO read_models.inventory_dashboard (inventory_id, sku, last_updated_utc) " +
             "VALUES (@inventory_id, @sku, @last_updated_utc) " +
-            "ON CONFLICT (inventory_id) DO NOTHING";
+            "ON CONFLICT DO NOTHING";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);

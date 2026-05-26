@@ -1,4 +1,7 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Fulfillment;
+using EventSourcingCqrs.Domain.Fulfillment.Events;
+using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
@@ -68,6 +71,47 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
             row!.OrderId.Should().Be(orderId);
             row.Status.Should().Be(OrderStatus.Placed);
             row.Total.Should().Be(new Money(99.95m, Currency.USD));
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Host_startup_catch_up_tolerates_a_duplicate_sku_stream()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        // Two InventoryCreated events share a SKU under different InventoryIds, on
+        // their two aggregate streams. Appended before the host starts, so the
+        // startup catch-up replays both. Without the untargeted ON CONFLICT, the
+        // second create faults the inventory-dashboard projection on the sku UNIQUE
+        // constraint, and StartingAsync rethrows so StartAsync never completes.
+        var firstOwner = Guid.NewGuid();
+        var secondOwner = Guid.NewGuid();
+        var when = new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc);
+
+        var eventStore = host.Services.GetRequiredService<IEventStore>();
+        var streamA = StreamId.ForAggregate<Inventory>(firstOwner);
+        var streamB = StreamId.ForAggregate<Inventory>(secondOwner);
+        await eventStore.AppendAsync(
+            streamA, 0, [BuildEnvelope(streamA, 1, new InventoryCreated(firstOwner, "SKU-1", when))], cts.Token);
+        await eventStore.AppendAsync(
+            streamB, 0, [BuildEnvelope(streamB, 1, new InventoryCreated(secondOwner, "SKU-1", when))], cts.Token);
+
+        // Catch-up runs in StartingAsync, before the outbox tail starts, so a
+        // StartAsync that returns means the duplicate-SKU replay did not fault.
+        await host.StartAsync(cts.Token);
+        try
+        {
+            var dashboard = host.Services.GetRequiredService<IInventoryDashboardStore>();
+            var row = await dashboard.GetBySkuAsync("SKU-1", cts.Token);
+
+            row.Should().NotBeNull("startup catch-up should tolerate the duplicate SKU");
+            row!.InventoryId.Should().Be(firstOwner, "the first SKU owner keeps the dashboard row");
         }
         finally
         {

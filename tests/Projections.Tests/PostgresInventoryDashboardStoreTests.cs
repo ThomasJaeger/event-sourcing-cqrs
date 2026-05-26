@@ -42,6 +42,36 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
     }
 
     [Fact]
+    public async Task CreateDashboard_tolerates_a_duplicate_sku_under_a_different_inventory_id()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory));
+        var firstOwner = Guid.NewGuid();
+        var secondOwner = Guid.NewGuid();
+
+        // Each create commits in its own transaction, as the projection runs them.
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.CreateDashboardAsync(firstOwner, "SKU-1", At, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+
+        // The second create reuses the SKU under a different InventoryId, which the
+        // sku UNIQUE constraint would reject. The untargeted ON CONFLICT DO NOTHING
+        // makes it a no-op rather than a throw that would fault the projection.
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.CreateDashboardAsync(secondOwner, "SKU-1", At, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        // The first SKU owner keeps the row.
+        (await store.GetBySkuAsync("SKU-1", CancellationToken.None))!.InventoryId.Should().Be(firstOwner);
+    }
+
+    [Fact]
     public async Task AdjustOnHand_accumulates_in_both_directions()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
