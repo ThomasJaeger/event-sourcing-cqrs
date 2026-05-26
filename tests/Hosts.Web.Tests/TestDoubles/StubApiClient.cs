@@ -19,6 +19,7 @@ internal sealed class StubApiClient : IApiClient
     private readonly Dictionary<Type, Queue<object?>> queryResults = new();
     private readonly Dictionary<Type, Queue<CommandAcceptedResponse>> commandResults = new();
     private readonly Dictionary<Type, Queue<Exception>> commandFailures = new();
+    private readonly Dictionary<Type, Queue<Exception>> queryFailures = new();
 
     public List<object> CapturedQueries { get; } = new();
     public List<(ICommand Command, string IdempotencyKey)> CapturedCommands { get; } = new();
@@ -56,10 +57,27 @@ internal sealed class StubApiClient : IApiClient
         queue.Enqueue(exception);
     }
 
+    // Seeds a query to throw, for the polling-loop transient-failure tests. A
+    // seeded query failure takes precedence over a seeded result for the same
+    // type, mirroring SeedCommandFailure.
+    public void SeedQueryFailure<TQuery>(Exception exception)
+    {
+        if (!queryFailures.TryGetValue(typeof(TQuery), out var queue))
+        {
+            queue = new Queue<Exception>();
+            queryFailures[typeof(TQuery)] = queue;
+        }
+        queue.Enqueue(exception);
+    }
+
     public Task<TResult?> QueryAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
     {
         CapturedQueries.Add(query);
         var key = query.GetType();
+        if (queryFailures.TryGetValue(key, out var seededFailures) && seededFailures.Count > 0)
+        {
+            throw seededFailures.Dequeue();
+        }
         if (!queryResults.TryGetValue(key, out var queue) || queue.Count == 0)
         {
             throw new InvalidOperationException(

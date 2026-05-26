@@ -1,8 +1,13 @@
 @page "/orders/new"
 @using EventSourcingCqrs.Application.Commands.Sales
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Sales
 @using EventSourcingCqrs.Domain.SharedKernel
 @using EventSourcingCqrs.Hosts.Web.Components.OrderCreate
 @inject IApiClient ApiClient
+@inject TimeProvider TimeProvider
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
 
 <PageTitle>New Order</PageTitle>
 
@@ -48,7 +53,12 @@
             <ReviewAndPlaceStep OrderId="@orderId"
                                 CustomerId="@customerId"
                                 LineItems="@lineItems"
-                                ShippingAddress="@shippingAddress" />
+                                ShippingAddress="@shippingAddress"
+                                BadgeState="@placeBadgeState"
+                                BadgeMessage="@placeMessage"
+                                IsPlacing="@isPlacing"
+                                FailureMessage="@placeFailureMessage"
+                                OnPlace="@HandlePlaceOrder" />
             break;
     }
 
@@ -73,6 +83,12 @@
 
     private bool isDispatchingLine;
     private string? lineFailureMessage;
+
+    private CancellationTokenSource? pollingCts;
+    private BadgeState placeBadgeState = BadgeState.Idle;
+    private string placeMessage = string.Empty;
+    private bool isPlacing;
+    private string? placeFailureMessage;
 
     private void HandleCustomerStepDispatched()
     {
@@ -158,5 +174,121 @@
         {
             isDispatchingLine = false;
         }
+    }
+
+    // PlaceOrder is the wizard's final dispatch. It transitions the badge to
+    // Pending optimistically, then polls GetOrderDetail for the Draft-to-Placed
+    // status flip (D6); the PM cascade downstream of OrderPlaced surfaces at the
+    // order-detail page the poll redirects to. Page-owned to match the line
+    // dispatches, since the polling loop owns the page's TimeProvider and disposal.
+    private async Task HandlePlaceOrder()
+    {
+        placeFailureMessage = null;
+        placeBadgeState = BadgeState.Pending;
+        placeMessage = "Placing order...";
+        isPlacing = true;
+
+        try
+        {
+            var command = new PlaceOrder(orderId);
+            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+
+            pollingCts?.Cancel();
+            pollingCts?.Dispose();
+            pollingCts = new CancellationTokenSource();
+            _ = StartPlacePolling(pollingCts.Token);
+        }
+        catch (ApiValidationException ex)
+        {
+            placeBadgeState = BadgeState.Failed;
+            placeFailureMessage = ex.Errors.Count > 0
+                ? string.Join(" ", ex.Errors.SelectMany(kvp => kvp.Value))
+                : (!string.IsNullOrWhiteSpace(ex.Message) && ex.Message != "The request was invalid.")
+                    ? ex.Message
+                    : "The order could not be placed.";
+            isPlacing = false;
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            placeBadgeState = BadgeState.Failed;
+            placeFailureMessage = ex.Message;
+            isPlacing = false;
+        }
+        catch (ApiConcurrencyException)
+        {
+            placeBadgeState = BadgeState.Failed;
+            placeFailureMessage = "The order changed while you were placing it. Please refresh and try again.";
+            isPlacing = false;
+        }
+        catch (ApiInfrastructureException ex)
+        {
+            placeBadgeState = BadgeState.Failed;
+            placeFailureMessage = $"The order could not be placed: {ex.Message}";
+            isPlacing = false;
+        }
+    }
+
+    // Mirrors OrderDetail.razor's StartPolling: 1-second TimeProvider-driven
+    // delays, a 30-second deadline, a five-retry cap on transient read failures,
+    // and OperationCanceled exit on disposal. On the Status flip to Placed it
+    // settles the badge and redirects to the order-detail page (N.a), where the
+    // user watches the PM cascade unfold.
+    private async Task StartPlacePolling(CancellationToken token)
+    {
+        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
+        var transientFailures = 0;
+
+        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
+                var detail = await ApiClient.QueryAsync(new GetOrderDetail(orderId), token);
+                transientFailures = 0;
+
+                if (detail?.Header.Status == OrderStatus.Placed)
+                {
+                    placeBadgeState = BadgeState.Settled;
+                    placeMessage = "Order placed.";
+                    await InvokeAsync(StateHasChanged);
+                    NavigationManager.NavigateTo($"/orders/{orderId}");
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (ApiInfrastructureException)
+            {
+                transientFailures++;
+                if (transientFailures >= 5)
+                {
+                    placeBadgeState = BadgeState.Failed;
+                    placeFailureMessage = "The order detail could not be retrieved. The order may still have been placed; check the orders list.";
+                    isPlacing = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+            }
+        }
+
+        // The 30-second window elapsed without the status flipping to Placed.
+        if (!token.IsCancellationRequested)
+        {
+            placeBadgeState = BadgeState.Failed;
+            placeFailureMessage = "Placing the order is taking longer than expected. The order may still be processing; check the orders list.";
+            isPlacing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        pollingCts?.Cancel();
+        pollingCts?.Dispose();
+        pollingCts = null;
+        await Task.CompletedTask;
     }
 }

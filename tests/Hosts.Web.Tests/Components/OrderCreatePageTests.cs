@@ -22,6 +22,9 @@ public sealed class OrderCreatePageTests : BunitContext
     public OrderCreatePageTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
+        // The page injects TimeProvider for the PlaceOrder polling loop. These
+        // navigation tests never start polling, so the system clock satisfies it.
+        Services.AddSingleton(TimeProvider.System);
     }
 
     [Fact]
@@ -221,7 +224,7 @@ public sealed class OrderCreatePageTests : BunitContext
         cut.Markup.Should().Contain("SKU-1");
         cut.Markup.Should().Contain("1 Main St");
         cut.FindAll("button").Single(b => b.TextContent.Trim() == "Place order")
-            .HasAttribute("disabled").Should().BeTrue();
+            .HasAttribute("disabled").Should().BeFalse();
 
         var commands = stubApiClient.CapturedCommands.Select(c => c.Command).ToList();
         var orderIds = new[]

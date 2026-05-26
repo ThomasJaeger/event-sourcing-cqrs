@@ -42,16 +42,25 @@
         </div>
     }
 
-    <p class="text-sm text-gray-600 mb-4">
-        Placing the order becomes available once Commit 26 wires the PlaceOrder
-        dispatch with the pending-badge surface.
-    </p>
+    @if (!string.IsNullOrEmpty(FailureMessage))
+    {
+        <p class="text-sm text-red-600 mb-3">@FailureMessage</p>
+    }
 
-    <button type="button"
-            class="bg-green-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed"
-            disabled="true">
-        Place order
-    </button>
+    <div class="flex items-center gap-3">
+        <button id="placeOrderButton"
+                type="button"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                @onclick="HandlePlace"
+                disabled="@(!CanPlace)">
+            @(IsPlacing ? "Placing order..." : "Place order")
+        </button>
+
+        @if (BadgeState != BadgeState.Idle)
+        {
+            <PendingBadge State="@BadgeState" Message="@BadgeMessage" />
+        }
+    </div>
 </div>
 
 @code {
@@ -59,4 +68,19 @@
     [Parameter, EditorRequired] public Guid CustomerId { get; set; }
     [Parameter, EditorRequired] public List<LineItem> LineItems { get; set; } = new();
     [Parameter] public Address? ShippingAddress { get; set; }
+    [Parameter] public BadgeState BadgeState { get; set; } = BadgeState.Idle;
+    [Parameter] public string BadgeMessage { get; set; } = string.Empty;
+    [Parameter] public bool IsPlacing { get; set; }
+    [Parameter] public string? FailureMessage { get; set; }
+    [Parameter] public EventCallback OnPlace { get; set; }
+
+    // Disabled while a place is in flight (Pending) or already settled, so the
+    // operator cannot double-place; enabled on Idle or Failed so a failed place
+    // can be retried.
+    private bool CanPlace =>
+        !IsPlacing
+        && BadgeState != BadgeState.Pending
+        && BadgeState != BadgeState.Settled;
+
+    private Task HandlePlace() => OnPlace.InvokeAsync();
 }
