@@ -3,41 +3,40 @@
 <div>
     <h2 class="text-lg font-semibold mb-4">Line items</h2>
 
-    <p class="text-sm text-gray-600 mb-4">
-        Line items become available once Commit 25 wires the AddOrderLine and
-        RemoveOrderLine dispatches.
-    </p>
-
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <div>
-            <label class="block text-sm font-medium mb-1">SKU</label>
-            <input type="text"
+            <label for="skuInput" class="block text-sm font-medium mb-1">SKU</label>
+            <input id="skuInput"
+                   type="text"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="skuInput"
-                   disabled="true" />
+                   disabled="@IsDispatching" />
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Quantity</label>
-            <input type="number"
+            <label for="quantityInput" class="block text-sm font-medium mb-1">Quantity</label>
+            <input id="quantityInput"
+                   type="number"
                    min="1"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="quantityInput"
-                   disabled="true" />
+                   disabled="@IsDispatching" />
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Unit price</label>
-            <input type="number"
+            <label for="unitPriceInput" class="block text-sm font-medium mb-1">Unit price</label>
+            <input id="unitPriceInput"
+                   type="number"
                    step="0.01"
                    min="0"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="unitPriceInput"
-                   disabled="true" />
+                   disabled="@IsDispatching" />
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Currency</label>
-            <select class="border border-gray-300 rounded px-3 py-2 w-full"
+            <label for="currencyInput" class="block text-sm font-medium mb-1">Currency</label>
+            <select id="currencyInput"
+                    class="border border-gray-300 rounded px-3 py-2 w-full"
                     @bind="currencyInput"
-                    disabled="true">
+                    disabled="@IsDispatching">
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
                 <option value="GBP">GBP</option>
@@ -46,10 +45,16 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrEmpty(FailureMessage))
+    {
+        <p class="text-sm text-red-600 mb-3">@FailureMessage</p>
+    }
+
     <button type="button"
-            class="bg-blue-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed mb-4"
-            disabled="true">
-        Add to order
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+            @onclick="HandleAdd"
+            disabled="@(!CanAdd)">
+        @(IsDispatching ? "Adding..." : "Add to order")
     </button>
 
     <div class="border rounded p-4 bg-gray-50 mb-4">
@@ -65,8 +70,9 @@
                     <li class="flex justify-between items-center py-1">
                         <span>@line.Sku × @line.Quantity @@ @line.UnitPrice</span>
                         <button type="button"
-                                class="text-sm text-red-600 hover:text-red-800"
-                                disabled="true">
+                                class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                @onclick="() => OnRemoveLine.InvokeAsync(line.LineId)"
+                                disabled="@IsDispatching">
                             Remove
                         </button>
                     </li>
@@ -76,8 +82,9 @@
     </div>
 
     <button type="button"
-            class="bg-gray-300 text-gray-700 px-4 py-2 rounded cursor-not-allowed"
-            disabled="true">
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            @onclick="HandleContinue"
+            disabled="@(!CanContinue || IsDispatching)">
         Continue to shipping
     </button>
 </div>
@@ -85,10 +92,36 @@
 @code {
     [Parameter, EditorRequired] public Guid OrderId { get; set; }
     [Parameter, EditorRequired] public List<LineItem> LineItems { get; set; } = new();
+    [Parameter] public bool IsDispatching { get; set; }
+    [Parameter] public string? FailureMessage { get; set; }
+    [Parameter] public bool CanContinue { get; set; }
+    [Parameter] public EventCallback<(string Sku, int Quantity, Money UnitPrice)> OnAddLine { get; set; }
+    [Parameter] public EventCallback<Guid> OnRemoveLine { get; set; }
     [Parameter] public EventCallback OnContinue { get; set; }
 
     private string skuInput = string.Empty;
     private int quantityInput = 1;
     private decimal unitPriceInput;
     private string currencyInput = "USD";
+
+    private bool CanAdd =>
+        !IsDispatching
+        && !string.IsNullOrWhiteSpace(skuInput)
+        && quantityInput >= 1
+        && unitPriceInput >= 0;
+
+    private async Task HandleAdd()
+    {
+        var unitPrice = new Money(unitPriceInput, new Currency(currencyInput));
+        await OnAddLine.InvokeAsync((skuInput, quantityInput, unitPrice));
+
+        // Clear the form for the next line; the operator's flow is add-one,
+        // add-another.
+        skuInput = string.Empty;
+        quantityInput = 1;
+        unitPriceInput = 0;
+        currencyInput = "USD";
+    }
+
+    private Task HandleContinue() => OnContinue.InvokeAsync();
 }

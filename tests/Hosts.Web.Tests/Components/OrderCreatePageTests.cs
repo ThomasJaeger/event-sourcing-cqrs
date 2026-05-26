@@ -10,14 +10,11 @@ using OrderCreatePage = EventSourcingCqrs.Hosts.Web.Components.Pages.OrderCreate
 
 namespace EventSourcingCqrs.Hosts.Web.Tests.Components;
 
-// The wizard page owns step navigation and the working OrderId; each step
-// component owns its own dispatch. These tests cover the navigation the scaffold
-// ships: step 1 (CustomerStep) dispatches DraftOrder and advances to step 2, Back
-// returns, and the step indicator tracks the current step. Steps 3 and 4 are not
-// reachable through the UI until Commit 25 enables the steps-2-and-3 Continue
-// buttons, so assertions that depend on reaching them are deferred. The
-// OrderCreatePage alias keeps the page class from colliding with this assembly's
-// Components.OrderCreate test namespace.
+// The wizard page owns step navigation, the working OrderId, the line list, and
+// (design call M.a) the AddOrderLine and RemoveOrderLine dispatch. These tests
+// cover navigation plus the page-owned line dispatches end to end through the
+// rendered steps. The OrderCreatePage alias keeps the page class from colliding
+// with this assembly's Components.OrderCreate test namespace.
 public sealed class OrderCreatePageTests : BunitContext
 {
     private readonly StubApiClient stubApiClient = new();
@@ -71,9 +68,6 @@ public sealed class OrderCreatePageTests : BunitContext
     [Fact]
     public void Step_one_dispatches_DraftOrder_with_the_wizard_OrderId_and_entered_CustomerId()
     {
-        // Scaffold-level OrderId assertion: the dispatch carries the page's own
-        // OrderId and the entered CustomerId. The step-1-to-step-4-review
-        // stability comparison lands at Commit 26, when step 4 becomes reachable.
         var customerId = Guid.NewGuid();
         stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
         var cut = Render<OrderCreatePage>();
@@ -109,5 +103,147 @@ public sealed class OrderCreatePageTests : BunitContext
 
         cut.Markup.Should().Contain("Customer ID");
         cut.Markup.Should().NotContain("No line items yet");
+    }
+
+    [Fact]
+    public void AddOrderLine_dispatch_adds_a_line_to_the_visible_list()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+
+        AddLine(cut, "SKU-1", "2", "10");
+
+        var add = stubApiClient.CapturedCommands.Select(c => c.Command).OfType<AddOrderLine>()
+            .Should().ContainSingle().Subject;
+        add.Sku.Should().Be("SKU-1");
+        add.Quantity.Should().Be(2);
+        add.UnitPrice.Amount.Should().Be(10m);
+        var draft = stubApiClient.CapturedCommands.Select(c => c.Command).OfType<DraftOrder>().Single();
+        add.OrderId.Should().Be(draft.OrderId);
+        cut.Markup.Should().Contain("SKU-1");
+        cut.Markup.Should().NotContain("No line items yet");
+    }
+
+    [Fact]
+    public void RemoveOrderLine_dispatch_removes_the_line_with_its_minted_LineId()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(RemoveOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+        AddLine(cut, "SKU-1", "1", "10");
+        cut.Markup.Should().Contain("SKU-1");
+
+        cut.FindAll("button").Single(b => b.TextContent.Trim() == "Remove").Click();
+
+        var remove = stubApiClient.CapturedCommands.Select(c => c.Command).OfType<RemoveOrderLine>()
+            .Should().ContainSingle().Subject;
+        var add = stubApiClient.CapturedCommands.Select(c => c.Command).OfType<AddOrderLine>().Single();
+        remove.LineId.Should().Be(add.LineId);
+        cut.Markup.Should().Contain("No line items yet");
+    }
+
+    [Fact]
+    public void AddOrderLine_failure_renders_the_message_and_does_not_add_the_line()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.SeedCommandFailure<AddOrderLine>(new ApiBusinessRuleException(
+            "RULE", "That SKU is discontinued."));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+
+        AddLine(cut, "SKU-1", "1", "10");
+
+        cut.Markup.Should().Contain("That SKU is discontinued.");
+        cut.Markup.Should().Contain("No line items yet");
+    }
+
+    [Fact]
+    public void AddOrderLine_dispatches_a_fresh_idempotency_key_per_call()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+
+        AddLine(cut, "SKU-1", "1", "10");
+        AddLine(cut, "SKU-2", "1", "10");
+
+        var keys = stubApiClient.CapturedCommands
+            .Where(c => c.Command is AddOrderLine)
+            .Select(c => c.IdempotencyKey)
+            .ToList();
+        keys.Should().HaveCount(2);
+        keys.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void AddOrderLine_mints_a_fresh_LineId_per_call()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+
+        AddLine(cut, "SKU-1", "1", "10");
+        AddLine(cut, "SKU-2", "1", "10");
+
+        var lineIds = stubApiClient.CapturedCommands.Select(c => c.Command).OfType<AddOrderLine>()
+            .Select(a => a.LineId)
+            .ToList();
+        lineIds.Should().HaveCount(2);
+        lineIds.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void Wizard_advances_through_all_steps_to_review_with_a_stable_OrderId()
+    {
+        stubApiClient.EnqueueCommandResult(typeof(DraftOrder), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(AddOrderLine), new CommandAcceptedResponse(DateTime.UtcNow));
+        stubApiClient.EnqueueCommandResult(typeof(SetOrderShippingAddress), new CommandAcceptedResponse(DateTime.UtcNow));
+        var cut = Render<OrderCreatePage>();
+        AdvanceToLineItems(cut);
+        AddLine(cut, "SKU-1", "1", "10");
+
+        cut.FindAll("button").Single(b => b.TextContent.Trim() == "Continue to shipping").Click();
+        cut.Find("#streetInput").Change("1 Main St");
+        cut.Find("#cityInput").Change("Springfield");
+        cut.Find("#postalCodeInput").Change("12345");
+        cut.Find("#countryInput").Change("USA");
+        cut.FindAll("button").Single(b => b.TextContent.Trim().StartsWith("Sav")).Click();
+
+        cut.Markup.Should().Contain("Review and place");
+        cut.Markup.Should().Contain("SKU-1");
+        cut.Markup.Should().Contain("1 Main St");
+        cut.FindAll("button").Single(b => b.TextContent.Trim() == "Place order")
+            .HasAttribute("disabled").Should().BeTrue();
+
+        var commands = stubApiClient.CapturedCommands.Select(c => c.Command).ToList();
+        var orderIds = new[]
+        {
+            commands.OfType<DraftOrder>().Single().OrderId,
+            commands.OfType<AddOrderLine>().Single().OrderId,
+            commands.OfType<SetOrderShippingAddress>().Single().OrderId,
+        };
+        orderIds.Should().AllBeEquivalentTo(orderIds[0]);
+    }
+
+    private static void AdvanceToLineItems(IRenderedComponent<OrderCreatePage> cut)
+    {
+        cut.Find("#customerIdInput").Input(Guid.NewGuid().ToString());
+        cut.Find("button").Click();
+    }
+
+    private static void AddLine(IRenderedComponent<OrderCreatePage> cut, string sku, string quantity, string unitPrice)
+    {
+        cut.Find("#skuInput").Change(sku);
+        cut.Find("#quantityInput").Change(quantity);
+        cut.Find("#unitPriceInput").Change(unitPrice);
+        cut.FindAll("button").Single(b => b.TextContent.Trim().StartsWith("Add")).Click();
     }
 }

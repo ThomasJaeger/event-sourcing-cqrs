@@ -1,6 +1,8 @@
 @page "/orders/new"
+@using EventSourcingCqrs.Application.Commands.Sales
 @using EventSourcingCqrs.Domain.SharedKernel
 @using EventSourcingCqrs.Hosts.Web.Components.OrderCreate
+@inject IApiClient ApiClient
 
 <PageTitle>New Order</PageTitle>
 
@@ -29,6 +31,11 @@
         case 2:
             <LineItemsStep OrderId="@orderId"
                            LineItems="@lineItems"
+                           IsDispatching="@isDispatchingLine"
+                           FailureMessage="@lineFailureMessage"
+                           CanContinue="@(lineItems.Count >= 1)"
+                           OnAddLine="@HandleAddLine"
+                           OnRemoveLine="@HandleRemoveLine"
                            OnContinue="@(() => currentStep = 3)" />
             break;
         case 3:
@@ -64,8 +71,92 @@
     private List<LineItem> lineItems = new();
     private Address? shippingAddress;
 
+    private bool isDispatchingLine;
+    private string? lineFailureMessage;
+
     private void HandleCustomerStepDispatched()
     {
         currentStep = 2;
+    }
+
+    // The line-item dispatches are page-owned (design call M.a): the page holds
+    // the working line list and the LineId minting site (alongside OrderId), so
+    // the step component stays a form that reports inputs back rather than holding
+    // its own dispatch state. LineId is minted here per add, matching OrderId.
+    private async Task HandleAddLine((string Sku, int Quantity, Money UnitPrice) input)
+    {
+        isDispatchingLine = true;
+        lineFailureMessage = null;
+        var lineId = Guid.NewGuid();
+
+        try
+        {
+            var command = new AddOrderLine(orderId, lineId, input.Sku, input.Quantity, input.UnitPrice);
+            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+            lineItems.Add(new LineItem(lineId, input.Sku, input.Quantity, input.UnitPrice));
+        }
+        catch (ApiValidationException ex)
+        {
+            lineFailureMessage = ex.Errors.Count > 0
+                ? string.Join(" ", ex.Errors.SelectMany(kvp => kvp.Value))
+                : (!string.IsNullOrWhiteSpace(ex.Message) && ex.Message != "The request was invalid.")
+                    ? ex.Message
+                    : "The line could not be added.";
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            lineFailureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            lineFailureMessage = "The order changed while you were editing. Please refresh and try again.";
+        }
+        catch (ApiInfrastructureException ex)
+        {
+            lineFailureMessage = $"The line could not be added: {ex.Message}";
+        }
+        finally
+        {
+            isDispatchingLine = false;
+        }
+    }
+
+    private async Task HandleRemoveLine(Guid lineId)
+    {
+        isDispatchingLine = true;
+        lineFailureMessage = null;
+
+        try
+        {
+            var command = new RemoveOrderLine(orderId, lineId);
+            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+            lineItems.RemoveAll(li => li.LineId == lineId);
+        }
+        catch (ApiValidationException ex)
+        {
+            lineFailureMessage = ex.Errors.Count > 0
+                ? string.Join(" ", ex.Errors.SelectMany(kvp => kvp.Value))
+                : (!string.IsNullOrWhiteSpace(ex.Message) && ex.Message != "The request was invalid.")
+                    ? ex.Message
+                    : "The line could not be removed.";
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            lineFailureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            lineFailureMessage = "The order changed while you were editing. Please refresh and try again.";
+        }
+        catch (ApiInfrastructureException ex)
+        {
+            lineFailureMessage = $"The line could not be removed: {ex.Message}";
+        }
+        finally
+        {
+            isDispatchingLine = false;
+        }
     }
 }

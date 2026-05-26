@@ -1,48 +1,55 @@
+@inject IApiClient ApiClient
+@using EventSourcingCqrs.Application.Commands.Sales
 @using EventSourcingCqrs.Domain.SharedKernel
 
 <div>
     <h2 class="text-lg font-semibold mb-4">Shipping address</h2>
 
-    <p class="text-sm text-gray-600 mb-4">
-        Shipping address becomes available once Commit 25 wires the
-        SetOrderShippingAddress dispatch.
-    </p>
-
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <div class="md:col-span-2">
-            <label class="block text-sm font-medium mb-1">Street</label>
-            <input type="text"
+            <label for="streetInput" class="block text-sm font-medium mb-1">Street</label>
+            <input id="streetInput"
+                   type="text"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="streetInput"
-                   disabled="true" />
+                   disabled="@isDispatching" />
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">City</label>
-            <input type="text"
+            <label for="cityInput" class="block text-sm font-medium mb-1">City</label>
+            <input id="cityInput"
+                   type="text"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="cityInput"
-                   disabled="true" />
+                   disabled="@isDispatching" />
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Postal code</label>
-            <input type="text"
+            <label for="postalCodeInput" class="block text-sm font-medium mb-1">Postal code</label>
+            <input id="postalCodeInput"
+                   type="text"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="postalCodeInput"
-                   disabled="true" />
+                   disabled="@isDispatching" />
         </div>
         <div class="md:col-span-2">
-            <label class="block text-sm font-medium mb-1">Country</label>
-            <input type="text"
+            <label for="countryInput" class="block text-sm font-medium mb-1">Country</label>
+            <input id="countryInput"
+                   type="text"
                    class="border border-gray-300 rounded px-3 py-2 w-full"
                    @bind="countryInput"
-                   disabled="true" />
+                   disabled="@isDispatching" />
         </div>
     </div>
 
+    @if (!string.IsNullOrEmpty(failureMessage))
+    {
+        <p class="text-sm text-red-600 mb-3">@failureMessage</p>
+    }
+
     <button type="button"
-            class="bg-blue-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed"
-            disabled="true">
-        Save shipping address
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            @onclick="HandleSubmit"
+            disabled="@(!CanSubmit)">
+        @(isDispatching ? "Saving..." : "Save shipping address")
     </button>
 </div>
 
@@ -56,4 +63,68 @@
     private string cityInput = string.Empty;
     private string postalCodeInput = string.Empty;
     private string countryInput = string.Empty;
+
+    private bool isDispatching;
+    private string? failureMessage;
+
+    private bool CanSubmit =>
+        !isDispatching
+        && !string.IsNullOrWhiteSpace(streetInput)
+        && !string.IsNullOrWhiteSpace(cityInput)
+        && !string.IsNullOrWhiteSpace(postalCodeInput)
+        && !string.IsNullOrWhiteSpace(countryInput);
+
+    // Rehydrate the form when the operator navigates back to this step from the
+    // review step; the address they saved earlier reappears. The empty-street
+    // guard keeps an in-progress edit from being overwritten on later renders.
+    protected override void OnParametersSet()
+    {
+        if (Address is not null && string.IsNullOrEmpty(streetInput))
+        {
+            streetInput = Address.Street;
+            cityInput = Address.City;
+            postalCodeInput = Address.PostalCode;
+            countryInput = Address.Country;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        failureMessage = null;
+        isDispatching = true;
+
+        try
+        {
+            var address = new Address(streetInput, cityInput, postalCodeInput, countryInput);
+            var command = new SetOrderShippingAddress(OrderId, address);
+            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+            await OnAddressChanged.InvokeAsync(address);
+            await OnContinue.InvokeAsync();
+        }
+        catch (ApiValidationException ex)
+        {
+            failureMessage = ex.Errors.Count > 0
+                ? string.Join(" ", ex.Errors.SelectMany(kvp => kvp.Value))
+                : (!string.IsNullOrWhiteSpace(ex.Message) && ex.Message != "The request was invalid.")
+                    ? ex.Message
+                    : "The shipping address could not be saved.";
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            failureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            failureMessage = "The order changed while you were editing. Please refresh and try again.";
+        }
+        catch (ApiInfrastructureException ex)
+        {
+            failureMessage = $"The shipping address could not be saved: {ex.Message}";
+        }
+        finally
+        {
+            isDispatching = false;
+        }
+    }
 }
