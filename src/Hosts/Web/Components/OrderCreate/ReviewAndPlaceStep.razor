@@ -1,0 +1,62 @@
+@using EventSourcingCqrs.Domain.SharedKernel
+
+<div>
+    <h2 class="text-lg font-semibold mb-4">Review and place</h2>
+
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+            <dt class="text-sm font-medium text-gray-600">Order ID</dt>
+            <dd class="text-sm font-mono">@OrderId</dd>
+        </div>
+        @if (CustomerId != Guid.Empty)
+        {
+            <div>
+                <dt class="text-sm font-medium text-gray-600">Customer ID</dt>
+                <dd class="text-sm font-mono">@CustomerId</dd>
+            </div>
+        }
+    </dl>
+
+    @if (LineItems.Count > 0)
+    {
+        <div class="mb-4">
+            <h3 class="text-sm font-medium text-gray-600 mb-2">Line items</h3>
+            <ul>
+                @foreach (var line in LineItems)
+                {
+                    <li class="text-sm">@line.Sku × @line.Quantity @@ @line.UnitPrice</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (ShippingAddress is not null)
+    {
+        <div class="mb-4">
+            <h3 class="text-sm font-medium text-gray-600 mb-2">Shipping address</h3>
+            <address class="text-sm not-italic">
+                @ShippingAddress.Street<br />
+                @ShippingAddress.City, @ShippingAddress.PostalCode<br />
+                @ShippingAddress.Country
+            </address>
+        </div>
+    }
+
+    <p class="text-sm text-gray-600 mb-4">
+        Placing the order becomes available once Commit 26 wires the PlaceOrder
+        dispatch with the pending-badge surface.
+    </p>
+
+    <button type="button"
+            class="bg-green-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed"
+            disabled="true">
+        Place order
+    </button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid OrderId { get; set; }
+    [Parameter, EditorRequired] public Guid CustomerId { get; set; }
+    [Parameter, EditorRequired] public List<LineItem> LineItems { get; set; } = new();
+    [Parameter] public Address? ShippingAddress { get; set; }
+}

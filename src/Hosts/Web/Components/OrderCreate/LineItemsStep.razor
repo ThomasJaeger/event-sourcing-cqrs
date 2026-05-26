@@ -1,0 +1,94 @@
+@using EventSourcingCqrs.Domain.SharedKernel
+
+<div>
+    <h2 class="text-lg font-semibold mb-4">Line items</h2>
+
+    <p class="text-sm text-gray-600 mb-4">
+        Line items become available once Commit 25 wires the AddOrderLine and
+        RemoveOrderLine dispatches.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div>
+            <label class="block text-sm font-medium mb-1">SKU</label>
+            <input type="text"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="skuInput"
+                   disabled="true" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Quantity</label>
+            <input type="number"
+                   min="1"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="quantityInput"
+                   disabled="true" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Unit price</label>
+            <input type="number"
+                   step="0.01"
+                   min="0"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="unitPriceInput"
+                   disabled="true" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Currency</label>
+            <select class="border border-gray-300 rounded px-3 py-2 w-full"
+                    @bind="currencyInput"
+                    disabled="true">
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="JPY">JPY</option>
+            </select>
+        </div>
+    </div>
+
+    <button type="button"
+            class="bg-blue-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed mb-4"
+            disabled="true">
+        Add to order
+    </button>
+
+    <div class="border rounded p-4 bg-gray-50 mb-4">
+        @if (LineItems.Count == 0)
+        {
+            <p class="text-sm text-gray-500">No line items yet.</p>
+        }
+        else
+        {
+            <ul>
+                @foreach (var line in LineItems)
+                {
+                    <li class="flex justify-between items-center py-1">
+                        <span>@line.Sku × @line.Quantity @@ @line.UnitPrice</span>
+                        <button type="button"
+                                class="text-sm text-red-600 hover:text-red-800"
+                                disabled="true">
+                            Remove
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    <button type="button"
+            class="bg-gray-300 text-gray-700 px-4 py-2 rounded cursor-not-allowed"
+            disabled="true">
+        Continue to shipping
+    </button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid OrderId { get; set; }
+    [Parameter, EditorRequired] public List<LineItem> LineItems { get; set; } = new();
+    [Parameter] public EventCallback OnContinue { get; set; }
+
+    private string skuInput = string.Empty;
+    private int quantityInput = 1;
+    private decimal unitPriceInput;
+    private string currencyInput = "USD";
+}

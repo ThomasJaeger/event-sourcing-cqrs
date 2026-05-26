@@ -1,0 +1,71 @@
+@page "/orders/new"
+@using EventSourcingCqrs.Domain.SharedKernel
+@using EventSourcingCqrs.Hosts.Web.Components.OrderCreate
+
+<PageTitle>New Order</PageTitle>
+
+<div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold mb-6">New Order</h1>
+
+    <nav aria-label="Wizard progress" class="mb-6">
+        <ol class="flex items-center space-x-4">
+            @for (var step = 1; step <= StepLabels.Length; step++)
+            {
+                <li class="@(step == currentStep ? "font-bold text-blue-600" : "text-gray-400")">
+                    <span class="text-sm">@step. @StepLabels[step - 1]</span>
+                </li>
+            }
+        </ol>
+    </nav>
+
+    @switch (currentStep)
+    {
+        case 1:
+            <CustomerStep OrderId="@orderId"
+                          CustomerId="@customerId"
+                          OnCustomerIdChanged="@(value => customerId = value)"
+                          OnDispatched="@HandleCustomerStepDispatched" />
+            break;
+        case 2:
+            <LineItemsStep OrderId="@orderId"
+                           LineItems="@lineItems"
+                           OnContinue="@(() => currentStep = 3)" />
+            break;
+        case 3:
+            <ShippingAddressStep OrderId="@orderId"
+                                 Address="@shippingAddress"
+                                 OnAddressChanged="@(value => shippingAddress = value)"
+                                 OnContinue="@(() => currentStep = 4)" />
+            break;
+        case 4:
+            <ReviewAndPlaceStep OrderId="@orderId"
+                                CustomerId="@customerId"
+                                LineItems="@lineItems"
+                                ShippingAddress="@shippingAddress" />
+            break;
+    }
+
+    @if (currentStep > 1)
+    {
+        <button type="button"
+                class="mt-4 text-sm text-gray-600 hover:text-gray-800 underline"
+                @onclick="() => currentStep -= 1">
+            Back
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly string[] StepLabels = ["Customer", "Line items", "Shipping", "Review"];
+
+    private int currentStep = 1;
+    private readonly Guid orderId = Guid.NewGuid();
+    private Guid customerId;
+    private List<LineItem> lineItems = new();
+    private Address? shippingAddress;
+
+    private void HandleCustomerStepDispatched()
+    {
+        currentStep = 2;
+    }
+}

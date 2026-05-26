@@ -1,0 +1,59 @@
+@using EventSourcingCqrs.Domain.SharedKernel
+
+<div>
+    <h2 class="text-lg font-semibold mb-4">Shipping address</h2>
+
+    <p class="text-sm text-gray-600 mb-4">
+        Shipping address becomes available once Commit 25 wires the
+        SetOrderShippingAddress dispatch.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Street</label>
+            <input type="text"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="streetInput"
+                   disabled="true" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">City</label>
+            <input type="text"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="cityInput"
+                   disabled="true" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Postal code</label>
+            <input type="text"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="postalCodeInput"
+                   disabled="true" />
+        </div>
+        <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Country</label>
+            <input type="text"
+                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   @bind="countryInput"
+                   disabled="true" />
+        </div>
+    </div>
+
+    <button type="button"
+            class="bg-blue-600 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed"
+            disabled="true">
+        Save shipping address
+    </button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid OrderId { get; set; }
+    [Parameter] public Address? Address { get; set; }
+    [Parameter] public EventCallback<Address> OnAddressChanged { get; set; }
+    [Parameter] public EventCallback OnContinue { get; set; }
+
+    private string streetInput = string.Empty;
+    private string cityInput = string.Empty;
+    private string postalCodeInput = string.Empty;
+    private string countryInput = string.Empty;
+}

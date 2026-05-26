@@ -1,0 +1,95 @@
+@inject IApiClient ApiClient
+@using EventSourcingCqrs.Application.Commands.Sales
+
+<div>
+    <h2 class="text-lg font-semibold mb-4">Customer</h2>
+
+    <div class="mb-4">
+        <label for="customerIdInput" class="block text-sm font-medium mb-1">
+            Customer ID
+        </label>
+        <input id="customerIdInput"
+               type="text"
+               class="border border-gray-300 rounded px-3 py-2 w-full max-w-md"
+               @bind="customerIdInput"
+               @bind:event="oninput"
+               disabled="@isDispatching" />
+        @if (!string.IsNullOrEmpty(validationMessage))
+        {
+            <p class="text-sm text-red-600 mt-1">@validationMessage</p>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(failureMessage))
+    {
+        <p class="text-sm text-red-600 mb-3">@failureMessage</p>
+    }
+
+    <button type="button"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            @onclick="HandleSubmit"
+            disabled="@(!CanSubmit)">
+        @(isDispatching ? "Starting order..." : "Start order")
+    </button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid OrderId { get; set; }
+    [Parameter] public Guid CustomerId { get; set; }
+    [Parameter] public EventCallback<Guid> OnCustomerIdChanged { get; set; }
+    [Parameter] public EventCallback OnDispatched { get; set; }
+
+    private string customerIdInput = string.Empty;
+    private bool isDispatching;
+    private string? validationMessage;
+    private string? failureMessage;
+
+    private bool CanSubmit => !isDispatching && !string.IsNullOrWhiteSpace(customerIdInput);
+
+    private async Task HandleSubmit()
+    {
+        validationMessage = null;
+        failureMessage = null;
+
+        if (!Guid.TryParse(customerIdInput, out var parsed))
+        {
+            validationMessage = "Customer ID must be a valid GUID.";
+            return;
+        }
+
+        isDispatching = true;
+        await OnCustomerIdChanged.InvokeAsync(parsed);
+
+        try
+        {
+            var command = new DraftOrder(OrderId, parsed);
+            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
+            await OnDispatched.InvokeAsync();
+        }
+        catch (ApiValidationException ex)
+        {
+            failureMessage = ex.Errors.Count > 0
+                ? string.Join(" ", ex.Errors.SelectMany(kvp => kvp.Value))
+                : (!string.IsNullOrWhiteSpace(ex.Message) && ex.Message != "The request was invalid.")
+                    ? ex.Message
+                    : "The order draft request was invalid.";
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            failureMessage = ex.Message;
+        }
+        catch (ApiConcurrencyException)
+        {
+            failureMessage = "An order with this ID already exists. Please refresh and try again.";
+        }
+        catch (ApiInfrastructureException ex)
+        {
+            failureMessage = $"The order draft could not be saved: {ex.Message}";
+        }
+        finally
+        {
+            isDispatching = false;
+        }
+    }
+}
