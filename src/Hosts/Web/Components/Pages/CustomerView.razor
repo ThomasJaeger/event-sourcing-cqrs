@@ -1,0 +1,51 @@
+@page "/customers/{CustomerId:guid}"
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Sales.ReadModels
+@inject IApiClient ApiClient
+
+<PageTitle>Customer @CustomerId</PageTitle>
+
+@if (loading)
+{
+    <p class="text-gray-500">Loading...</p>
+}
+else if (summary is null)
+{
+    <p class="text-gray-500">No order activity for this customer.</p>
+}
+else
+{
+    <h1 class="text-2xl font-bold mb-4">Customer @summary.CustomerId</h1>
+
+    <div class="mb-6 grid grid-cols-2 gap-4">
+        <div>
+            <p class="text-sm text-gray-600">Order Count</p>
+            <p class="font-semibold">@summary.OrderCount</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Lifetime Value</p>
+            <p>@summary.LifetimeValue</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Last Order</p>
+            <p>@summary.LastOrderUtc.ToString("u")</p>
+        </div>
+        <div>
+            <p class="text-sm text-gray-600">Last Updated</p>
+            <p>@summary.LastUpdatedUtc.ToString("u")</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid CustomerId { get; set; }
+
+    private CustomerSummaryRow? summary;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        summary = await ApiClient.QueryAsync(new GetCustomerSummary(CustomerId), CancellationToken.None);
+        loading = false;
+    }
+}
