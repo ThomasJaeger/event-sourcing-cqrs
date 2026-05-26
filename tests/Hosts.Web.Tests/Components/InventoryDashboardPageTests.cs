@@ -31,7 +31,18 @@ public class InventoryDashboardPageTests : BunitContext
         var cut = Render<InventoryDashboard>();
 
         var headers = cut.FindAll("th").Select(th => th.TextContent.Trim()).ToList();
-        headers.Should().Equal("SKU", "On Hand", "Reserved", "Last Updated");
+        headers.Should().Equal("SKU", "On Hand", "Reserved", "Last Updated", "Actions");
+    }
+
+    [Fact]
+    public void Inventory_page_renders_an_adjust_button_per_row()
+    {
+        stubApiClient.EnqueueQueryResult<GetAllInventoryDashboard, IReadOnlyList<InventoryDashboardRow>>(
+            new[] { SampleRow("SKU-1"), SampleRow("SKU-2") });
+
+        var cut = Render<InventoryDashboard>();
+
+        cut.FindAll(".adjust-button").Should().HaveCount(2);
     }
 
     [Fact]

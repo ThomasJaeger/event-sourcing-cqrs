@@ -1,0 +1,71 @@
+@* The adjust affordance's modal, mirroring CreateInventoryDialog: presentation
+   only, raising OnSubmit with the signed delta and reason or OnCancel. The page
+   owns the dispatch, polling, and badge. CurrentOnHand is a snapshot the page
+   passes at open time, for operator context only. *@
+
+<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h2 class="text-lg font-semibold mb-4">Adjust Inventory</h2>
+
+        <dl class="mb-4 text-sm">
+            <div class="flex justify-between">
+                <dt class="text-gray-600">SKU</dt>
+                <dd class="font-mono">@Sku</dd>
+            </div>
+            <div class="flex justify-between">
+                <dt class="text-gray-600">Current on-hand</dt>
+                <dd class="font-semibold">@CurrentOnHand</dd>
+            </div>
+        </dl>
+
+        <label class="block text-sm font-medium text-gray-600 mb-1" for="deltaInput">Adjustment</label>
+        <input id="deltaInput"
+               type="number"
+               class="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+               @bind="delta"
+               @bind:event="oninput" />
+
+        <label class="block text-sm font-medium text-gray-600 mb-1" for="reasonInput">Reason</label>
+        <input id="reasonInput"
+               type="text"
+               class="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+               @bind="reason"
+               @bind:event="oninput" />
+
+        <div class="flex justify-end gap-3">
+            <button id="dialogAdjustCancelButton"
+                    type="button"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                    @onclick="HandleCancel">
+                Cancel
+            </button>
+            <button id="dialogAdjustButton"
+                    type="button"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="HandleSubmit"
+                    disabled="@(!CanSubmit)">
+                Adjust
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Sku { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public int CurrentOnHand { get; set; }
+    [Parameter, EditorRequired] public EventCallback<(int Delta, string Reason)> OnSubmit { get; set; }
+    [Parameter, EditorRequired] public EventCallback OnCancel { get; set; }
+
+    private int delta;
+    private string reason = string.Empty;
+
+    // Client gates mirroring the aggregate's non-zero-delta and non-empty-reason
+    // rules; the server stays the authority. The would-make-available-negative
+    // rule is not re-checked here and surfaces on the page's badge as a
+    // business-rule failure.
+    private bool CanSubmit => delta != 0 && !string.IsNullOrWhiteSpace(reason);
+
+    private Task HandleSubmit() => OnSubmit.InvokeAsync((delta, reason));
+
+    private Task HandleCancel() => OnCancel.InvokeAsync();
+}

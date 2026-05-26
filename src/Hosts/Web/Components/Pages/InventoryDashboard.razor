@@ -19,13 +19,13 @@
     </button>
 </div>
 
-@if (createBadge != BadgeState.Idle)
+@if (opBadge != BadgeState.Idle)
 {
     <div class="mb-4">
-        <PendingBadge State="@createBadge" Message="@createBadgeMessage" />
-        @if (createBadge == BadgeState.Failed && createFailureMessage is not null)
+        <PendingBadge State="@opBadge" Message="@opBadgeMessage" />
+        @if (opBadge == BadgeState.Failed && opFailureMessage is not null)
         {
-            <p class="text-sm text-red-700 mt-1">@createFailureMessage</p>
+            <p class="text-sm text-red-700 mt-1">@opFailureMessage</p>
         }
     </div>
 }
@@ -47,6 +47,7 @@ else
                 <th class="px-4 py-2 text-right">On Hand</th>
                 <th class="px-4 py-2 text-right">Reserved</th>
                 <th class="px-4 py-2 text-left">Last Updated</th>
+                <th class="px-4 py-2 text-left">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -57,6 +58,13 @@ else
                     <td class="px-4 py-2 text-right">@row.OnHandQuantity</td>
                     <td class="px-4 py-2 text-right">@row.ReservedQuantity</td>
                     <td class="px-4 py-2">@row.LastUpdatedUtc.ToString("u")</td>
+                    <td class="px-4 py-2">
+                        <button class="adjust-button text-blue-600 hover:text-blue-800 underline"
+                                type="button"
+                                @onclick="() => OpenAdjustDialog(row)">
+                            Adjust
+                        </button>
+                    </td>
                 </tr>
             }
         </tbody>
@@ -68,12 +76,29 @@ else
     <CreateInventoryDialog OnSubmit="HandleCreate" OnCancel="CloseCreateDialog" />
 }
 
+@if (showAdjustDialog)
+{
+    <AdjustInventoryDialog Sku="@adjustSku"
+                           CurrentOnHand="@adjustSnapshotOnHand"
+                           OnSubmit="HandleAdjust"
+                           OnCancel="CloseAdjustDialog" />
+}
+
 @code {
     private IReadOnlyList<InventoryDashboardRow>? rows;
     private bool showCreateDialog;
-    private BadgeState createBadge = BadgeState.Idle;
-    private string createBadgeMessage = string.Empty;
-    private string? createFailureMessage;
+    private bool showAdjustDialog;
+    private Guid adjustInventoryId;
+    private string adjustSku = string.Empty;
+    private int adjustSnapshotOnHand;
+
+    // One optimistic operation is in flight at a time (the dialogs are modal), so
+    // a single badge serves both Create and Adjust. opLabel names the operation so
+    // the failed and timeout badges read "Create failed" / "Adjust failed".
+    private string opLabel = string.Empty;
+    private BadgeState opBadge = BadgeState.Idle;
+    private string opBadgeMessage = string.Empty;
+    private string? opFailureMessage;
     private CancellationTokenSource? pollingCts;
 
     protected override async Task OnInitializedAsync()
@@ -90,60 +115,116 @@ else
 
     private void CloseCreateDialog() => showCreateDialog = false;
 
+    // Snapshots the row's current on-hand at open time; the settle predicate adds
+    // the dispatched delta to this snapshot rather than re-reading live.
+    private void OpenAdjustDialog(InventoryDashboardRow row)
+    {
+        adjustInventoryId = row.InventoryId;
+        adjustSku = row.Sku;
+        adjustSnapshotOnHand = row.OnHandQuantity;
+        showAdjustDialog = true;
+    }
+
+    private void CloseAdjustDialog() => showAdjustDialog = false;
+
     private async Task HandleCreate(string sku)
     {
         showCreateDialog = false;
-        createBadge = BadgeState.Pending;
-        createBadgeMessage = "Creating...";
-        createFailureMessage = null;
+        BeginOperation("Create", "Creating...");
 
         try
         {
             // A fresh InventoryId per click; the entered SKU is the only operator
             // input. Idempotency key minted at click time per ADR 0021.
             var command = new CreateInventory(Guid.NewGuid(), sku);
-            var idempotencyKey = Guid.NewGuid().ToString();
+            await ApiClient.SendCommandAsync(command, Guid.NewGuid().ToString(), CancellationToken.None);
 
-            await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
-
-            // Dispatch accepted; poll for the new SKU's row to appear.
-            await StartCreatePolling(sku);
+            // The new SKU's row appearing at all is the settled state.
+            await StartPolling(sku, _ => true, "Created");
         }
         catch (ApiValidationException ex)
         {
-            createBadge = BadgeState.Failed;
-            createBadgeMessage = "Create failed";
-            var firstError = ex.Errors.SelectMany(e => e.Value).FirstOrDefault();
-            createFailureMessage = firstError
-                ?? (string.IsNullOrWhiteSpace(ex.Message) || ex.Message == "The request was invalid."
-                    ? "The create request was invalid."
-                    : ex.Message);
+            FailOperation(ValidationMessage(ex, "The create request was invalid."));
         }
         catch (ApiBusinessRuleException ex)
         {
-            createBadge = BadgeState.Failed;
-            createBadgeMessage = "Create failed";
-            createFailureMessage = ex.Message;
+            FailOperation(ex.Message);
         }
         catch (ApiConcurrencyException)
         {
-            createBadge = BadgeState.Failed;
-            createBadgeMessage = "Create failed";
-            createFailureMessage = "This inventory already exists. Refresh and try again.";
+            FailOperation("This inventory already exists. Refresh and try again.");
         }
         catch (ApiInfrastructureException)
         {
-            createBadge = BadgeState.Failed;
-            createBadgeMessage = "Create failed";
-            createFailureMessage = "Something went wrong. Try again.";
+            FailOperation("Something went wrong. Try again.");
         }
     }
 
-    // Delay-first polling for the new SKU's dashboard row, matching
-    // OrderDetail.StartPolling: a 30-second deadline and a five-failure transient
-    // cap on the read-side query. On settlement the table refreshes in place; the
-    // operator stays on the dashboard rather than redirecting.
-    private async Task StartCreatePolling(string sku)
+    private async Task HandleAdjust((int Delta, string Reason) input)
+    {
+        showAdjustDialog = false;
+        var sku = adjustSku;
+        var expectedOnHand = adjustSnapshotOnHand + input.Delta;
+        var command = new AdjustInventory(adjustInventoryId, input.Delta, input.Reason);
+        BeginOperation("Adjust", "Adjusting...");
+
+        try
+        {
+            await ApiClient.SendCommandAsync(command, Guid.NewGuid().ToString(), CancellationToken.None);
+
+            // The dashboard's on-hand reaching the snapshot-plus-delta target is the
+            // settled state.
+            await StartPolling(sku, row => row.OnHandQuantity == expectedOnHand, "Adjusted");
+        }
+        catch (ApiValidationException ex)
+        {
+            FailOperation(ValidationMessage(ex, "The adjustment was invalid."));
+        }
+        catch (ApiBusinessRuleException ex)
+        {
+            FailOperation(ex.Message);
+        }
+        catch (ApiConcurrencyException)
+        {
+            FailOperation("The inventory changed while you were adjusting it. Refresh and try again.");
+        }
+        catch (ApiInfrastructureException)
+        {
+            FailOperation("Something went wrong. Try again.");
+        }
+    }
+
+    private void BeginOperation(string label, string pendingMessage)
+    {
+        opLabel = label;
+        opBadge = BadgeState.Pending;
+        opBadgeMessage = pendingMessage;
+        opFailureMessage = null;
+    }
+
+    private void FailOperation(string failureMessage)
+    {
+        opBadge = BadgeState.Failed;
+        opBadgeMessage = $"{opLabel} failed";
+        opFailureMessage = failureMessage;
+    }
+
+    private static string ValidationMessage(ApiValidationException ex, string fallback)
+    {
+        var firstError = ex.Errors.SelectMany(e => e.Value).FirstOrDefault();
+        return firstError
+            ?? (string.IsNullOrWhiteSpace(ex.Message) || ex.Message == "The request was invalid."
+                ? fallback
+                : ex.Message);
+    }
+
+    // Delay-first polling for the read model to reflect the dispatched command,
+    // matching OrderDetail.StartPolling: a 30-second deadline and a five-failure
+    // transient cap on the read-side query. isSettled tests the fetched row (create
+    // settles on any row appearing, adjust on the on-hand reaching its target). On
+    // settlement the table refreshes in place; the operator stays on the dashboard
+    // rather than redirecting.
+    private async Task StartPolling(string sku, Func<InventoryDashboardRow, bool> isSettled, string settledMessage)
     {
         pollingCts?.Cancel();
         pollingCts = new CancellationTokenSource();
@@ -160,11 +241,11 @@ else
                 var row = await ApiClient.QueryAsync(new GetInventoryDashboardBySku(sku), token);
                 transientFailures = 0;
 
-                if (row is not null)
+                if (row is not null && isSettled(row))
                 {
                     await LoadAsync(token);
-                    createBadge = BadgeState.Settled;
-                    createBadgeMessage = "Created";
+                    opBadge = BadgeState.Settled;
+                    opBadgeMessage = settledMessage;
                     StateHasChanged();
                     return;
                 }
@@ -186,7 +267,7 @@ else
             }
         }
 
-        // Deadline elapsed without the row appearing.
+        // Deadline elapsed without the read model reaching the settled state.
         if (!token.IsCancellationRequested)
         {
             MarkPollingTimeout();
@@ -195,10 +276,10 @@ else
 
     private void MarkPollingTimeout()
     {
-        createBadge = BadgeState.Failed;
-        createBadgeMessage = "Create may still be processing";
-        createFailureMessage =
-            "The create was accepted but is taking longer than expected. Refresh to check status.";
+        opBadge = BadgeState.Failed;
+        opBadgeMessage = $"{opLabel} may still be processing";
+        opFailureMessage =
+            "The command was accepted but is taking longer than expected. Refresh to check status.";
         StateHasChanged();
     }
 
