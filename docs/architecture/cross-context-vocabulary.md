@@ -60,6 +60,8 @@ No direct flow: Fulfillment and Billing remain unaware of each other, and the pr
 
 Customer Support consumes the projections the other three contexts' events feed. Phase 6 shipped the four read models it reads: `OrderListProjection`, `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`. The read-side store interfaces follow ADR 0008: each store lives with the bounded context whose events it consumes, not in `Domain.Abstractions` (`IOrderListStore`, `IOrderDetailStore`, `ICustomerSummaryStore` in `Domain.Sales.ReadModels`; `IInventoryDashboardStore` in `Domain.Fulfillment.ReadModels`). Customer Support is a read-only composite, confirmed to add no write-side dependency.
 
+Phase 7 added the first Web render surface for Customer Support's read side. The page at `/customers/{id}` reads `CustomerSummaryRow` through `GetCustomerSummary` and surfaces the per-customer aggregates (order count, lifetime value, last-order date) as a read-only page in the Web host. The page composes Customer Support's existing read-side with no new domain types and no write-side dependency; the four bounded contexts continue to share no types beyond the existing shared kernel. The Web host's other dashboard pages render the same Customer-Support-shaped reads against the other three projections without any cross-context type sharing.
+
 ## What does NOT cross
 
 Some types stay strictly inside their context:
