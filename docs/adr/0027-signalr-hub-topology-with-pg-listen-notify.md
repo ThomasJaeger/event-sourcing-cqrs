@@ -65,13 +65,13 @@ The rate-limiting applies per-group, not globally: two updates to different reso
 
 Two new ports land at Cluster 1, with placements determined by their consumer sets per ADR 0026's hexagonal-inversion reasoning:
 
-- `INotificationPublisher` lives in `src/Domain.Abstractions/Notifications/INotificationPublisher.cs`. Six unit-of-work files in `src/Infrastructure/ReadModels.Postgres/` consume it (`PostgresOrderListUnitOfWork`, `PostgresCustomerSummaryUnitOfWork`, `PostgresInventoryDashboardUnitOfWork`, `PostgresOrderDetailUnitOfWork`, `PostgresSkuToInventoryIdUnitOfWork`, `PostgresOrderIdToPaymentIdUnitOfWork`). Infrastructure consumers force Domain.Abstractions placement: Application placement would require Infrastructure to reference Application, inverting the layering rule. Same shape as ADR 0026's resolution for `CommandTypeRegistry`.
+- `INotificationPublisher` lives in `src/Domain.Abstractions/INotificationPublisher.cs`. Six unit-of-work files in `src/Infrastructure/ReadModels.Postgres/` consume it (`PostgresOrderListUnitOfWork`, `PostgresCustomerSummaryUnitOfWork`, `PostgresInventoryDashboardUnitOfWork`, `PostgresOrderDetailUnitOfWork`, `PostgresSkuToInventoryIdUnitOfWork`, `PostgresOrderIdToPaymentIdUnitOfWork`). Infrastructure consumers force Domain.Abstractions placement: Application placement would require Infrastructure to reference Application, inverting the layering rule. Same shape as ADR 0026's resolution for `CommandTypeRegistry`.
 
 - `IHubBackplaneConnection` lives in `src/Application/SignalR/IHubBackplaneConnection.cs`. Only Hosts.Web's `DashboardHub` consumes it. No Infrastructure consumer surfaces. Application placement is correct: the consumer set is transport-only, the same as `QueryTypeRegistry`'s in ADR 0026. Domain.Abstractions placement would be premature in the same way ADR 0026 left `QueryTypeRegistry` in Application rather than promoting it.
 
 The asymmetry between the two ports is the same shape ADR 0026 documented for `CommandTypeRegistry` (Domain.Abstractions, persistence consumer) versus `QueryTypeRegistry` (Application, transport-only consumer). ADR 0026's reasoning governs; this ADR cites it rather than re-deriving.
 
-The `NotificationEnvelope` record lives in `src/Domain.Abstractions/Notifications/NotificationEnvelope.cs` alongside the publisher port.
+The `NotificationEnvelope` record lives in `src/Domain.Abstractions/NotificationEnvelope.cs` alongside the publisher port.
 
 ### Rejected alternatives
 
@@ -85,7 +85,7 @@ Three alternatives to the LISTEN/NOTIFY carrier were considered and rejected on 
 
 ## Consequences
 
-- A new `INotificationPublisher` port lands in `src/Domain.Abstractions/Notifications/` at Cluster 1 Commit 2, with `NotificationEnvelope` as a companion record. The port's surface is `Task PublishAsync(NotificationEnvelope envelope, CancellationToken ct)`; no infrastructure types appear in the signature.
+- A new `INotificationPublisher` port lands in `src/Domain.Abstractions/` at Cluster 1 Commit 2, with `NotificationEnvelope` as a companion record. The port's surface is `Task PublishAsync(NotificationEnvelope envelope, CancellationToken ct)`; no infrastructure types appear in the signature.
 
 - A new `PostgresPgNotifyPublisher` implementation lands in `src/Infrastructure/SignalR/` at Cluster 1 Commit 3. The implementation issues `NOTIFY projection_committed, '<envelope-json>'` against the caller's unit-of-work transaction, with the transactional-orchestration mechanism resolved at Commit 2 and Commit 3 pre-flight. Payload-size validation against PostgreSQL's 8000-byte cap surfaces at the boundary with a named exception.
 
@@ -117,7 +117,7 @@ Three alternatives to the LISTEN/NOTIFY carrier were considered and rejected on 
 
 - The 8000-byte NOTIFY payload cap proves insufficient for a future envelope shape. The current envelope is bounded by design (no row data) and a 100-300 byte typical size leaves substantial headroom. A future envelope that legitimately needs row data triggers both this revisit and the row-data revisit above; they are correlated triggers.
 
-- A future port appears in `Application/SignalR/` or `Domain.Abstractions/Notifications/` whose placement reasoning differs from this ADR's. This ADR records the per-port placement reasoning; a future port follows the same hexagonal-inversion logic from ADR 0026 rather than this ADR's specific resolution.
+- A future port appears in `Application/SignalR/` or `Domain.Abstractions/` whose placement reasoning differs from this ADR's. This ADR records the per-port placement reasoning; a future port follows the same hexagonal-inversion logic from ADR 0026 rather than this ADR's specific resolution.
 
 - A future event-store adapter (SQL Server, KurrentDB, DynamoDB per the Phase 2, Phase 10, and Phase 11 roadmap) needs a different notification carrier than `pg_notify`. The carrier choice is Postgres-specific; the publisher abstraction is adapter-agnostic, so an adapter-specific publisher implementation behind the same `INotificationPublisher` port satisfies the per-adapter need without reopening this ADR's hub-topology decisions.
 
