@@ -612,6 +612,67 @@ public class OrderDetailProjectionTests
         (await read.GetOrderIdByPaymentIdAsync(paymentId, CancellationToken.None)).Should().BeNull();
     }
 
+    [Fact]
+    public async Task OrderPlaced_stages_an_order_notification_keyed_by_the_order_id()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(125m, Currency.USD), At), position: 2),
+            CancellationToken.None);
+
+        // OrderDetail is a v1 SignalR subscriber: the draft and the placement each
+        // stage one order-keyed notification for the hub to route to order:{orderId}.
+        store.StagedNotifications.Should().HaveCount(2);
+        var placed = store.StagedNotifications[1];
+        placed.ProjectionName.Should().Be(projection.Name);
+        placed.ResourceId.Should().Be(orderId.ToString());
+        placed.EventName.Should().Be(nameof(OrderPlaced));
+        placed.Widgets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_payment_event_with_no_mapping_stages_no_notification()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+
+        // No PaymentAuthorized recorded the mapping, so PaymentCaptured cannot
+        // resolve an order: it writes nothing and stages nothing.
+        await projection.HandleAsync(
+            Context(new PaymentCaptured(Guid.NewGuid(), new Money(50m, Currency.USD), At), position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_resolved_payment_event_stages_keyed_by_the_resolved_order_id()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        var paymentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new PaymentAuthorized(paymentId, orderId, new Money(50m, Currency.USD), "auth-ref", At),
+                position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new PaymentCaptured(paymentId, new Money(50m, Currency.USD), At), position: 2),
+            CancellationToken.None);
+
+        // PaymentAuthorized (direct) and PaymentCaptured (resolved through the
+        // payment-to-order lookup) both stage, keyed by the resolved OrderId.
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications.Should().OnlyContain(n => n.ResourceId == orderId.ToString());
+        store.StagedNotifications[1].EventName.Should().Be(nameof(PaymentCaptured));
+    }
+
     private static OrderDetailProjection Projection(InMemoryOrderDetailStore store)
         => new(store, JsonOptions, NullLogger<OrderDetailProjection>.Instance);
 

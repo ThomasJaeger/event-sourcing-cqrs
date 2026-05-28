@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using NpgsqlTypes;
 
 namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
@@ -13,15 +14,19 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
 
     public PostgresInventoryDashboardStore(
         IReadModelConnectionFactory factory,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(publisher);
         _factory = factory;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public async Task<IInventoryDashboardUnitOfWork> BeginAsync(CancellationToken ct)
@@ -30,7 +35,7 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresInventoryDashboardUnitOfWork(connection, transaction, _checkpointStore);
+            return new PostgresInventoryDashboardUnitOfWork(connection, transaction, _checkpointStore, _publisher);
         }
         catch
         {

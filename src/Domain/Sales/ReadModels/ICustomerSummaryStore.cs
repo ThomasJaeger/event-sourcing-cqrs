@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Domain.Sales.ReadModels;
@@ -60,6 +61,13 @@ public interface ICustomerSummaryUnitOfWork : IAsyncDisposable
     Task<CustomerSummaryOrderRow?> GetOrderByOrderIdAsync(Guid orderId, CancellationToken ct);
 
     Task DeleteOrderAsync(Guid customerId, Guid orderId, CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the writes, so a committed change always notifies and a
+    // rolled-back one never does. The handler stages only when a UI-relevant row
+    // changed; a unit of work stages at most one notification, and a second call
+    // throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     // Advances the projection's checkpoint to `position` and commits, both in
     // the transaction the writes above ran in.

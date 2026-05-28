@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Domain.Sales.ReadModels;
@@ -82,6 +83,13 @@ public interface IOrderDetailUnitOfWork : IAsyncDisposable
     // NOTHING on insert. The mapping persists; nothing deletes it.
     Task InsertPaymentMappingAsync(OrderDetailPaymentRow row, CancellationToken ct);
     Task<Guid?> GetOrderIdByPaymentIdAsync(Guid paymentId, CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the writes, so a committed change always notifies and a
+    // rolled-back one never does. The handler stages only when a UI-relevant row
+    // changed; a unit of work stages at most one notification, and a second call
+    // throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     Task CommitAsync(string projectionName, long position, CancellationToken ct);
 }

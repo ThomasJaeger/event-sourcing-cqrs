@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -15,15 +16,19 @@ internal sealed class PostgresOrderIdToPaymentIdUnitOfWork : IOrderIdToPaymentId
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
+    private NotificationEnvelope? _staged;
 
     public PostgresOrderIdToPaymentIdUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -45,11 +50,30 @@ internal sealed class PostgresOrderIdToPaymentIdUnitOfWork : IOrderIdToPaymentId
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    // No v1 consumer subscribes to this lookup, so the projection never stages a
+    // notification; the member keeps the unit-of-work contract uniform across the
+    // six read models and is ready when a consumer arrives.
+    public void PublishOnCommit(NotificationEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (_staged is not null)
+        {
+            throw new InvalidOperationException(
+                "A unit of work stages at most one notification: one projection " +
+                "handler processes one event and makes one logical change per commit.");
+        }
+        _staged = envelope;
+    }
+
     public async Task CommitAsync(string projectionName, long position, CancellationToken ct)
     {
         // The checkpoint advance runs on this same transaction, so the mapping
         // write above and the checkpoint move commit as one unit.
         await _checkpointStore.AdvanceAsync(projectionName, position, _transaction, ct);
+        if (_staged is not null)
+        {
+            await _publisher.PublishOnTransactionAsync(_staged, _transaction, ct);
+        }
         await _transaction.CommitAsync(ct);
     }
 

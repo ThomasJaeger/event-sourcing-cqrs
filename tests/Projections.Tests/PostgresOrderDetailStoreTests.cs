@@ -29,7 +29,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
 
@@ -53,7 +53,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -76,7 +76,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -100,7 +100,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var address = new Address("12 Main St", "Portland", "97201", "US");
 
@@ -121,7 +121,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -143,7 +143,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var line1 = new OrderDetailLineRow(orderId, Guid.NewGuid(), "SKU-1", 2, new Money(5m, Currency.USD));
         var line2 = new OrderDetailLineRow(orderId, Guid.NewGuid(), "SKU-2", 1, new Money(8.25m, Currency.USD));
@@ -165,7 +165,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var shipmentId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
@@ -200,7 +200,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         // Keys out of alphabetical order on purpose: jsonb canonicalises them, so a
         // byte comparison would fail even though the data is identical. The read
@@ -231,7 +231,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var shipmentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
 
@@ -253,7 +253,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var paymentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
 
@@ -275,7 +275,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -300,7 +300,7 @@ public class PostgresOrderDetailStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderDetailStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))

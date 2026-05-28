@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -14,15 +15,19 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
+    private NotificationEnvelope? _staged;
 
     public PostgresInventoryDashboardUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -52,34 +57,41 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task AdjustOnHandAsync(
+    public async Task<string?> AdjustOnHandAsync(
         Guid inventoryId, int quantityDelta, DateTime lastUpdatedUtc, CancellationToken ct)
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        // RETURNING sku hands back the mutated row's routing key in the same
+        // statement, no write-path read. A zero-row UPDATE (no dashboard row for
+        // this InventoryId, the ADR 0020 orphan case) returns null, and the
+        // handler stages nothing.
         cmd.CommandText =
             "UPDATE read_models.inventory_dashboard " +
             "SET on_hand_quantity = on_hand_quantity + @delta, last_updated_utc = @last_updated_utc " +
-            "WHERE inventory_id = @inventory_id";
+            "WHERE inventory_id = @inventory_id " +
+            "RETURNING sku";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("delta", NpgsqlDbType.Integer, quantityDelta);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
-    public async Task AdjustReservedAsync(
+    public async Task<string?> AdjustReservedAsync(
         Guid inventoryId, int reservedDelta, DateTime lastUpdatedUtc, CancellationToken ct)
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        // RETURNING sku: see AdjustOnHandAsync. Null when no row matched.
         cmd.CommandText =
             "UPDATE read_models.inventory_dashboard " +
             "SET reserved_quantity = reserved_quantity + @delta, last_updated_utc = @last_updated_utc " +
-            "WHERE inventory_id = @inventory_id";
+            "WHERE inventory_id = @inventory_id " +
+            "RETURNING sku";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("delta", NpgsqlDbType.Integer, reservedDelta);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
     public async Task InsertReservationAsync(InventoryReservationRow row, CancellationToken ct)
@@ -143,11 +155,31 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public void PublishOnCommit(NotificationEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (_staged is not null)
+        {
+            throw new InvalidOperationException(
+                "A unit of work stages at most one notification: one projection " +
+                "handler processes one event and makes one logical change per commit.");
+        }
+        _staged = envelope;
+    }
+
     public async Task CommitAsync(string projectionName, long position, CancellationToken ct)
     {
         // The checkpoint advance runs on this same transaction, so the dashboard
         // and lookup writes above and the checkpoint move commit as one unit.
         await _checkpointStore.AdvanceAsync(projectionName, position, _transaction, ct);
+        // A staged notification rides the same transaction: pg_notify delivers it
+        // to LISTEN subscribers at COMMIT and suppresses it on rollback. Issued
+        // before the commit so an oversized payload faults here rather than after
+        // the row write is already durable.
+        if (_staged is not null)
+        {
+            await _publisher.PublishOnTransactionAsync(_staged, _transaction, ct);
+        }
         await _transaction.CommitAsync(ct);
     }
 

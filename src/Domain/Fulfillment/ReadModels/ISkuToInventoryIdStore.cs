@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 
 // The SKU-to-InventoryId lookup's persistence port. Lives in
@@ -34,6 +36,13 @@ public interface ISkuToInventoryIdUnitOfWork : IAsyncDisposable
     // Records a SKU's InventoryId. A SKU maps to one InventoryId for its
     // lifetime, so a redelivered InventoryCreated for the same SKU is a no-op.
     Task RecordAsync(string sku, Guid inventoryId, CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the write. No v1 consumer subscribes to this lookup,
+    // so its handler stages nothing today; the member keeps the unit-of-work
+    // contract uniform across the six read models. A unit of work stages at most
+    // one notification, and a second call throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     // Advances the checkpoint to `position` and commits, both in the transaction
     // the mapping write above ran in.

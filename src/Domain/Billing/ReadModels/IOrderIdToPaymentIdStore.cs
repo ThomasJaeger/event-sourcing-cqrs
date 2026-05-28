@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Domain.Billing.ReadModels;
 
 // The OrderId-to-PaymentId lookup's persistence port. Lives in
@@ -34,6 +36,13 @@ public interface IOrderIdToPaymentIdUnitOfWork : IAsyncDisposable
     // Records an order's PaymentId. An order has one authorized payment, so a
     // redelivered PaymentAuthorized for the same order is a no-op.
     Task RecordAsync(Guid orderId, Guid paymentId, CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the write. No v1 consumer subscribes to this lookup,
+    // so its handler stages nothing today; the member keeps the unit-of-work
+    // contract uniform across the six read models. A unit of work stages at most
+    // one notification, and a second call throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     // Advances the checkpoint to `position` and commits, both in the transaction
     // the mapping write above ran in.

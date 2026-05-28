@@ -45,6 +45,7 @@ public sealed class InventoryDashboardProjection
         }
         await uow.CreateDashboardAsync(
             context.Event.InventoryId, context.Event.Sku, context.Metadata.OccurredUtc, ct);
+        StageNotification(uow, context.Event.Sku, nameof(InventoryCreated));
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -57,8 +58,12 @@ public sealed class InventoryDashboardProjection
             return;
         }
         // QuantityDelta is signed; the dashboard's on-hand is its running sum.
-        await uow.AdjustOnHandAsync(
+        var sku = await uow.AdjustOnHandAsync(
             context.Event.InventoryId, context.Event.QuantityDelta, context.Metadata.OccurredUtc, ct);
+        if (sku is not null)
+        {
+            StageNotification(uow, sku, nameof(InventoryAdjusted));
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -73,9 +78,13 @@ public sealed class InventoryDashboardProjection
         var e = context.Event;
         // Add to reserved and record the per-reservation lookup row so a later
         // InventoryReleased (which carries no quantity) can recover it.
-        await uow.AdjustReservedAsync(e.InventoryId, e.Quantity, context.Metadata.OccurredUtc, ct);
+        var sku = await uow.AdjustReservedAsync(e.InventoryId, e.Quantity, context.Metadata.OccurredUtc, ct);
         await uow.InsertReservationAsync(
             new InventoryReservationRow(e.InventoryId, e.OrderId, e.LineId, e.Quantity, e.ReservedUtc), ct);
+        if (sku is not null)
+        {
+            StageNotification(uow, sku, nameof(InventoryReserved));
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -103,10 +112,23 @@ public sealed class InventoryDashboardProjection
         }
         else
         {
-            await uow.AdjustReservedAsync(
+            var sku = await uow.AdjustReservedAsync(
                 e.InventoryId, -reservation.Quantity, context.Metadata.OccurredUtc, ct);
             await uow.DeleteReservationAsync(e.InventoryId, e.OrderId, e.LineId, ct);
+            if (sku is not null)
+            {
+                StageNotification(uow, sku, nameof(InventoryReleased));
+            }
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
+
+    // Stages an inventory notification for the SignalR hub, keyed by sku for the
+    // inventory:{sku} group (D2). InventoryDashboard is a v1 subscriber. The sku
+    // comes from the mutation's RETURNING clause, so a zero-row UPDATE stages
+    // nothing. The widget set is empty for now: the page re-queries authoritative
+    // state on any notification (D1), and the precise Chapter 13 widget vocabulary
+    // lands with the Cluster 2 retrofit page.
+    private void StageNotification(IInventoryDashboardUnitOfWork uow, string sku, string eventName)
+        => uow.PublishOnCommit(new NotificationEnvelope(Name, sku, eventName, []));
 }

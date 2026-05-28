@@ -23,7 +23,7 @@ public class PostgresOrderIdToPaymentIdStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
 
@@ -46,7 +46,8 @@ public class PostgresOrderIdToPaymentIdStoreTests : IClassFixture<PostgresFixtur
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresOrderIdToPaymentIdStore(
             new NpgsqlReadModelConnectionFactory(dataSource),
-            new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource)));
+            new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource)),
+            TestNotificationPublisher.Create());
 
         (await store.GetPaymentIdAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeNull();
     }
@@ -57,7 +58,7 @@ public class PostgresOrderIdToPaymentIdStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
@@ -75,7 +76,7 @@ public class PostgresOrderIdToPaymentIdStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -96,7 +97,7 @@ public class PostgresOrderIdToPaymentIdStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresOrderIdToPaymentIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var orderA = Guid.NewGuid();
         var orderB = Guid.NewGuid();
         await RecordAndCommitAsync(store, orderA, Guid.NewGuid(), position: 1);

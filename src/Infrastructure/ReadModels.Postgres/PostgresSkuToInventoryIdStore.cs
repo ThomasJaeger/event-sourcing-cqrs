@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -14,15 +15,19 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
 
     public PostgresSkuToInventoryIdStore(
         IReadModelConnectionFactory factory,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(publisher);
         _factory = factory;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public async Task<ISkuToInventoryIdUnitOfWork> BeginAsync(CancellationToken ct)
@@ -31,7 +36,7 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresSkuToInventoryIdUnitOfWork(connection, transaction, _checkpointStore);
+            return new PostgresSkuToInventoryIdUnitOfWork(connection, transaction, _checkpointStore, _publisher);
         }
         catch
         {

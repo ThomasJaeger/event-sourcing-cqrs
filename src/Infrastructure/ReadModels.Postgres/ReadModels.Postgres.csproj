@@ -8,5 +8,6 @@
     <ProjectReference Include="..\..\Domain\Domain.csproj" />
     <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Projections\Projections.csproj" />
+    <ProjectReference Include="..\SignalR\SignalR.csproj" />
   </ItemGroup>
 </Project>

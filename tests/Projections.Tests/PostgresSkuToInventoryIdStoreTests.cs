@@ -23,7 +23,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -45,7 +45,8 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresSkuToInventoryIdStore(
             new NpgsqlReadModelConnectionFactory(dataSource),
-            new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource)));
+            new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource)),
+            TestNotificationPublisher.Create());
 
         (await store.GetInventoryIdAsync("SKU-MISSING", CancellationToken.None)).Should().BeNull();
     }
@@ -56,7 +57,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
 
@@ -73,7 +74,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
         {
@@ -93,7 +94,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory));
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
         await RecordAndCommitAsync(store, "SKU-1", Guid.NewGuid(), position: 1);
         await RecordAndCommitAsync(store, "SKU-2", Guid.NewGuid(), position: 2);
 

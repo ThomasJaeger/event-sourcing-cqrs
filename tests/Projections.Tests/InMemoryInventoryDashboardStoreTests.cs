@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using FluentAssertions;
 using Xunit;
@@ -145,5 +146,20 @@ public class InMemoryInventoryDashboardStoreTests
         (await store.GetBySkuAsync("SKU-1", CancellationToken.None)).Should().BeNull();
         await using var read = await store.BeginAsync(CancellationToken.None);
         (await read.GetReservationAsync(inventoryId, orderId, lineId, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PublishOnCommit_a_second_time_in_one_unit_of_work_throws()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        uow.PublishOnCommit(new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryCreated", []));
+
+        // A unit of work stages at most one notification: one handler, one event,
+        // one logical change per commit.
+        var act = () => uow.PublishOnCommit(
+            new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryAdjusted", []));
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }

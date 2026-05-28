@@ -239,6 +239,23 @@ public class CustomerSummaryProjectionTests
         store.Checkpoints[projection.Name].Should().Be(20);
     }
 
+    [Fact]
+    public async Task OrderPlaced_stages_no_notification_because_customer_summary_has_no_v1_subscriber()
+    {
+        var store = new InMemoryCustomerSummaryStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new OrderPlaced(Guid.NewGuid(), Guid.NewGuid(), new Money(50m, Currency.USD), PlacedAt),
+                position: 1),
+            CancellationToken.None);
+
+        // CustomerSummary carries the publish mechanism so the unit-of-work contract
+        // stays uniform, but no page subscribes to it in v1, so its handler stages
+        // nothing (born-at-consumer).
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
     private static CustomerSummaryProjection Projection(InMemoryCustomerSummaryStore store)
         => new(store, NullLogger<CustomerSummaryProjection>.Instance);
 

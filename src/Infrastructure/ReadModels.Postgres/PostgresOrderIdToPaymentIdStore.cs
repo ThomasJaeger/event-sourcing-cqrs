@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -14,15 +15,19 @@ public sealed class PostgresOrderIdToPaymentIdStore : IOrderIdToPaymentIdStore
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
 
     public PostgresOrderIdToPaymentIdStore(
         IReadModelConnectionFactory factory,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(publisher);
         _factory = factory;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public async Task<IOrderIdToPaymentIdUnitOfWork> BeginAsync(CancellationToken ct)
@@ -31,7 +36,7 @@ public sealed class PostgresOrderIdToPaymentIdStore : IOrderIdToPaymentIdStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresOrderIdToPaymentIdUnitOfWork(connection, transaction, _checkpointStore);
+            return new PostgresOrderIdToPaymentIdUnitOfWork(connection, transaction, _checkpointStore, _publisher);
         }
         catch
         {

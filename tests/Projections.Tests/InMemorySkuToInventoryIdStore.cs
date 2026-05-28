@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 
 namespace EventSourcingCqrs.Projections.Tests;
@@ -12,6 +13,11 @@ internal sealed class InMemorySkuToInventoryIdStore : ISkuToInventoryIdStore
     private readonly Dictionary<string, Guid> _mappings = [];
 
     public Dictionary<string, long> Checkpoints { get; } = [];
+
+    // Records each committed unit of work's staged notification. No v1 consumer
+    // subscribes to this lookup, so the projection never stages; the list stays
+    // empty and a test asserts that.
+    public List<NotificationEnvelope> StagedNotifications { get; } = [];
 
     public int RecordCount { get; private set; }
 
@@ -29,6 +35,8 @@ internal sealed class InMemorySkuToInventoryIdStore : ISkuToInventoryIdStore
 
     private sealed class UnitOfWork(InMemorySkuToInventoryIdStore store) : ISkuToInventoryIdUnitOfWork
     {
+        private NotificationEnvelope? _staged;
+
         public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
             => Task.FromResult(store.Checkpoints.GetValueOrDefault(projectionName));
 
@@ -40,11 +48,26 @@ internal sealed class InMemorySkuToInventoryIdStore : ISkuToInventoryIdStore
             return Task.CompletedTask;
         }
 
+        public void PublishOnCommit(NotificationEnvelope envelope)
+        {
+            if (_staged is not null)
+            {
+                throw new InvalidOperationException(
+                    "A unit of work stages at most one notification: one projection " +
+                    "handler processes one event and makes one logical change per commit.");
+            }
+            _staged = envelope;
+        }
+
         public Task CommitAsync(string projectionName, long position, CancellationToken ct)
         {
             // GREATEST, mirroring PostgresCheckpointStore's UPSERT.
             store.Checkpoints[projectionName] = Math.Max(
                 store.Checkpoints.GetValueOrDefault(projectionName), position);
+            if (_staged is not null)
+            {
+                store.StagedNotifications.Add(_staged);
+            }
             return Task.CompletedTask;
         }
 

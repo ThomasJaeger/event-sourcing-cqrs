@@ -2,6 +2,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -17,15 +18,19 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
+    private NotificationEnvelope? _staged;
 
     public PostgresOrderDetailUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -254,11 +259,31 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         return result is null or DBNull ? null : (Guid)result;
     }
 
+    public void PublishOnCommit(NotificationEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (_staged is not null)
+        {
+            throw new InvalidOperationException(
+                "A unit of work stages at most one notification: one projection " +
+                "handler processes one event and makes one logical change per commit.");
+        }
+        _staged = envelope;
+    }
+
     public async Task CommitAsync(string projectionName, long position, CancellationToken ct)
     {
         // The checkpoint advance runs on this same transaction, so the five-table
         // write above and the checkpoint move commit as one unit.
         await _checkpointStore.AdvanceAsync(projectionName, position, _transaction, ct);
+        // A staged notification rides the same transaction: pg_notify delivers it
+        // to LISTEN subscribers at COMMIT and suppresses it on rollback. Issued
+        // before the commit so an oversized payload faults here rather than after
+        // the row write is already durable.
+        if (_staged is not null)
+        {
+            await _publisher.PublishOnTransactionAsync(_staged, _transaction, ct);
+        }
         await _transaction.CommitAsync(ct);
     }
 

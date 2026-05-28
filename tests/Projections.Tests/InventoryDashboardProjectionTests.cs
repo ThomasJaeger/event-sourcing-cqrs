@@ -184,6 +184,57 @@ public class InventoryDashboardProjectionTests
         (await store.GetBySkuAsync("SKU-1", CancellationToken.None))!.ReservedQuantity.Should().Be(0);
     }
 
+    [Fact]
+    public async Task InventoryCreated_stages_an_inventory_notification_keyed_by_the_sku()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+
+        await projection.HandleAsync(
+            Context(new InventoryCreated(Guid.NewGuid(), "SKU-1", At), position: 1), CancellationToken.None);
+
+        var staged = store.StagedNotifications.Should().ContainSingle().Subject;
+        staged.ProjectionName.Should().Be(projection.Name);
+        staged.ResourceId.Should().Be("SKU-1");
+        staged.EventName.Should().Be(nameof(InventoryCreated));
+        staged.Widgets.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task InventoryAdjusted_stages_keyed_by_the_returned_sku()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+        var inventoryId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new InventoryCreated(inventoryId, "SKU-1", At), position: 1), CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new InventoryAdjusted(inventoryId, "SKU-1", 100, "restock", At), position: 2),
+            CancellationToken.None);
+
+        // The created row and the adjustment each stage; the adjustment keys on the
+        // sku its UPDATE returns, not on the InventoryId the event carries.
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be("SKU-1");
+        store.StagedNotifications[1].EventName.Should().Be(nameof(InventoryAdjusted));
+    }
+
+    [Fact]
+    public async Task InventoryAdjusted_on_an_unknown_inventory_id_stages_nothing()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+
+        // No dashboard row for this InventoryId (the ADR 0020 orphan case): the
+        // UPDATE matches zero rows, returns no sku, and the handler stages nothing.
+        await projection.HandleAsync(
+            Context(new InventoryAdjusted(Guid.NewGuid(), "SKU-X", 100, "restock", At), position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
     private static InventoryDashboardProjection Projection(InMemoryInventoryDashboardStore store)
         => new(store, NullLogger<InventoryDashboardProjection>.Instance);
 

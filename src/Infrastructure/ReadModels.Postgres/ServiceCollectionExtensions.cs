@@ -2,6 +2,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.InventoryDashboard;
@@ -44,6 +45,14 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<ICheckpointStore, PostgresCheckpointStore>();
+
+        // The notification publisher the six unit-of-works stage onto inside
+        // CommitAsync. One shared singleton, stateless beyond the JsonSerializerOptions
+        // it serializes envelopes with, which AddPostgresEventStore registers. TryAdd
+        // so a host that wires its own publisher wins. The stores take it by
+        // constructor injection; the four read models with no v1 subscriber hold it
+        // but never stage onto it.
+        services.TryAddSingleton<PostgresPgNotifyPublisher>();
 
         // The store-to-port pairings stay hand-written: they are Postgres-specific
         // and not derivable from the projection type. AddProjection registers each

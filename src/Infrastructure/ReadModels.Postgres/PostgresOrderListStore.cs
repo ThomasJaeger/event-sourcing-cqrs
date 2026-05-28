@@ -2,6 +2,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -15,15 +16,19 @@ public sealed class PostgresOrderListStore : IOrderListStore
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly PostgresPgNotifyPublisher _publisher;
 
     public PostgresOrderListStore(
         IReadModelConnectionFactory factory,
-        ICheckpointStore checkpointStore)
+        ICheckpointStore checkpointStore,
+        PostgresPgNotifyPublisher publisher)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(publisher);
         _factory = factory;
         _checkpointStore = checkpointStore;
+        _publisher = publisher;
     }
 
     public async Task<IOrderListUnitOfWork> BeginAsync(CancellationToken ct)
@@ -32,7 +37,7 @@ public sealed class PostgresOrderListStore : IOrderListStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresOrderListUnitOfWork(connection, transaction, _checkpointStore);
+            return new PostgresOrderListUnitOfWork(connection, transaction, _checkpointStore, _publisher);
         }
         catch
         {

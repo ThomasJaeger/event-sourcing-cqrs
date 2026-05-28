@@ -132,7 +132,8 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var eventStore = new PostgresEventStore(
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderDetailStore(readModelFactory, new PostgresCheckpointStore(readModelFactory));
+        var store = new PostgresOrderDetailStore(
+            readModelFactory, new PostgresCheckpointStore(readModelFactory), TestNotificationPublisher.Create());
         var projection = new OrderDetailProjection(
             store, CreateJsonOptions(), NullLogger<OrderDetailProjection>.Instance);
 
@@ -176,7 +177,8 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
             new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
-        var store = new PostgresOrderDetailStore(readModelFactory, checkpointStore);
+        var store = new PostgresOrderDetailStore(
+            readModelFactory, checkpointStore, TestNotificationPublisher.Create());
         var projection = new OrderDetailProjection(
             store, CreateJsonOptions(), NullLogger<OrderDetailProjection>.Instance);
 

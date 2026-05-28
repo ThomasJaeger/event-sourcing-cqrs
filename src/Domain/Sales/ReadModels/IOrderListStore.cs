@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Domain.Sales.ReadModels;
 
 // The order-list read model's persistence port. Lives in Domain.Sales.ReadModels
@@ -65,6 +67,13 @@ public interface IOrderListUnitOfWork : IAsyncDisposable
         DateTime returnedUtc,
         DateTime lastUpdatedUtc,
         CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the write, so a committed change always notifies and a
+    // rolled-back one never does. The handler stages only when a UI-relevant row
+    // changed; a unit of work stages at most one notification, and a second call
+    // throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     // Advances the projection's checkpoint to `position` and commits, both in
     // the transaction the row write above ran in.

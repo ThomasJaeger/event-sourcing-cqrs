@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 
 // The inventory-dashboard read model's persistence port. Lives in
@@ -31,12 +33,16 @@ public interface IInventoryDashboardUnitOfWork : IAsyncDisposable
     // ON CONFLICT DO NOTHING so a redelivered InventoryCreated keeps the first row.
     Task CreateDashboardAsync(Guid inventoryId, string sku, DateTime lastUpdatedUtc, CancellationToken ct);
 
-    // InventoryAdjusted: add the signed delta to on_hand_quantity.
-    Task AdjustOnHandAsync(Guid inventoryId, int quantityDelta, DateTime lastUpdatedUtc, CancellationToken ct);
+    // InventoryAdjusted: add the signed delta to on_hand_quantity. Returns the
+    // mutated row's sku via RETURNING, or null when no row matched (the ADR 0020
+    // orphan case), so the handler routes the notification by sku without a
+    // second read.
+    Task<string?> AdjustOnHandAsync(Guid inventoryId, int quantityDelta, DateTime lastUpdatedUtc, CancellationToken ct);
 
     // InventoryReserved (positive delta) and InventoryReleased (negative delta,
     // the recovered reservation quantity): add the signed delta to reserved_quantity.
-    Task AdjustReservedAsync(Guid inventoryId, int reservedDelta, DateTime lastUpdatedUtc, CancellationToken ct);
+    // Returns the mutated row's sku via RETURNING, or null when no row matched.
+    Task<string?> AdjustReservedAsync(Guid inventoryId, int reservedDelta, DateTime lastUpdatedUtc, CancellationToken ct);
 
     // The projection-private per-reservation lookup (D10). Written on reserve,
     // read by the full key on release to recover the quantity, then deleted.
@@ -44,6 +50,13 @@ public interface IInventoryDashboardUnitOfWork : IAsyncDisposable
     Task<InventoryReservationRow?> GetReservationAsync(
         Guid inventoryId, Guid orderId, Guid lineId, CancellationToken ct);
     Task DeleteReservationAsync(Guid inventoryId, Guid orderId, Guid lineId, CancellationToken ct);
+
+    // Stages a notification to publish atomically inside CommitAsync, on the
+    // same transaction as the writes, so a committed change always notifies and a
+    // rolled-back one never does. The handler stages only when a UI-relevant row
+    // changed; a unit of work stages at most one notification, and a second call
+    // throws.
+    void PublishOnCommit(NotificationEnvelope envelope);
 
     Task CommitAsync(string projectionName, long position, CancellationToken ct);
 }

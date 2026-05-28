@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 
 namespace EventSourcingCqrs.Projections.Tests;
@@ -14,6 +15,10 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
 
     // Exposed so tests can assert the checkpoint advanced with the write.
     public Dictionary<string, long> Checkpoints { get; } = [];
+
+    // Records each committed unit of work's staged notification, flushed on
+    // CommitAsync so an uncommitted unit stages nothing the tests can observe.
+    public List<NotificationEnvelope> StagedNotifications { get; } = [];
 
     public Task<IInventoryDashboardUnitOfWork> BeginAsync(CancellationToken ct)
         => Task.FromResult<IInventoryDashboardUnitOfWork>(new UnitOfWork(this));
@@ -33,6 +38,8 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
 
     private sealed class UnitOfWork(InMemoryInventoryDashboardStore store) : IInventoryDashboardUnitOfWork
     {
+        private NotificationEnvelope? _staged;
+
         public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
             => Task.FromResult(store.Checkpoints.GetValueOrDefault(projectionName));
 
@@ -52,9 +59,11 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
             return Task.CompletedTask;
         }
 
-        public Task AdjustOnHandAsync(
+        public Task<string?> AdjustOnHandAsync(
             Guid inventoryId, int quantityDelta, DateTime lastUpdatedUtc, CancellationToken ct)
         {
+            // Returns the row's sku, mirroring the adapter's RETURNING sku; null
+            // when no row matched.
             if (store._dashboard.TryGetValue(inventoryId, out var existing))
             {
                 store._dashboard[inventoryId] = existing with
@@ -62,13 +71,16 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
                     OnHandQuantity = existing.OnHandQuantity + quantityDelta,
                     LastUpdatedUtc = lastUpdatedUtc,
                 };
+                return Task.FromResult<string?>(existing.Sku);
             }
-            return Task.CompletedTask;
+            return Task.FromResult<string?>(null);
         }
 
-        public Task AdjustReservedAsync(
+        public Task<string?> AdjustReservedAsync(
             Guid inventoryId, int reservedDelta, DateTime lastUpdatedUtc, CancellationToken ct)
         {
+            // Returns the row's sku, mirroring the adapter's RETURNING sku; null
+            // when no row matched.
             if (store._dashboard.TryGetValue(inventoryId, out var existing))
             {
                 store._dashboard[inventoryId] = existing with
@@ -76,8 +88,9 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
                     ReservedQuantity = existing.ReservedQuantity + reservedDelta,
                     LastUpdatedUtc = lastUpdatedUtc,
                 };
+                return Task.FromResult<string?>(existing.Sku);
             }
-            return Task.CompletedTask;
+            return Task.FromResult<string?>(null);
         }
 
         public Task InsertReservationAsync(InventoryReservationRow row, CancellationToken ct)
@@ -99,11 +112,28 @@ internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
             return Task.CompletedTask;
         }
 
+        public void PublishOnCommit(NotificationEnvelope envelope)
+        {
+            if (_staged is not null)
+            {
+                throw new InvalidOperationException(
+                    "A unit of work stages at most one notification: one projection " +
+                    "handler processes one event and makes one logical change per commit.");
+            }
+            _staged = envelope;
+        }
+
         public Task CommitAsync(string projectionName, long position, CancellationToken ct)
         {
             // GREATEST, mirroring PostgresCheckpointStore's UPSERT.
             store.Checkpoints[projectionName] = Math.Max(
                 store.Checkpoints.GetValueOrDefault(projectionName), position);
+            // Flush the staged notification on commit, mirroring the Postgres unit
+            // of work issuing pg_notify inside CommitAsync.
+            if (_staged is not null)
+            {
+                store.StagedNotifications.Add(_staged);
+            }
             return Task.CompletedTask;
         }
 

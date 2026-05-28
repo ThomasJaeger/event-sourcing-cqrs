@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
@@ -19,6 +20,10 @@ internal sealed class InMemoryOrderDetailStore : IOrderDetailStore
 
     // Exposed so tests can assert the checkpoint advanced with the write.
     public Dictionary<string, long> Checkpoints { get; } = [];
+
+    // Records each committed unit of work's staged notification, flushed on
+    // CommitAsync so an uncommitted unit stages nothing the tests can observe.
+    public List<NotificationEnvelope> StagedNotifications { get; } = [];
 
     public Task<IOrderDetailUnitOfWork> BeginAsync(CancellationToken ct)
         => Task.FromResult<IOrderDetailUnitOfWork>(new UnitOfWork(this));
@@ -49,6 +54,8 @@ internal sealed class InMemoryOrderDetailStore : IOrderDetailStore
 
     private sealed class UnitOfWork(InMemoryOrderDetailStore store) : IOrderDetailUnitOfWork
     {
+        private NotificationEnvelope? _staged;
+
         public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
             => Task.FromResult(store.Checkpoints.GetValueOrDefault(projectionName));
 
@@ -180,11 +187,28 @@ internal sealed class InMemoryOrderDetailStore : IOrderDetailStore
             => Task.FromResult(
                 store._payments.TryGetValue(paymentId, out var row) ? row.OrderId : (Guid?)null);
 
+        public void PublishOnCommit(NotificationEnvelope envelope)
+        {
+            if (_staged is not null)
+            {
+                throw new InvalidOperationException(
+                    "A unit of work stages at most one notification: one projection " +
+                    "handler processes one event and makes one logical change per commit.");
+            }
+            _staged = envelope;
+        }
+
         public Task CommitAsync(string projectionName, long position, CancellationToken ct)
         {
             // GREATEST, mirroring PostgresCheckpointStore's UPSERT.
             store.Checkpoints[projectionName] = Math.Max(
                 store.Checkpoints.GetValueOrDefault(projectionName), position);
+            // Flush the staged notification on commit, mirroring the Postgres unit
+            // of work issuing pg_notify inside CommitAsync.
+            if (_staged is not null)
+            {
+                store.StagedNotifications.Add(_staged);
+            }
             return Task.CompletedTask;
         }
 
