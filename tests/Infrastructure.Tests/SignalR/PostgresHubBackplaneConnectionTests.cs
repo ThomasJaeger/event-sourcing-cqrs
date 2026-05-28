@@ -14,12 +14,6 @@ namespace EventSourcingCqrs.Infrastructure.Tests.SignalR;
 
 public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture>
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
-
     private readonly PostgresFixture _fixture;
 
     public PostgresHubBackplaneConnectionTests(PostgresFixture fixture)
@@ -228,18 +222,17 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
         var options = Options.Create(new HubBackplaneOptions
         {
             ConnectionString = connStr,
-            ChannelName = PostgresPgNotifyPublisher.ChannelName,
+            ChannelName = NotificationContract.ChannelName,
             ReconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(1),
         });
         return new PostgresHubBackplaneConnection(
             options,
-            JsonOptions,
             logger ?? NullLogger<PostgresHubBackplaneConnection>.Instance);
     }
 
     private static async Task PublishNotificationAsync(string connStr, NotificationEnvelope envelope)
     {
-        var payloadJson = JsonSerializer.Serialize(envelope, JsonOptions);
+        var payloadJson = JsonSerializer.Serialize(envelope, NotificationContract.SerializerOptions);
         await PublishRawAsync(connStr, payloadJson);
     }
 
@@ -250,7 +243,7 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT pg_notify(@channel, @payload)";
         cmd.Parameters.AddWithValue(
-            "channel", NpgsqlDbType.Text, PostgresPgNotifyPublisher.ChannelName);
+            "channel", NpgsqlDbType.Text, NotificationContract.ChannelName);
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Text, payload);
         await cmd.ExecuteNonQueryAsync();
     }

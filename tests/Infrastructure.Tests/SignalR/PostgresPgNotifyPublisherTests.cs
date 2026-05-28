@@ -34,7 +34,7 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
         listenerConnection.Notification += (_, args) => receivedPayloads.Add(args.Payload);
         await using (var listenCmd = listenerConnection.CreateCommand())
         {
-            listenCmd.CommandText = $"LISTEN {PostgresPgNotifyPublisher.ChannelName}";
+            listenCmd.CommandText = $"LISTEN {NotificationContract.ChannelName}";
             await listenCmd.ExecuteNonQueryAsync();
         }
 
@@ -59,7 +59,7 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
         await listenerConnection.WaitAsync(cts.Token);
 
         receivedPayloads.Should().HaveCount(1);
-        var deserialized = JsonSerializer.Deserialize<NotificationEnvelope>(receivedPayloads[0], JsonOptions);
+        var deserialized = JsonSerializer.Deserialize<NotificationEnvelope>(receivedPayloads[0], NotificationContract.SerializerOptions);
         deserialized.Should().BeEquivalentTo(envelope);
     }
 
@@ -75,7 +75,7 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
         listenerConnection.Notification += (_, args) => receivedPayloads.Add(args.Payload);
         await using (var listenCmd = listenerConnection.CreateCommand())
         {
-            listenCmd.CommandText = $"LISTEN {PostgresPgNotifyPublisher.ChannelName}";
+            listenCmd.CommandText = $"LISTEN {NotificationContract.ChannelName}";
             await listenCmd.ExecuteNonQueryAsync();
         }
 
@@ -181,12 +181,6 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
-
     private static PostgresPgNotifyPublisher BuildPublisher()
-        => new(JsonOptions, NullLogger<PostgresPgNotifyPublisher>.Instance);
+        => new(NullLogger<PostgresPgNotifyPublisher>.Instance);
 }

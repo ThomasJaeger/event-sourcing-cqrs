@@ -329,7 +329,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         listener.Notification += (_, args) => received.Add(args.Payload);
         await using (var listenCmd = listener.CreateCommand())
         {
-            listenCmd.CommandText = $"LISTEN {PostgresPgNotifyPublisher.ChannelName}";
+            listenCmd.CommandText = $"LISTEN {NotificationContract.ChannelName}";
             await listenCmd.ExecuteNonQueryAsync();
         }
 
@@ -348,7 +348,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         await listener.WaitAsync(cts.Token);
 
         received.Should().ContainSingle();
-        JsonSerializer.Deserialize<NotificationEnvelope>(received[0], TestNotificationPublisher.JsonOptions)
+        JsonSerializer.Deserialize<NotificationEnvelope>(received[0], NotificationContract.SerializerOptions)
             .Should().BeEquivalentTo(envelope);
         // The row write committed alongside the notification.
         (await store.GetAsync(row.OrderId, CancellationToken.None)).Should().Be(row);
@@ -369,7 +369,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         listener.Notification += (_, args) => received.Add(args.Payload);
         await using (var listenCmd = listener.CreateCommand())
         {
-            listenCmd.CommandText = $"LISTEN {PostgresPgNotifyPublisher.ChannelName}";
+            listenCmd.CommandText = $"LISTEN {NotificationContract.ChannelName}";
             await listenCmd.ExecuteNonQueryAsync();
         }
 

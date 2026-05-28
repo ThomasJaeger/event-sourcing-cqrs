@@ -33,20 +33,16 @@ namespace EventSourcingCqrs.Infrastructure.SignalR;
 public sealed class PostgresHubBackplaneConnection : IHubBackplaneConnection, IAsyncDisposable
 {
     private readonly HubBackplaneOptions _options;
-    private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<PostgresHubBackplaneConnection> _logger;
     private readonly NpgsqlDataSource _dataSource;
 
     public PostgresHubBackplaneConnection(
         IOptions<HubBackplaneOptions> options,
-        JsonSerializerOptions jsonOptions,
         ILogger<PostgresHubBackplaneConnection> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(jsonOptions);
         ArgumentNullException.ThrowIfNull(logger);
         _options = options.Value;
-        _jsonOptions = jsonOptions;
         _logger = logger;
         ArgumentException.ThrowIfNullOrEmpty(
             _options.ConnectionString,
@@ -167,7 +163,7 @@ public sealed class PostgresHubBackplaneConnection : IHubBackplaneConnection, IA
         try
         {
             envelope = JsonSerializer.Deserialize<NotificationEnvelope>(
-                args.Payload, _jsonOptions);
+                args.Payload, NotificationContract.SerializerOptions);
             if (envelope is null)
             {
                 _logger.LogError(

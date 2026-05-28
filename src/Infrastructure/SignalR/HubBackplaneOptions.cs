@@ -5,10 +5,10 @@ namespace EventSourcingCqrs.Infrastructure.SignalR;
 // than reusing the event-store's or read-model's connection factory, since
 // the hub's listener is independent of those adapters' lifecycles and the
 // backplane lives in Hosts.Web which has no other Postgres dependency.
-// ChannelName defaults to projection_committed, the channel
-// PostgresPgNotifyPublisher publishes to; overriding it requires both the
-// publisher and the backplane to agree, which is why both sides expose the
-// channel name as a configurable constant rather than hard-coding it.
+// ChannelName stays overridable but defaults to NotificationContract.ChannelName,
+// the single source both the publisher (NOTIFY) and this backplane (LISTEN)
+// reference, so the two sides agree by construction rather than by two literals
+// that happen to match.
 //
 // No validation framework usage; constructor guards on
 // PostgresHubBackplaneConnection enforce the required-field contract at
@@ -19,6 +19,6 @@ namespace EventSourcingCqrs.Infrastructure.SignalR;
 public sealed class HubBackplaneOptions
 {
     public string ConnectionString { get; init; } = "";
-    public string ChannelName { get; init; } = "projection_committed";
+    public string ChannelName { get; init; } = NotificationContract.ChannelName;
     public TimeSpan ReconnectDelay { get; init; } = TimeSpan.FromSeconds(1);
 }

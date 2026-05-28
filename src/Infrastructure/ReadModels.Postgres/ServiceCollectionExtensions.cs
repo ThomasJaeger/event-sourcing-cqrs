@@ -47,11 +47,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICheckpointStore, PostgresCheckpointStore>();
 
         // The notification publisher the six unit-of-works stage onto inside
-        // CommitAsync. One shared singleton, stateless beyond the JsonSerializerOptions
-        // it serializes envelopes with, which AddPostgresEventStore registers. TryAdd
-        // so a host that wires its own publisher wins. The stores take it by
-        // constructor injection; the four read models with no v1 subscriber hold it
-        // but never stage onto it.
+        // CommitAsync. One shared singleton, stateless beyond its logger; it sources
+        // the envelope serializer and channel name from NotificationContract, so it
+        // needs no JsonSerializerOptions from the container. TryAdd so a host that
+        // wires its own publisher wins. The stores take it by constructor injection;
+        // the four read models with no v1 subscriber hold it but never stage onto it.
         services.TryAddSingleton<PostgresPgNotifyPublisher>();
 
         // The store-to-port pairings stay hand-written: they are Postgres-specific

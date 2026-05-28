@@ -32,18 +32,11 @@ public sealed class PostgresPgNotifyPublisher : INotificationPublisher
     // fast on a future change that puts row data in the envelope.
     public const int MaxPayloadBytes = 8000;
 
-    public const string ChannelName = "projection_committed";
-
-    private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger<PostgresPgNotifyPublisher> _logger;
 
-    public PostgresPgNotifyPublisher(
-        JsonSerializerOptions jsonOptions,
-        ILogger<PostgresPgNotifyPublisher> logger)
+    public PostgresPgNotifyPublisher(ILogger<PostgresPgNotifyPublisher> logger)
     {
-        ArgumentNullException.ThrowIfNull(jsonOptions);
         ArgumentNullException.ThrowIfNull(logger);
-        _jsonOptions = jsonOptions;
         _logger = logger;
     }
 
@@ -73,7 +66,7 @@ public sealed class PostgresPgNotifyPublisher : INotificationPublisher
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(transaction);
 
-        var payloadJson = JsonSerializer.Serialize(envelope, _jsonOptions);
+        var payloadJson = JsonSerializer.Serialize(envelope, NotificationContract.SerializerOptions);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
         if (payloadBytes > MaxPayloadBytes)
         {
@@ -87,7 +80,7 @@ public sealed class PostgresPgNotifyPublisher : INotificationPublisher
         await using var cmd = transaction.Connection!.CreateCommand();
         cmd.Transaction = transaction;
         cmd.CommandText = "SELECT pg_notify(@channel, @payload)";
-        cmd.Parameters.AddWithValue("channel", NpgsqlDbType.Text, ChannelName);
+        cmd.Parameters.AddWithValue("channel", NpgsqlDbType.Text, NotificationContract.ChannelName);
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Text, payloadJson);
         await cmd.ExecuteNonQueryAsync(ct);
 
