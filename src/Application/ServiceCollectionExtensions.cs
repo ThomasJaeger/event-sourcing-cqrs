@@ -4,6 +4,7 @@ using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using EventSourcingCqrs.Application.Authorization;
 
 namespace EventSourcingCqrs.Application;
 
@@ -74,6 +75,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped(typeof(IProcessManagerRepository<>), typeof(ProcessManagerRepository<>));
 
         RegisterHandlers(services);
+
+        // Permission-based authorization policy substrate. The role-to-permission policy is part of
+        // the application definition and validates at composition: an incomplete or malformed policy
+        // throws here, at startup, rather than at the first authorization decision.
+        services.AddSingleton(new RolePermissionRegistry(RolePermissionPolicy.Default));
+        services.AddSingleton<IPermissionAuthorizer, PermissionAuthorizer>();
 
         return services;
     }
