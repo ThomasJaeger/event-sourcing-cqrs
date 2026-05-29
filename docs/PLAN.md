@@ -4,7 +4,7 @@ This document defines the scope, sequence, and weekly targets for building the r
 
 This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
 
-Realistic timeline: 24-28 weeks at 14 hours per week, solo, with Claude Code on the Max plan. Roughly six months from start to submission.
+Realistic timeline: roughly 30-36 weeks at 14 hours per week, solo, with Claude Code on the Max plan. The original estimate was 24-28 weeks; the authentication-and-authorization and multi-tenancy foundation adds roughly six to eight weeks (two foundation phases at two to three weeks each, plus the live-dashboards-completion phase at about two weeks, net of the Phase 8 work already counted). This is a real impact on the submission timeline, stated rather than absorbed silently.
 
 This document is a living plan. Update it weekly with what was actually built, what changed, and what surprised you. By week 28 it doubles as the build log, which is itself launch-period content.
 
@@ -87,6 +87,10 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 
 **Documentation.** README that maps every chapter to its code. Architecture decision records (ADRs) for major choices. Cross-reference map between book chapters and code files at the front of each Part 4 chapter.
 
+**Access control.** Role-based access control across the system. A permission model with a role-to-permission mapping, checked as permissions rather than role names. User-to-role assignments held in a small event-sourced Access context, so authorization changes are auditable; the role-to-permission mapping in startup-validated config. Command authorization as an Application pipeline behavior. Query and read-model authorization as role-and-ownership row filtering. SignalR subscription authorization as a resource-ownership check at the hub. Real authentication at both hosts, establishing identity where the actor is currently hardwired empty, with the principal abstracted so an external identity provider can slot in later.
+
+**Multi-tenancy.** Tenant isolation by a shared-schema discriminator, with read-isolation enforced by infrastructure (row-level security or a mandatory filter) rather than per-query discipline, and complete cross-tenant isolation tests at every boundary. Tenant context on the principal, in event metadata, and in stream identifiers. Tenant-scoped read models and dashboards. The existing event corpus migrated to a default tenant by an additive, append-only-respecting backfill. Tenant isolation enforced as an authorization boundary.
+
 ### Out of scope for v1
 
 Marten as another event-store adapter for PostgreSQL. Marten is discussed in Chapter 8 as an alternative the reader could swap in for PostgreSQL, but is not implemented as a peer.
@@ -95,9 +99,7 @@ Redis, Elasticsearch, and S3 read models. Chapter 13 discusses these. The refere
 
 Distributed messaging (RabbitMQ, Kafka). The reference implementation uses an in-process event bus driven by the outbox.
 
-Multi-tenancy beyond a tenant ID column. Chapter 13 covers patterns; the implementation demonstrates the simplest form that supports the dashboards.
-
-Authentication and authorization beyond a stub. Chapter 17 discusses operational concerns; the reference implementation does not ship with real auth.
+Access control and multi-tenancy are in scope; see the access-control and multi-tenancy entries in the v1 scope above. The residual boundaries the foundation design set: external identity-provider integration is out of scope (the principal is abstracted for it, but the integration itself is later work), and multi-region tenant placement and per-tenant data residency are out of scope unless a later need pulls them in.
 
 External monitoring integrations (Prometheus, Grafana, CloudWatch). Metrics are exposed via simple endpoints, not pushed to external systems.
 
@@ -125,6 +127,9 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | .NET version | .NET 10 LTS, C# 14 (supported through November 10, 2028) | Part 4, "Technology Choices" |
 | License | MIT | Book commitment |
 | Repository host | github.com/ThomasJaeger | Book commitment |
+| Tenant isolation model | Shared-schema discriminator with infrastructure-enforced read isolation | RBAC and multi-tenancy foundation |
+| Authorization model | Permission-based; command authz as a pipeline behavior, query and read authz as row filtering, hub subscription authz as a resource-ownership check, identity from a real principal | RBAC and multi-tenancy foundation |
+| TenantId type | Typed wrapper, a security-justified exception to the raw-Guid convention (amends ADR 0005's scope) | RBAC and multi-tenancy foundation |
 
 The manuscript and the implementation agree on .NET 10 / C# 14 as of April 2026. The Track A pass updated Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters. ADR 0001 in this repo records the original deviation and is now closed at superseded-by-manuscript status.
 
@@ -354,7 +359,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Out of scope.**
 - Live dashboards. Phase 8.
-- Authentication and authorization beyond a stub.
+- Authentication and authorization. The RBAC foundation phase.
 
 **Done when.**
 - A user can place an order and watch it move through the lifecycle in the UI.
@@ -378,6 +383,32 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 **Done when.**
 - Placing an order in one browser tab updates the customer-facing dashboard in another tab within seconds.
 - The admin dashboard shows live system metrics that match what the AdminConsole tools show.
+
+**Status note.** Phase 8 delivered the SignalR hub and the LISTEN/NOTIFY backplane (Cluster 1, CI-green at bfb4727). The retrofit sites, the two new dashboards, the LiveBadge component, hub-side rate limiting, and the cross-tab verification moved to the live-dashboards-completion phase, because they depend on the authentication-and-authorization and multi-tenancy foundation. The two done-when criteria above move with them; the hub-broadcasts-on-projection-commit capability they imply is proven by Cluster 1.
+
+### Authentication and Authorization (RBAC)
+
+**Goals.** A permission model with a startup-validated role-to-permission mapping, checked as permissions. User-to-role assignments in a small event-sourced Access context with a bootstrap administrator; the role-to-permission mapping in config. Command authorization as an Application pipeline behavior, folded after logging and before idempotency so an unauthorized command consumes no idempotency storage and reaches neither validation nor the handler. Every command declares its required permission, with startup validation failing loudly on a gap. Query and read-model authorization as role-and-ownership row filtering. SignalR subscription authorization at the hub (hub authentication plus the resource-ownership check that closes the direct-object-reference exposure). Real authentication at both hosts, establishing identity where the actor is hardwired empty, with the principal abstracted for a future external identity provider. Identity propagation through the async chains, with caused commands and resurfaced delayed commands authorizing under a system actor while preserving the originating correlation. A system role holding the permissions process managers exercise. Tests at every enforcement point, complete per the cross-tenant coverage mandate's authz boundaries.
+
+**Out of scope.** External identity-provider integration (the principal is abstracted for it; the integration is later work).
+
+**Done when.** A principal performs only the commands its roles permit. A principal sees only the read-model rows its roles and ownership allow. A subscription to a resource group is rejected unless the principal owns the resource. The actor is established from a real principal at both hosts and flows into event metadata, no longer hardwired empty. Caused commands authorize under the system actor. Every enforcement point has tests.
+
+### Multi-tenancy
+
+**Goals.** The shared-schema discriminator implemented end to end, with read-isolation enforced by infrastructure (row-level security keyed on a per-connection session variable, or a mandatory filter) rather than per-query discipline. A typed TenantId, with raw Guid retained elsewhere. Tenant context in event metadata (the EventMetadata change carried by both event envelopes) and in stream identifiers (the StreamId namespacing change, tenant-after-prefix so prefix-family routing is preserved). A tenant_id discriminator on every read-model table, and on the events table for operational tenant filtering and per-tenant replay. Tenant-scoped read models and tenant-qualified dashboard groups. The existing event corpus migrated to a default tenant by an additive backfill that leaves historical stream identifiers untouched and tolerates the legacy two-segment form. Tenant context propagated through commands, projections, process managers, the outbox, and the delay queue, set from the principal at the HTTP edge and from metadata at the worker edge. Complete, structurally-enforced cross-tenant isolation tests at every boundary: every query, command, subscription, and projection, the enforcement mechanism, the idempotency and delay-queue paths, and per-tenant rebuild.
+
+**Out of scope.** Multi-region tenant placement and per-tenant data residency, unless design pulls them in.
+
+**Done when.** A tenant's data is isolated from every other tenant's at the discriminator-plus-enforcement level. A query or subscription scoped to one tenant cannot observe another tenant's state. The corpus migration completes and historical events carry the default tenant. The tenant propagates through commands, projections, process managers, the outbox, and the delay queue. Cross-tenant isolation coverage is complete and structurally enforced at every boundary.
+
+### Live Dashboards Completion
+
+**Goals.** The deferred Phase 8 work, built authz-and-tenant-aware from the start. The three retrofit sites (OrderDetail, OrderCreate, InventoryDashboard) receive SignalR notifications instead of polling. The two new dashboards (customer-facing order tracking, SaaS admin metrics). The shared LiveBadge connection-status component. Hub-side rate limiting. The cross-tab verification.
+
+**Out of scope.** As the original Phase 8 scope named.
+
+**Done when.** The original Phase 8 done-when criteria (an order placed in one tab updates the customer dashboard in another within seconds; the admin dashboard's metrics match the AdminConsole tools), now with each surface tenant-scoped and authorized.
 
 ### Phase 9, Weeks 17-18: AdminConsole
 
@@ -539,6 +570,8 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 **Phase 2's SQL Server adapter is the first abstraction stress test.** Adding a second relational adapter alongside the PostgreSQL adapter forces `IEventStore` to handle two engines before the more-different KurrentDB and DynamoDB adapters arrive in Phases 10 and 11. If the abstraction has leaked PostgreSQL-specific concepts, this is where it shows up first. Treat any awkwardness in the SQL Server adapter as a signal about the abstraction, not the adapter.
 
+**The RBAC and multi-tenancy foundation is the highest-risk work in the plan.** The EventMetadata and StreamId changes ripple through every layer. The two unbuilt event-store adapters (KurrentDB and DynamoDB) must be built tenant-aware from the start, or they incur the re-key cost the sequencing exists to avoid. Cross-tenant leakage is a security boundary, so a tenancy bug is an incident rather than an ordinary defect: under the discriminator a single missing tenant predicate is a one-line breach, which is why read-isolation is enforced by infrastructure and the cross-tenant coverage is complete and structural rather than discipline-dependent. The corpus migration is a one-time operation that must be correct; the additive, append-only-respecting backfill (historical stream identifiers untouched, the legacy form tolerated) is the lower-risk path chosen for it. The tenant threads through more accepted infrastructure than first anticipated: the async-propagation work touches the caused-command dispatch fragment (ADR 0014, anticipated by its own revisit-trigger), the delay-queue table (ADR 0017), and the command-idempotency key (ADR 0016, the key becoming tenant-scoped), each a touchback to an accepted ADR and each a place a tenancy bug would be a cross-tenant defect.
+
 **Phases 10 and 11 are the highest-risk.** Adding KurrentDB and DynamoDB adapters after the relational adapters are mature is the moment when the abstraction in Domain.Abstractions is tested against fundamentally different storage models. If the abstraction was wrong, this is when it surfaces, and fixing it requires touching everything that depends on it. Pace these phases carefully and resist the temptation to skip them or simplify the test suite for them.
 
 **Process managers are the second-highest risk.** Chapter 10 covers a lot of ground. Compensation branches, idempotency, timeouts, distributed coordination, observability. Phase 5's two weeks may run long. If it does, take the third week. Better to ship a correct OrderFulfillmentProcessManager than a buggy one that the book has to apologize for.
@@ -547,7 +580,7 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 **Manuscript reconciliation in Phase 14 will take longer than expected.** Six months of building will produce dozens of small divergences from the manuscript. Each is a small edit; the aggregate is real work. Do not skimp.
 
-**The temptation to keep building beyond v1.** Once the implementation runs, ideas for additional features will arrive faster than time allows. Resist them. The book is the product. v1 is what the book commits to. Anything beyond v1 is post-launch material, not pre-submission material.
+**The temptation to keep building beyond v1.** Once the implementation runs, ideas for additional features will arrive faster than time allows. Resist them. The book is the product. v1 is what the book commits to. Anything beyond v1 is post-launch material, not pre-submission material. The RBAC and multi-tenancy foundation is the exception that proves the rule: a deliberate, sanctioned scope expansion driven by a direct production need and recorded in this plan's amendment, not the unsanctioned creep this entry warns against. The warning continues to apply to genuine scope creep.
 
 ---
 
@@ -560,13 +593,14 @@ The reference implementation is done when:
 3. `docker compose up` followed by browser navigation produces a working UI within five minutes of clone.
 4. The README maps every chapter to its code.
 5. The chapter-to-code map document covers every pattern in the book.
-6. The manuscript and the code agree.
+6. The manuscript and the code agree, including the chapters the book grows to teach access control and multi-tenancy; the parallel book-repo planning scopes that growth against the locked foundation design.
 7. ADRs document the major architectural choices.
 8. v1.0.0 is tagged on GitHub.
 9. All four event store adapters pass the same test suite.
 10. The proposal package's supplementary materials description references the actual GitHub URL.
+11. No query, command, subscription, or projection reaches production without a cross-tenant isolation test, enforced structurally so a registered type that lacks coverage fails the suite.
 
-When all ten are true, the proposal goes to Pearson.
+When all eleven are true, the proposal goes to Pearson.
 
 ---
 
