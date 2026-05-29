@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Application.Authorization;
 
 // The static role-to-permission policy. The policy is part of the application definition,

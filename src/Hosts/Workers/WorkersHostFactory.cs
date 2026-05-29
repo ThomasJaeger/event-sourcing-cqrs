@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Access;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
@@ -11,6 +12,7 @@ using EventSourcingCqrs.ProcessManagers.Returns;
 using EventSourcingCqrs.Projections.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace EventSourcingCqrs.Hosts.Workers;
 
@@ -33,6 +35,7 @@ public static class WorkersHostFactory
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
+        builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();
         // Process-manager event types resolve through the separate PM registry
         // (ADR 0013); AddPostgresEventStore walks every IProcessManagerEventTypeProvider.
         builder.Services.AddSingleton<IProcessManagerEventTypeProvider, OrderFulfillmentEventTypeProvider>();
@@ -66,6 +69,19 @@ public static class WorkersHostFactory
             TimeoutAwaitingPaymentForOrderHandler>();
         builder.Services.AddScoped<ICommandHandler<TimeoutAwaitingDispatchForOrder>,
             TimeoutAwaitingDispatchForOrderHandler>();
+
+        // Bootstrap administrator seed (Phase 9, ADR 0028): grants the configured administrator the
+        // Admin role on startup so the system has an assigner before any assignment can be made.
+        // Registered before the projection catch-up so its StartingAsync runs first and the catch-up
+        // replays the seeded event into the current-roles read model. An unset id disables the seed.
+        var bootstrapAdministratorId =
+            Guid.TryParse(
+                builder.Configuration["BootstrapAdministrator:AdministratorUserId"], out var adminId)
+                ? adminId
+                : Guid.Empty;
+        builder.Services.AddSingleton<IOptions<BootstrapAdministratorOptions>>(
+            Options.Create(new BootstrapAdministratorOptions { AdministratorUserId = bootstrapAdministratorId }));
+        builder.Services.AddHostedService<BootstrapAdministratorService>();
 
         builder.Services.AddHostedService<ProjectionStartupCatchUpService>();
         return builder.Build();

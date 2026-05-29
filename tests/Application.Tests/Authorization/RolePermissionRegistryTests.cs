@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application.Authorization;
+using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
 using Xunit;
 

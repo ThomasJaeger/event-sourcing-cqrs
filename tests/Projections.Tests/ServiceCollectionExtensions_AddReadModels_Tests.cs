@@ -1,10 +1,12 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Access.Events;
 using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Projections.CurrentRoles;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderDetail;
@@ -45,7 +47,7 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
 
         // Each projection is one instance surfaced under every interface its
         // consumers resolve; the forwarding registrations hand back the same
-        // singleton. Four projections now, so the IProjection set holds all.
+        // singleton. Seven projections now, so the IProjection set holds all.
         var orderList = provider.GetRequiredService<OrderListProjection>();
         var customerSummary = provider.GetRequiredService<CustomerSummaryProjection>();
         var orderDetail = provider.GetRequiredService<OrderDetailProjection>();
@@ -88,14 +90,20 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<PaymentRefunded>>().Should().BeSameAs(orderDetail);
         provider.GetRequiredService<IEventHandler<PaymentVoided>>().Should().BeSameAs(orderDetail);
 
+        // RoleAssigned and RoleRevoked are CurrentRoles-only.
+        var currentRoles = provider.GetRequiredService<CurrentRolesProjection>();
+        provider.GetRequiredService<IEventHandler<RoleAssigned>>().Should().BeSameAs(currentRoles);
+        provider.GetRequiredService<IEventHandler<RoleRevoked>>().Should().BeSameAs(currentRoles);
+
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(6);
+        projections.Should().HaveCount(7);
         projections.Should().Contain(orderList);
         projections.Should().Contain(customerSummary);
         projections.Should().Contain(inventoryDashboard);
         projections.Should().Contain(skuToInventory);
         projections.Should().Contain(orderToPayment);
         projections.Should().Contain(orderDetail);
+        projections.Should().Contain(currentRoles);
 
         // AddReadModels composes with AddPostgresEventStore: the event-store
         // side still resolves, because AddReadModels does not register an

@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Application.Authorization;
 
 // Authorizes when any of the principal's roles grants the required permission (union semantics).

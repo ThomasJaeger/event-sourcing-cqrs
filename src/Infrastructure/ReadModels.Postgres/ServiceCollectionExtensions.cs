@@ -1,8 +1,10 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Access.ReadModels;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.SignalR;
+using EventSourcingCqrs.Projections.CurrentRoles;
 using EventSourcingCqrs.Projections.CustomerSummary;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.InventoryDashboard;
@@ -77,6 +79,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IOrderDetailStore, PostgresOrderDetailStore>();
         services.AddProjection<OrderDetailProjection>();
+
+        services.AddSingleton<ICurrentUserRolesStore, PostgresCurrentUserRolesStore>();
+        services.AddProjection<CurrentRolesProjection>();
 
         return services;
     }

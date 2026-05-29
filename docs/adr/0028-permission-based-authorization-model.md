@@ -34,6 +34,16 @@ The role set is Customer, Support, Admin, and System. The System role holds the 
 - This ADR opens the authorization-model record. It is extended through the phase: the Access surface and its assignment storage, the command-authz behavior and its fold position, the query and read authz, the hub authentication and ownership check, and the caused-command authorization under the system actor.
 - A future external identity provider supplies the principal. The model consumes roles off the principal regardless of source, so external identity-provider integration stays out of scope here without reshaping the model.
 
+## Amendment: the Access surface, and Role in Domain.Abstractions
+
+The Access surface that records role assignments lands as `UserRoles`, an event-sourced aggregate keyed by user id, with `RoleAssigned` and `RoleRevoked` events and a `CurrentRolesProjection` into a `current_user_roles` read model the principal factory reads. A bootstrap-administrator seed in the Workers host grants the configured administrator the Admin role on startup through an idempotent append, so the system has an assigner before any other assignment is possible.
+
+This forced one change to the placement the original decision recorded. The substrate put `Role` in `Application/Authorization`. The Access events serialize `Role` and the read-model port returns it, so an Application-resident `Role` would force the Postgres read-model adapter and the projection to reference Application, inverting the hexagonal layering rule ADR 0026 records (Infrastructure must not depend on Application). `Role` therefore moves to `Domain.Abstractions`, alongside the other types that cross the persistence boundary (`SystemActor`, the event and stream contracts), and the whole Access surface lives in `Domain/Access` like every other event-sourced context. `Permission` stays in `Application/Authorization`: it is runtime authorization policy, never serialized, so it carries no cross-layer constraint. The policy, the registry, and the authorizer reference `Role` from its new home.
+
+The current-roles unit of work carries no notification-publish member, unlike the six dashboard-feeding units of work: the read model feeds the principal factory, not a live dashboard, so it has no SignalR subscriber and stages nothing (born-at-consumer).
+
+`RoleAssigned` and `RoleRevoked` register through an `AccessEventTypeProvider` in the Workers host, which runs the projection and the seed. The Api host registers no Access provider, consistent with its rule of registering event providers only for the aggregates its command handlers dispatch. User-facing assignment commands are not part of this commit: the bootstrap seed is the only writer, and command-driven assignment lands with the command-authz work or later.
+
 ## Trigger for revisiting
 
 - A permission needs to vary per tenant or per deployment beyond what a static code-level policy expresses. That moves the policy to external configuration, keeping the same startup-validation guarantee.

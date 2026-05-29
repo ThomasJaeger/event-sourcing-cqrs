@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Application.Authorization;
 
 // The permission check. A guard asks whether a principal holding these roles is authorized for this

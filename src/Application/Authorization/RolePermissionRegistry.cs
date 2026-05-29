@@ -1,3 +1,5 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
 namespace EventSourcingCqrs.Application.Authorization;
 
 // Resolves a role's permission set from a validated policy. Validation runs in the constructor so a
