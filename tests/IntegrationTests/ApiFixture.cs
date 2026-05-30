@@ -1,3 +1,4 @@
+using EventSourcingCqrs.IntegrationTests.Authentication;
 using EventSourcingCqrs.TestInfrastructure;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -24,6 +25,10 @@ public sealed class ApiFixture : IAsyncLifetime
         {
             builder.UseSetting("EVENT_STORE_CONNECTION_STRING", connectionString);
             builder.UseSetting("READ_MODEL_CONNECTION_STRING", connectionString);
+            // The host verifies the forwarded-identity signature against this secret; the test client
+            // signs with the same constant, so both sides of the WebApplicationFactory agree (P9.3b).
+            builder.UseSetting(
+                "FORWARDED_IDENTITY_SIGNING_SECRET", ForwardedIdentityTestHeader.SigningSecret);
         });
     }
 

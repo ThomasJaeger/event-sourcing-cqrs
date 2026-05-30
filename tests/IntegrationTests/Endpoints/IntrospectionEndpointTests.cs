@@ -96,8 +96,11 @@ public class IntrospectionEndpointTests : IClassFixture<ApiFixture>
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
         // /commands is gated (Phase 9); this round-trip is about the type registry, not auth, so it
-        // carries the default forwarded identity.
+        // carries the default forwarded identity and its signature (P9.3b).
         request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
+        request.Headers.Add(
+            ForwardedIdentityDefaults.SignatureHeaderName,
+            ForwardedIdentityTestHeader.SignatureFor(ForwardedIdentityTestHeader.Default));
         var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);

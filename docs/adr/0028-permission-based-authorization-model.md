@@ -60,8 +60,19 @@ The bus seam: the actor reaches the bus through a new principal-carrying `SendAs
 
 The gated set: the two POST dispatch routes require authentication; the GET introspection routes stay open, because they publish only the catalog of accepted type tokens and no data. Queries are gated at the host (a request without an identity is a 401) but do not yet thread the actor into a query context, which is a later commit's concern.
 
+## Extension: forwarded-identity signature (P9.3b)
+
+P9.3b makes the forwarded header trustworthy across the Web-to-Api hop: the Web host signs the request and the Api host verifies the signature before it trusts the claim. This commit is the Api half, the enforced verification. It closes the P9.3a posture where the unsigned header was trusted only because a trusted upstream sat in front of it. The signature is now the credential, so an unsigned or wrongly-signed header is rejected whatever sits upstream.
+
+The signature rides in its own header. `X-Forwarded-Identity` keeps its exact value, and `X-Forwarded-Identity-Signature` carries the base64url HMAC-SHA256 of that verbatim value under the shared secret. Folding a third segment into the value was rejected: the reader splits the value on its first semicolon and treats everything after as the roles segment, so an appended signature segment would land inside role parsing and couple the signature's safety to the role tokenizer. A separate header keeps the string the reader parses byte-identical to the string that was signed, which is the property the verification depends on. The handler verifies over the verbatim value and, only on success, hands that same value to the unchanged reader.
+
+The secret is one configuration key both hosts read, never a serialized or persisted value. The Api host reads it with the same throw-on-missing idiom the connection strings use, and the verifier guards it in its constructor: a missing, blank, or under-length secret throws as the composition root constructs the verifier at startup, so a misconfigured deployment fails to boot rather than failing the first request. The floor is 32 characters. The secret never appears in a log, an exception message, or a comment. No new package: HMAC-SHA256 and the constant-time comparison are in the base class library.
+
+Verification is fail-closed with no escape. There is no unsigned-acceptance path and no dev or test toggle that bypasses the check; the tests run against the same verification with a shared test secret. An absent signature, a signature that does not decode, and a signature that decodes but does not match all fail identically, and the comparison is constant-time so a wrong signature leaks no timing signal.
+
 ## Trigger for revisiting
 
 - A permission needs to vary per tenant or per deployment beyond what a static code-level policy expresses. That moves the policy to external configuration, keeping the same startup-validation guarantee.
 - An audit requirement needs roles-at-time-of-action recorded in event metadata, which the current model deliberately excludes.
 - The role taxonomy grows enough that a flat role-to-permission map needs hierarchy or composition, which the current flat enumeration does not carry.
+- The Web-to-Api hop becomes reachable by a caller outside the shared trust boundary. The signature proves integrity, not freshness, so a captured header replays; the hop assumes a same-trust-boundary path over TLS. A boundary change moves the signed payload to carry a timestamp or nonce with a replay guard.

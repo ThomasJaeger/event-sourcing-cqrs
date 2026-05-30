@@ -16,9 +16,13 @@ internal static class HttpClientQueryExtensions
         {
             Content = JsonContent.Create(new { type, payload }),
         };
-        // /queries is gated (Phase 9): send the default forwarded identity so the query tests stay
-        // authenticated. The unauthenticated-path test builds its own request without it.
+        // /queries is gated (Phase 9): send the default forwarded identity and its signature so the
+        // query tests stay authenticated (P9.3b). The unauthenticated-path test builds its own request
+        // without these headers.
         request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
+        request.Headers.Add(
+            ForwardedIdentityDefaults.SignatureHeaderName,
+            ForwardedIdentityTestHeader.SignatureFor(ForwardedIdentityTestHeader.Default));
         return client.SendAsync(request, ct);
     }
 }

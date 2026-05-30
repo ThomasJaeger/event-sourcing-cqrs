@@ -15,6 +15,7 @@ using EventSourcingCqrs.Hosts.Api.Endpoints;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,12 +62,21 @@ builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);
 
 // Forwarded-identity authentication (Phase 9, ADR 0028). The Api host authenticates a request from
-// the X-Forwarded-Identity header a trusted upstream sets: the handler establishes the principal,
-// the reader parses the dev header format (shared-secret signature validation is P9.3b), and the
-// principal factory loads the actor's authoritative roles from the current-roles read model. No new
-// package: the scheme is a custom AuthenticationHandler over the framework's authentication
-// primitives. The handler trusts the unsigned header, so the Api host must sit behind a trusted
-// upstream until P9.3b adds the signature.
+// the X-Forwarded-Identity header an upstream sets: the handler verifies the shared-secret signature,
+// the reader parses the header value, and the principal factory loads the actor's authoritative roles
+// from the current-roles read model. No new package: the scheme is a custom AuthenticationHandler over
+// the framework's authentication primitives, and the signature is HMAC-SHA256 from the base class
+// library.
+//
+// P9.3b: the signature is the enforced credential. The shared secret comes from one configuration key
+// both hosts read; the verifier is constructed here so its constructor guard runs as the container is
+// built, making a missing or under-length secret a startup failure rather than a first-request one.
+// An unsigned or wrongly-signed header fails authentication, so the host no longer relies on a
+// trusted-upstream posture to keep the header honest.
+var signingSecret = builder.Configuration["FORWARDED_IDENTITY_SIGNING_SECRET"]
+    ?? throw new InvalidOperationException("FORWARDED_IDENTITY_SIGNING_SECRET is not set.");
+builder.Services.AddSingleton(new ForwardedIdentitySignatureVerifier(
+    Options.Create(new ForwardedIdentitySigningOptions { Secret = signingSecret })));
 builder.Services.AddSingleton<IForwardedIdentityReader, HeaderForwardedIdentityReader>();
 builder.Services.AddSingleton<IPrincipalFactory, CurrentRolesPrincipalFactory>();
 builder.Services.AddAuthentication(ForwardedIdentityDefaults.SchemeName)

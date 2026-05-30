@@ -22,9 +22,13 @@ internal static class HttpClientCommandExtensions
         {
             request.Headers.Add("Idempotency-Key", idempotencyKey);
         }
-        // /commands is gated (Phase 9): send the default forwarded identity so the command tests
-        // stay authenticated. The unauthenticated-path test builds its own request without it.
+        // /commands is gated (Phase 9): send the default forwarded identity and its signature so the
+        // command tests stay authenticated (P9.3b). The unauthenticated-path test builds its own
+        // request without these headers.
         request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
+        request.Headers.Add(
+            ForwardedIdentityDefaults.SignatureHeaderName,
+            ForwardedIdentityTestHeader.SignatureFor(ForwardedIdentityTestHeader.Default));
         return await client.SendAsync(request, ct);
     }
 }
