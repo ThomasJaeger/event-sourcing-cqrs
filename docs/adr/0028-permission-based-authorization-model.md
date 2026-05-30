@@ -44,6 +44,22 @@ The current-roles unit of work carries no notification-publish member, unlike th
 
 `RoleAssigned` and `RoleRevoked` register through an `AccessEventTypeProvider` in the Workers host, which runs the projection and the seed. The Api host registers no Access provider, consistent with its rule of registering event providers only for the aggregates its command handlers dispatch. User-facing assignment commands are not part of this commit: the bootstrap seed is the only writer, and command-driven assignment lands with the command-authz work or later.
 
+## Extension: Api-side identity establishment (P9.3a)
+
+P9.3 establishes a real principal where the actor was hardwired empty. It is split deliberately. P9.3a is the Api half: a request carries a forwarded identity, the Api host authenticates it, and the actor and its authoritative roles land on the command context and through it on event metadata. P9.3b is the browser half: the Blazor circuit authenticates the user, the Web host forwards the identity to the Api host, and it adds the signature that makes the forwarded header trustworthy across the wire. P9.3a proves that an authenticated request stamps the real actor and an unauthenticated request is rejected; it does not yet prove a browser-to-actor flow.
+
+The scheme is a custom authentication scheme that reads a single combined header carrying the actor id and the upstream's role claim. The handler establishes a `ClaimsPrincipal` from it; the parsing sits behind `IForwardedIdentityReader`. No new package: the scheme is a custom `AuthenticationHandler` over the framework's authentication primitives.
+
+Staged validation and the trust posture: in P9.3a the forwarded header is unsigned and only dev-validated, parsed rather than verified. The Api host must not be exposed to untrusted callers carrying this header until P9.3b adds shared-secret signature validation at the `IForwardedIdentityReader` seam. Until then the header is a same-trust-boundary mechanism between the Web host and the Api host, not an authentication credential a hostile client could not forge.
+
+Authoritative roles, not the forwarded claim: the command context's roles come from the current-roles read model, loaded by the principal factory keyed on the authenticated actor id, not from the header's role claim. The worst an unsigned header can assert is an actor id; the roles that actor holds are what the system recorded. Loading roles rather than trusting the claim is why the factory exists.
+
+The factory's placement: `CurrentRolesPrincipalFactory` lives in Application, not Infrastructure, although D8 framed the principal-factory implementation as Infrastructure's. The factory does no I/O of its own. It composes the `ICurrentUserRolesStore` port and maps the result onto an `AuthenticatedPrincipal`; the I/O lives in the Postgres store behind the port. Application placement honors D8's spirit (the principal-factory concern is Application's, the storage is Infrastructure's), keeps the factory testable without a database, and avoids a new Infrastructure project for a type that touches no infrastructure.
+
+The bus seam: the actor reaches the bus through a new principal-carrying `SendAsync` overload the endpoint calls with the actor and roles, not through an ambient principal accessor the bus reads. The overload mirrors the idempotency-key overload's placement and reasoning: the Api host resolves `ICommandBus` through DI and dispatches every user command through it, so the interface widens for the host edge. The bare overloads keep the actor empty for callers without a principal (worker writes, the System fallback), so the no-principal default and the unit tests asserting it stay unchanged. The overload is preferred over an accessor because the endpoint already holds the principal and the dependency is explicit at the call site rather than ambient.
+
+The gated set: the two POST dispatch routes require authentication; the GET introspection routes stay open, because they publish only the catalog of accepted type tokens and no data. Queries are gated at the host (a request without an identity is a 401) but do not yet thread the actor into a query context, which is a later commit's concern.
+
 ## Trigger for revisiting
 
 - A permission needs to vary per tenant or per deployment beyond what a static code-level policy expresses. That moves the policy to external configuration, keeping the same startup-validation guarantee.

@@ -25,6 +25,11 @@ public sealed class CommandContext : ICommandContext
 
     public required Guid ActorId { get; init; }
 
+    // The actor's authoritative roles (Phase 9). Defaults to empty rather than required: only the
+    // authenticated user-dispatch path supplies roles, so the bare overloads, the CausedCommandBus
+    // seam, and the System fallback leave it empty without restating it.
+    public IReadOnlyCollection<Role> Roles { get; init; } = [];
+
     public required string ServiceName { get; init; }
 
     // Non-required: only the CausedCommandBus seam sets it (ADR 0014). The

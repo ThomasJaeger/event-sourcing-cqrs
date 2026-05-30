@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
 using EventSourcingCqrs.Application.Commands.Sales;
@@ -9,9 +10,11 @@ using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Hosts.Api;
+using EventSourcingCqrs.Hosts.Api.Authentication;
 using EventSourcingCqrs.Hosts.Api.Endpoints;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,11 +60,32 @@ builder.Services.AddApplication();
 builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);
 
+// Forwarded-identity authentication (Phase 9, ADR 0028). The Api host authenticates a request from
+// the X-Forwarded-Identity header a trusted upstream sets: the handler establishes the principal,
+// the reader parses the dev header format (shared-secret signature validation is P9.3b), and the
+// principal factory loads the actor's authoritative roles from the current-roles read model. No new
+// package: the scheme is a custom AuthenticationHandler over the framework's authentication
+// primitives. The handler trusts the unsigned header, so the Api host must sit behind a trusted
+// upstream until P9.3b adds the signature.
+builder.Services.AddSingleton<IForwardedIdentityReader, HeaderForwardedIdentityReader>();
+builder.Services.AddSingleton<IPrincipalFactory, CurrentRolesPrincipalFactory>();
+builder.Services.AddAuthentication(ForwardedIdentityDefaults.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, ForwardedIdentityAuthenticationHandler>(
+        ForwardedIdentityDefaults.SchemeName, configureOptions: null);
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
+// Authentication and authorization run inside the exception-mapping middleware (so a dispatch
+// exception still maps) and before the endpoints (so an unauthenticated request to a gated route is
+// a 401 challenge that never reaches the handler).
 app.UseMiddleware<ExceptionMappingMiddleware>();
-app.MapPost("/commands", CommandsEndpoint.HandleAsync);
-app.MapPost("/queries", QueriesEndpoint.HandleAsync);
+app.UseAuthentication();
+app.UseAuthorization();
+// Both POST dispatch routes require authentication (Phase 9). The GET introspection routes stay
+// open: they publish only the catalog of accepted type tokens, no data.
+app.MapPost("/commands", CommandsEndpoint.HandleAsync).RequireAuthorization();
+app.MapPost("/queries", QueriesEndpoint.HandleAsync).RequireAuthorization();
 app.MapGet("/commands", IntrospectionEndpoint.ListCommands);
 app.MapGet("/queries", IntrospectionEndpoint.ListQueries);
 

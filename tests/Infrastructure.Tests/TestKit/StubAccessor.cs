@@ -12,6 +12,7 @@ internal sealed class StubContext : ICommandContext
     public Guid CorrelationId { get; init; } = Guid.Empty;
     public Guid CausationCommandId { get; init; } = Guid.Empty;
     public Guid ActorId { get; init; } = Guid.Empty;
+    public IReadOnlyCollection<Role> Roles { get; init; } = [];
     public string ServiceName { get; init; } = "TestService";
     public string? IdempotencyKey { get; init; }
 

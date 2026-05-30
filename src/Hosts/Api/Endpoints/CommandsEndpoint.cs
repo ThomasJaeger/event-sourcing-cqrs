@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using System.Text.Json;
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -18,8 +20,10 @@ public static class CommandsEndpoint
     public static async Task<IResult> HandleAsync(
         CommandEnvelope envelope,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        ClaimsPrincipal user,
         CommandTypeRegistry registry,
         ICommandBus bus,
+        IPrincipalFactory principalFactory,
         IOptions<JsonOptions> jsonOptions,
         CancellationToken ct)
     {
@@ -61,7 +65,17 @@ public static class CommandsEndpoint
                 message = $"The payload could not be read as '{envelope.Type}'." });
         }
 
-        await bus.SendAsync(command, idempotencyKey, ct);
+        // The route requires authentication, so the principal is established and carries the actor
+        // id as its name identifier. Load the actor's authoritative roles (not the forwarded claim)
+        // and dispatch through the principal overload so the actor lands on event metadata.
+        var actorClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(actorClaim, out var actorId))
+        {
+            return Results.Unauthorized();
+        }
+        var principal = await principalFactory.CreateAsync(actorId, ct);
+
+        await bus.SendAsync(command, principal.ActorId, principal.Roles, idempotencyKey, ct);
         return Results.Accepted(value: new CommandAcceptedResponse(DateTime.UtcNow));
     }
 }

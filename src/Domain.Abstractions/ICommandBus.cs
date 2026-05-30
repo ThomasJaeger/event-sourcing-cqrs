@@ -15,4 +15,17 @@ public interface ICommandBus
     // resolves ICommandBus through DI and dispatches every user command through
     // it.
     Task SendAsync(ICommand command, string? idempotencyKey, CancellationToken ct);
+
+    // The authenticated user-dispatch path (Phase 9). The Api /commands endpoint resolves the actor
+    // and its authoritative roles from the request and dispatches here, so both land on the command
+    // context and the actor lands on event metadata. Correlation and causation are minted fresh as
+    // on the bare overloads; the idempotency key threads through as on the key overload. On the
+    // interface for the same reason that overload is: the Api host resolves ICommandBus through DI.
+    // The bare overloads keep ActorId = Guid.Empty for callers without a principal.
+    Task SendAsync(
+        ICommand command,
+        Guid actorId,
+        IReadOnlyCollection<Role> roles,
+        string? idempotencyKey,
+        CancellationToken ct);
 }

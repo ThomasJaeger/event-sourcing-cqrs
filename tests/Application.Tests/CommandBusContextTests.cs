@@ -32,6 +32,27 @@ public sealed class CommandBusContextTests
     }
 
     [Fact]
+    public async Task SendAsync_with_a_principal_stamps_the_actor_and_roles_onto_the_context()
+    {
+        var actorId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        var roles = new[] { Role.Customer, Role.Support };
+        var accessor = new AsyncLocalCommandContextAccessor();
+        var capture = new ContextCapturingHandler(accessor);
+        var services = new ServiceCollection()
+            .AddSingleton<ICommandHandler<DoThing>>(capture)
+            .AddSingleton<ICommandContextAccessor>(accessor)
+            .BuildServiceProvider();
+        var bus = new CommandBus(services);
+
+        await bus.SendAsync(new DoThing(), actorId, roles, idempotencyKey: null, CancellationToken.None);
+
+        // The bare overloads keep ActorId = Guid.Empty (the tests above); the principal overload is
+        // the only path that stamps a real actor and the actor's roles onto the context.
+        capture.Observed!.ActorId.Should().Be(actorId);
+        capture.Observed.Roles.Should().BeEquivalentTo(roles);
+    }
+
+    [Fact]
     public async Task SendAsync_restores_the_previous_accessor_value_after_the_handler_completes()
     {
         var accessor = new AsyncLocalCommandContextAccessor();

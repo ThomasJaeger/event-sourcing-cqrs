@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using EventSourcingCqrs.Hosts.Api.Authentication;
+using EventSourcingCqrs.IntegrationTests.Authentication;
 using FluentAssertions;
 using Xunit;
 
@@ -93,6 +95,9 @@ public class IntrospectionEndpointTests : IClassFixture<ApiFixture>
             }),
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        // /commands is gated (Phase 9); this round-trip is about the type registry, not auth, so it
+        // carries the default forwarded identity.
+        request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
         var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);

@@ -49,6 +49,32 @@ public sealed class CommandBus : ICommandBus
     public Task SendAsync(ICommand command, string? idempotencyKey, CancellationToken ct)
         => SendInternal(command, Guid.NewGuid(), idempotencyKey, ct);
 
+    // Authenticated user-dispatch (Phase 9). The Api /commands endpoint resolves the actor and its
+    // authoritative roles and dispatches here, so both land on the command context and the actor
+    // flows into event metadata. Mints a fresh correlation and causation id like the bare path; the
+    // bare paths keep ActorId = Guid.Empty for callers without a principal.
+    public Task SendAsync(
+        ICommand command,
+        Guid actorId,
+        IReadOnlyCollection<Role> roles,
+        string? idempotencyKey,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(roles);
+        return DispatchAsync(
+            command,
+            (timeProvider, options) => new CommandContext(timeProvider)
+            {
+                CorrelationId = Guid.NewGuid(),
+                CausationCommandId = Guid.NewGuid(),
+                ActorId = actorId,
+                Roles = roles,
+                ServiceName = options.ServiceName,
+                IdempotencyKey = idempotencyKey
+            },
+            ct);
+    }
+
     private Task SendInternal(
         ICommand command, Guid correlationId, string? idempotencyKey, CancellationToken ct)
         // ActorId stays Guid.Empty until Phase 7's HTTP middleware maps an
