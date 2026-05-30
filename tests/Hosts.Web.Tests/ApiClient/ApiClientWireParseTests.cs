@@ -4,8 +4,10 @@ using System.Text;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Hosts.Web;
+using EventSourcingCqrs.Hosts.Web.Authentication;
 using FluentAssertions;
 using Xunit;
 using ApiClientSut = EventSourcingCqrs.Hosts.Web.ApiClient;
@@ -217,7 +219,15 @@ public sealed class ApiClientWireParseTests
         commandRegistry.Register(typeof(CancelOrder));
         var queryRegistry = new QueryTypeRegistry();
         queryRegistry.Register(typeof(GetOrderDetail));
-        return new ApiClientSut(httpClient, commandRegistry, queryRegistry);
+        var signer = new ForwardedIdentitySigner(new ForwardedIdentitySigningKey(
+            new ForwardedIdentitySigningOptions { Secret = "wire-parse-test-forwarded-identity-secret" }));
+        return new ApiClientSut(
+            httpClient, commandRegistry, queryRegistry, new FixedActorIdentityProvider(AnyOrderId), signer);
+    }
+
+    private sealed class FixedActorIdentityProvider(Guid actorId) : ICircuitForwardedIdentityProvider
+    {
+        public Task<Guid> GetActorIdAsync() => Task.FromResult(actorId);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

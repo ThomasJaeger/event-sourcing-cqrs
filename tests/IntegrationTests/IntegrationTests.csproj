@@ -11,6 +11,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Hosts\Api\Hosts.Api.csproj" />
+    <ProjectReference Include="..\..\src\Hosts\Web\Hosts.Web.csproj">
+      <Aliases>WebHost</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\TestInfrastructure\TestInfrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>

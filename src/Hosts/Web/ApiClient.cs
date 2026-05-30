@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Hosts.Web.Authentication;
 
 namespace EventSourcingCqrs.Hosts.Web;
 
@@ -13,6 +15,11 @@ namespace EventSourcingCqrs.Hosts.Web;
 // the test-only HttpClientCommandExtensions/HttpClientQueryExtensions in
 // IntegrationTests; the test helpers prove the wire format, this production type
 // consumes it with DI and lifetime management.
+//
+// Every request carries the circuit's signed forwarded identity (P9.3b): AttachForwardedIdentityAsync
+// reads the actor from the circuit-scoped provider and signs it, so the Api host (which has mandated
+// the signature since Commit 1) accepts the request. Signing happens here, inside a per-circuit
+// resolved client, not in a shared DelegatingHandler that would cross circuits.
 //
 // Non-2xx responses map to the ApiClientException hierarchy by status code: 400 to
 // ApiValidationException, 422 to ApiBusinessRuleException, 409 to
@@ -25,18 +32,26 @@ internal sealed class ApiClient : IApiClient
     private readonly HttpClient _httpClient;
     private readonly CommandTypeRegistry _commandRegistry;
     private readonly QueryTypeRegistry _queryRegistry;
+    private readonly ICircuitForwardedIdentityProvider _identity;
+    private readonly ForwardedIdentitySigner _signer;
 
     public ApiClient(
         HttpClient httpClient,
         CommandTypeRegistry commandRegistry,
-        QueryTypeRegistry queryRegistry)
+        QueryTypeRegistry queryRegistry,
+        ICircuitForwardedIdentityProvider identity,
+        ForwardedIdentitySigner signer)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(commandRegistry);
         ArgumentNullException.ThrowIfNull(queryRegistry);
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(signer);
         _httpClient = httpClient;
         _commandRegistry = commandRegistry;
         _queryRegistry = queryRegistry;
+        _identity = identity;
+        _signer = signer;
     }
 
     public async Task<CommandAcceptedResponse> SendCommandAsync(
@@ -55,6 +70,7 @@ internal sealed class ApiClient : IApiClient
             Content = content,
         };
         request.Headers.Add("Idempotency-Key", idempotencyKey);
+        await AttachForwardedIdentityAsync(request);
         var response = await _httpClient.SendAsync(request, ct);
         await ThrowMappedAsync(response, ct);
         var accepted = await response.Content.ReadFromJsonAsync<CommandAcceptedResponse>(
@@ -72,7 +88,12 @@ internal sealed class ApiClient : IApiClient
         var content = JsonContent.Create(
             new { type = typeName, payload = query },
             options: JsonSerializerOptions.Web);
-        var response = await _httpClient.PostAsync("/queries", content, ct);
+        var request = new HttpRequestMessage(HttpMethod.Post, "/queries")
+        {
+            Content = content,
+        };
+        await AttachForwardedIdentityAsync(request);
+        var response = await _httpClient.SendAsync(request, ct);
         // The Api host's QueriesEndpoint returns 404 for a null query result (the
         // nullable single-row and composed views). Surface that as a default TResult?
         // here; list queries never reach this branch because they never return null.
@@ -83,6 +104,19 @@ internal sealed class ApiClient : IApiClient
         await ThrowMappedAsync(response, ct);
         return await response.Content.ReadFromJsonAsync<TResult>(
             JsonSerializerOptions.Web, ct);
+    }
+
+    // Attaches the circuit's signed forwarded identity: the actor id formatted with an empty role set
+    // ("{actorId:N};") and its base64url HMAC-SHA256 signature, under the header names the Api verifier
+    // reads (2a). The actor is read from the circuit-scoped provider at send time, and a circuit
+    // without an identity throws fail-closed, so no unsigned request leaves the client. The roles are
+    // empty by design: the Api host loads the actor's authoritative roles, never trusting the wire.
+    private async Task AttachForwardedIdentityAsync(HttpRequestMessage request)
+    {
+        var actorId = await _identity.GetActorIdAsync();
+        var identityValue = ForwardedIdentityValue.Format(actorId, Array.Empty<Role>());
+        request.Headers.Add(ForwardedIdentityHeaders.HeaderName, identityValue);
+        request.Headers.Add(ForwardedIdentityHeaders.SignatureHeaderName, _signer.Sign(identityValue));
     }
 
     // Maps a non-success response to the matching ApiClientException; returns without

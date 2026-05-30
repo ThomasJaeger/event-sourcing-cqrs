@@ -76,6 +76,18 @@ The header names, the value format, and the signing key are single-sourced in `A
 
 This is a behavior-preserving refactor: the bytes on the wire and the verifier's accept and reject decisions are unchanged, which the gating tests prove green with their scenarios and assertions unmodified. The single source removes the drift risk the prior shape carried, where a change to the value format or the MAC on one host had to be mirrored on the other and was caught only if a shared test vector happened to exercise it.
 
+## Amendment: the Web cookie login and circuit-scoped signing (P9.3b commit 2b)
+
+P9.3b's Web half restores the hop Commit 1 made signature-mandatory: the Web host establishes the operator's identity on the Blazor circuit and signs every forwarded request, so the Api host accepts it.
+
+The login credential is the configured actor, not a password. A static-SSR `Login.razor` posts to a `/account/login` endpoint that `SignInAsync`-es a name-identifier-only cookie principal whose subject is the `BootstrapAdministrator:AdministratorUserId` value, the same key the Workers seed reads. This is a development and same-trust-boundary mechanism, not proof of identity; real authentication is deferred to an external identity provider, which the model already names out of scope. This is a documented scope boundary, recorded so it is not mistaken for a finished authentication story.
+
+Signing happens inside `ApiClient`, through a circuit-scoped `ICircuitForwardedIdentityProvider`, not in a `DelegatingHandler`. The handler chain of a typed `HttpClient` is pooled across circuits and rotated on a timer, so a handler reading a scoped identity accessor would attach one circuit's actor to another circuit's request. Resolving the identity inside the per-circuit `ApiClient` at send time binds each request to its own circuit's actor. The forwarded value carries the actor id with an empty role set (the `"{actorId:N};"` canonical form, the empty-roles vector the signing path exercises); the Api host loads the actor's authoritative roles from the read model and never trusts the forwarded roles.
+
+The cookie is HttpOnly and Secure-always, which means the Web host requires an https endpoint to function. No launch profile ships in the repository; the host expects `ASPNETCORE_URLS` to carry an https binding. On .NET 10 the framework seeds the InteractiveServer circuit's authentication state from the cookie principal through the default `ServerAuthenticationStateProvider`, verified by a throwaway spike against Microsoft.AspNetCore.App 10.0.7, so the wiring registers no explicit `AuthenticationStateProvider` and no authentication-state serialization (that is a WebAssembly and Auto render-mode concern, and this host is Server-only).
+
+The live circuit-to-ApiClient-to-Api leg has no single headless end-to-end test, a framework limit: a Blazor Server circuit is established over SignalR by a browser, which a `WebApplicationFactory` HTTP test cannot drive. The path is covered by composition instead: the spike proves the framework seeds the circuit from the cookie; a provider test proves the circuit-scoped provider reads the seeded name identifier; an acceptance test proves a header the real Web signer produces is accepted by the real Api verifier; and a scope-isolation test proves two circuits sign with their own actors. The login-to-cookie half is proven by a `WebApplicationFactory` test that drives the real login endpoint and confirms the auth cookie.
+
 ## Trigger for revisiting
 
 - A permission needs to vary per tenant or per deployment beyond what a static code-level policy expresses. That moves the policy to external configuration, keeping the same startup-validation guarantee.

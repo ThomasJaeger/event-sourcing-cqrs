@@ -1,0 +1,32 @@
+@page "/login"
+@using System.Security.Claims
+
+<PageTitle>Sign in</PageTitle>
+
+<h1>Sign in</h1>
+
+@* Static SSR (no render mode): the sign-in and sign-out are plain form posts to the minimal-API
+   account endpoints, which call SignInAsync/SignOutAsync. The forms carry an antiforgery token the
+   endpoints validate. The framework seeds the circuit from the cookie the login sets. *@
+<AuthorizeView>
+    <Authorized>
+        <p>Signed in as @context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value.</p>
+        <form method="post" action="/account/logout">
+            <AntiforgeryToken />
+            <button type="submit">Sign out</button>
+        </form>
+    </Authorized>
+    <NotAuthorized>
+        <p>Sign in as the configured operator to use the console.</p>
+        <form method="post" action="/account/login">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <button type="submit">Sign in</button>
+        </form>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+}
