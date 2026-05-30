@@ -5,7 +5,7 @@ using EventSourcingCqrs.Domain.Fulfillment;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using EventSourcingCqrs.Hosts.Api.Authentication;
+using EventSourcingCqrs.Application.Authentication;
 
 namespace EventSourcingCqrs.IntegrationTests.Authentication;
 
@@ -97,7 +97,7 @@ public class AuthenticationGatingTests : IClassFixture<ApiFixture>
             }),
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        request.Headers.Add(ForwardedIdentityDefaults.HeaderName, header);
+        request.Headers.Add(ForwardedIdentityHeaders.HeaderName, header);
 
         var response = await client.SendAsync(request);
 
@@ -119,7 +119,7 @@ public class AuthenticationGatingTests : IClassFixture<ApiFixture>
             }),
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
+        request.Headers.Add(ForwardedIdentityHeaders.HeaderName, ForwardedIdentityTestHeader.Default);
 
         var response = await client.SendAsync(request);
 
@@ -144,8 +144,8 @@ public class AuthenticationGatingTests : IClassFixture<ApiFixture>
             }),
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        request.Headers.Add(ForwardedIdentityDefaults.HeaderName, ForwardedIdentityTestHeader.Default);
-        request.Headers.Add(ForwardedIdentityDefaults.SignatureHeaderName, signature);
+        request.Headers.Add(ForwardedIdentityHeaders.HeaderName, ForwardedIdentityTestHeader.Default);
+        request.Headers.Add(ForwardedIdentityHeaders.SignatureHeaderName, signature);
 
         var response = await client.SendAsync(request);
 
@@ -170,9 +170,9 @@ public class AuthenticationGatingTests : IClassFixture<ApiFixture>
             }),
         };
         request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        request.Headers.Add(ForwardedIdentityDefaults.HeaderName, identityValue);
+        request.Headers.Add(ForwardedIdentityHeaders.HeaderName, identityValue);
         request.Headers.Add(
-            ForwardedIdentityDefaults.SignatureHeaderName,
+            ForwardedIdentityHeaders.SignatureHeaderName,
             ForwardedIdentityTestHeader.SignatureFor(identityValue));
 
         var response = await client.SendAsync(request);

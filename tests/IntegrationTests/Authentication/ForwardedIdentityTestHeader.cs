@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
 
 namespace EventSourcingCqrs.IntegrationTests.Authentication;
@@ -27,7 +28,7 @@ internal static class ForwardedIdentityTestHeader
     public static string Default { get; } = Build(DefaultActorId, Role.Admin);
 
     public static string Build(Guid actorId, params Role[] roles)
-        => $"{actorId:N};{string.Join(',', roles)}";
+        => ForwardedIdentityValue.Format(actorId, roles);
 
     // The base64url HMAC-SHA256 of the verbatim identity value under SigningSecret: the same
     // computation the host's ForwardedIdentitySignatureVerifier performs, so a header signed here

@@ -15,7 +15,6 @@ using EventSourcingCqrs.Hosts.Api.Endpoints;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,8 +74,10 @@ builder.Services.AddReadModels(opts =>
 // trusted-upstream posture to keep the header honest.
 var signingSecret = builder.Configuration["FORWARDED_IDENTITY_SIGNING_SECRET"]
     ?? throw new InvalidOperationException("FORWARDED_IDENTITY_SIGNING_SECRET is not set.");
-builder.Services.AddSingleton(new ForwardedIdentitySignatureVerifier(
-    Options.Create(new ForwardedIdentitySigningOptions { Secret = signingSecret })));
+var signingKey = new ForwardedIdentitySigningKey(
+    new ForwardedIdentitySigningOptions { Secret = signingSecret });
+builder.Services.AddSingleton(signingKey);
+builder.Services.AddSingleton(new ForwardedIdentitySignatureVerifier(signingKey));
 builder.Services.AddSingleton<IForwardedIdentityReader, HeaderForwardedIdentityReader>();
 builder.Services.AddSingleton<IPrincipalFactory, CurrentRolesPrincipalFactory>();
 builder.Services.AddAuthentication(ForwardedIdentityDefaults.SchemeName)

@@ -70,6 +70,12 @@ The secret is one configuration key both hosts read, never a serialized or persi
 
 Verification is fail-closed with no escape. There is no unsigned-acceptance path and no dev or test toggle that bypasses the check; the tests run against the same verification with a shared test secret. An absent signature, a signature that does not decode, and a signature that decodes but does not match all fail identically, and the comparison is constant-time so a wrong signature leaks no timing signal.
 
+## Amendment: single-sourced wire contract and signing key (P9.3b commit 2a)
+
+The header names, the value format, and the signing key are single-sourced in `Application/Authentication`, where both hosts already depend, so the Web signer and the Api verifier agree by construction rather than by a per-host duplicate kept honest by a test vector. `ForwardedIdentityHeaders` holds the two header names; `ForwardedIdentityValue.Format` produces the `{actorId:N};{roles}` value the reader parses, with an empty role set yielding the trailing-separator form `{actorId:N};`; `ForwardedIdentitySigningKey` holds the secret guard and the HMAC-SHA256 computation. The Api verifier composes the signing key rather than inlining the guard and the MAC, so the secret guard now fires as the composition root builds the key at startup, the same fail-fast timing as before. The signing key takes the `ForwardedIdentitySigningOptions` carrier directly rather than through `IOptions<T>`, so Application gains no options-package dependency for a type the composition root always constructs by hand. The scheme name stays in the Api host's `ForwardedIdentityDefaults`, since only the Api host registers the scheme.
+
+This is a behavior-preserving refactor: the bytes on the wire and the verifier's accept and reject decisions are unchanged, which the gating tests prove green with their scenarios and assertions unmodified. The single source removes the drift risk the prior shape carried, where a change to the value format or the MAC on one host had to be mirrored on the other and was caught only if a shared test vector happened to exercise it.
+
 ## Trigger for revisiting
 
 - A permission needs to vary per tenant or per deployment beyond what a static code-level policy expresses. That moves the policy to external configuration, keeping the same startup-validation guarantee.

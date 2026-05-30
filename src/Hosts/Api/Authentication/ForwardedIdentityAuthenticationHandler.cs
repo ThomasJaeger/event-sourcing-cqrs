@@ -38,7 +38,7 @@ public sealed class ForwardedIdentityAuthenticationHandler : AuthenticationHandl
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!Request.Headers.TryGetValue(ForwardedIdentityDefaults.HeaderName, out var values))
+        if (!Request.Headers.TryGetValue(ForwardedIdentityHeaders.HeaderName, out var values))
         {
             return Task.FromResult(AuthenticateResult.NoResult());
         }
@@ -48,7 +48,7 @@ public sealed class ForwardedIdentityAuthenticationHandler : AuthenticationHandl
         // A present identity must be signed. An absent or invalid signature is a failure, never a
         // fall-through to the reader on an unverified value.
         var signature = Request.Headers.TryGetValue(
-            ForwardedIdentityDefaults.SignatureHeaderName, out var signatureValues)
+            ForwardedIdentityHeaders.SignatureHeaderName, out var signatureValues)
             ? signatureValues.ToString()
             : null;
         if (!_verifier.Verify(identityValue, signature))
