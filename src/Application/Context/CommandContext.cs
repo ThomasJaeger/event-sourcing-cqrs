@@ -25,15 +25,16 @@ public sealed class CommandContext : ICommandContext
 
     public required Guid ActorId { get; init; }
 
-    // The actor's authoritative roles (Phase 9). Defaults to empty rather than required: only the
-    // authenticated user-dispatch path supplies roles, so the bare overloads, the CausedCommandBus
-    // seam, and the System fallback leave it empty without restating it.
+    // The actor's authoritative roles (Phase 9). Defaults to empty rather than required: the
+    // authenticated user-dispatch path supplies the principal's roles and the CausedCommandBus seam
+    // supplies Role.System, so the bare overloads and the System fallback leave it empty without
+    // restating it.
     public IReadOnlyCollection<Role> Roles { get; init; } = [];
 
-    // True only on the authenticated user-dispatch path. Defaults false, so the bare overloads, the
-    // CausedCommandBus seam, and the System fallback leave it false; the authorization behavior treats
-    // false as a pass-through.
-    public bool IsAuthenticatedUserDispatch { get; init; }
+    // How this dispatch is authorized (Phase 9). Defaults to None, the unenforced pass-through, so the
+    // bare overloads and the System fallback leave it None; the authenticated user path sets
+    // AuthenticatedUser and the CausedCommandBus seam sets SystemActor.
+    public DispatchAuthorizationMode AuthorizationMode { get; init; } = DispatchAuthorizationMode.None;
 
     public required string ServiceName { get; init; }
 

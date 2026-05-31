@@ -5,4 +5,11 @@ namespace EventSourcingCqrs.Domain.Abstractions;
 // EventMetadata.ActorId with the human-readable ServiceName that lands in
 // EventMetadata.Source, so a caller names the actor once and the bus stamps
 // both. SystemActors holds the constants (ADR 0014).
-public sealed record SystemActor(Guid Id, string ServiceName);
+public sealed record SystemActor(Guid Id, string ServiceName)
+{
+    // The roles every system actor dispatches under. The caused-command bus stamps this onto the
+    // command context so the authorization behavior resolves the System role's permission set. The
+    // single source for the system-actor-to-Role.System binding; no Role.System literal sits at the
+    // dispatch seam.
+    public static IReadOnlyList<Role> SystemRoles { get; } = [Role.System];
+}

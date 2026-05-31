@@ -69,7 +69,7 @@ public sealed class CommandBus : ICommandBus
                 CausationCommandId = Guid.NewGuid(),
                 ActorId = actorId,
                 Roles = roles,
-                IsAuthenticatedUserDispatch = true,
+                AuthorizationMode = DispatchAuthorizationMode.AuthenticatedUser,
                 ServiceName = options.ServiceName,
                 IdempotencyKey = idempotencyKey
             },
@@ -99,7 +99,9 @@ public sealed class CommandBus : ICommandBus
     // The caller supplies the context values built from the causing event's
     // metadata instead of letting the bus mint fresh ones; everything else is
     // the user-dispatch path unchanged. internal because CausedCommandBus shares
-    // this assembly, so the public ICommandBus surface does not widen.
+    // this assembly, so the public ICommandBus surface does not widen. The
+    // dispatch runs in SystemActor mode under Role.System (the single source on
+    // SystemActor), so the authorization behavior enforces the caused path.
     internal Task SendWithContextAsync(
         ICommand command, CausedDispatchFragment fragment, CancellationToken ct)
         => DispatchAsync(
@@ -109,6 +111,8 @@ public sealed class CommandBus : ICommandBus
                 CorrelationId = fragment.CorrelationId,
                 CausationCommandId = fragment.CausationCommandId,
                 ActorId = fragment.ActorId,
+                Roles = SystemActor.SystemRoles,
+                AuthorizationMode = DispatchAuthorizationMode.SystemActor,
                 ServiceName = fragment.ServiceName,
                 IdempotencyKey = fragment.IdempotencyKey
             },

@@ -8,7 +8,7 @@ internal sealed class StubCommandContext : ICommandContext
     public Guid CausationCommandId { get; init; } = Guid.Empty;
     public Guid ActorId { get; init; } = Guid.Empty;
     public IReadOnlyCollection<Role> Roles { get; init; } = [];
-    public bool IsAuthenticatedUserDispatch { get; init; }
+    public DispatchAuthorizationMode AuthorizationMode { get; init; }
     public string ServiceName { get; init; } = "test-service";
     public string? IdempotencyKey { get; init; }
 

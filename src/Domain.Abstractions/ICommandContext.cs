@@ -14,17 +14,18 @@ public interface ICommandContext
 
     Guid ActorId { get; }
 
-    // The actor's roles, the authoritative set the principal factory loaded from the current-roles
-    // read model (Phase 9). Empty on the no-principal paths: the bare user-dispatch overloads, the
-    // process-manager and worker writes, and the System fallback. The command-authorization behavior
-    // reads this to decide a command's required permission against the actor's roles.
+    // The actor's roles (Phase 9): on the authenticated user-dispatch path the authoritative set the
+    // principal factory loaded from the current-roles read model, and on the process-manager caused
+    // path Role.System. Empty on the no-principal paths: the bare user-dispatch overloads, the worker
+    // writes, and the System fallback. The command-authorization behavior reads this to decide a
+    // command's required permission against the actor's roles.
     IReadOnlyCollection<Role> Roles { get; }
 
-    // True only on the authenticated user-dispatch path (the principal-carrying SendAsync overload).
-    // The command-authorization behavior gates on it: the caused, worker, and System fallback paths
-    // leave it false and pass through unenforced, so a throw never reaches the dispatch-failure wrapper
-    // that catches only domain and concurrency failures.
-    bool IsAuthenticatedUserDispatch { get; }
+    // How this dispatch is authorized (Phase 9). The command-authorization behavior gates on it:
+    // AuthenticatedUser and SystemActor are enforced against Roles; the worker and bare paths leave it
+    // None and pass through unenforced, so a None pass-through means a throw never reaches the
+    // dispatch-failure wrapper that catches only domain and concurrency failures.
+    DispatchAuthorizationMode AuthorizationMode { get; }
 
     string ServiceName { get; }
 

@@ -9,11 +9,13 @@ namespace EventSourcingCqrs.Application.Pipelines;
 // only for commands that declare a required permission; for a plain ICommand (the timeout commands)
 // the container omits this behavior by constraint.
 //
-// Enforcement is on authenticated user dispatch only. The caused (process-manager) path, the System
-// fallback, and the bare or worker paths carry no authenticated principal and pass through;
-// authorization under the system actor lands at the caused-command commit. The flag gate is
-// load-bearing: a throw on the caused path would escape TrySendAsync, which catches only domain and
-// concurrency failures, and fault the workflow into outbox redelivery.
+// Enforcement runs for both authenticated user dispatch (AuthenticatedUser) and process-manager
+// caused dispatch (SystemActor); the gate passes through only on None, the unenforced default for the
+// worker and bare paths. The caused path dispatches under Role.System, whose permission set equals the
+// commands the process managers dispatch, so every real caused command authorizes here. A caused
+// command outside that set is a drift: it is denied, and the UnauthorizedCommandException (absent from
+// TrySendAsync's domain-and-concurrency catch set) faults the workflow rather than becoming a Failed
+// outcome the process manager would compensate on.
 public sealed class AuthorizationCommandBehavior<TCommand> : ICommandPipelineBehavior<TCommand>
     where TCommand : IAuthorizedCommand
 {
@@ -31,7 +33,7 @@ public sealed class AuthorizationCommandBehavior<TCommand> : ICommandPipelineBeh
     public Task HandleAsync(TCommand command, CommandHandlerDelegate next, CancellationToken ct)
     {
         var context = _accessor.Current;
-        if (context is not { IsAuthenticatedUserDispatch: true })
+        if (context is null or { AuthorizationMode: DispatchAuthorizationMode.None })
         {
             return next();
         }

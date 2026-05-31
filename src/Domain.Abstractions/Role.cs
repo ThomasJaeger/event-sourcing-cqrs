@@ -1,8 +1,8 @@
 namespace EventSourcingCqrs.Domain.Abstractions;
 
 // A named role a principal can hold. A principal can hold several. The System role holds the
-// permission set process managers exercise; the async-propagation commit wires the system actor
-// to it.
+// permission set process managers exercise; the caused-command bus stamps it onto the command
+// context (SystemActor.SystemRoles) so caused dispatch is authorized under it.
 //
 // Role lives in Domain.Abstractions rather than alongside the authorization policy in Application
 // (ADR 0028) because the event-sourced Access surface serializes it: RoleAssigned and RoleRevoked
