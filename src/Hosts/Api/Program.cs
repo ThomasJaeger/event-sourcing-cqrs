@@ -97,6 +97,9 @@ app.UseAuthorization();
 // open: they publish only the catalog of accepted type tokens, no data.
 app.MapPost("/commands", CommandsEndpoint.HandleAsync).RequireAuthorization();
 app.MapPost("/queries", QueriesEndpoint.HandleAsync).RequireAuthorization();
+// The Web host's dashboard hub calls this before joining a SignalR group, to authorize the subscribe
+// against the same gate and ownership rule a read of the resource runs under (P9.6).
+app.MapPost("/subscriptions/authorize", SubscriptionsEndpoint.AuthorizeAsync).RequireAuthorization();
 app.MapGet("/commands", IntrospectionEndpoint.ListCommands);
 app.MapGet("/queries", IntrospectionEndpoint.ListQueries);
 

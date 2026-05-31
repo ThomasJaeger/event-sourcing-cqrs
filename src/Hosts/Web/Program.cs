@@ -106,6 +106,16 @@ builder.Services.AddHttpClient<IApiClient, ApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl);
 });
 
+// The dashboard hub authorizes a subscribe by asking the Api host whether the caller may read the
+// resource (P9.6). Its own typed client to the same Api host signs with the actor on Context.User
+// rather than the circuit-scoped provider ApiClient uses, because a hub method runs on a SignalR
+// connection with no Blazor circuit. ForwardedIdentitySigner is the singleton registered just below
+// for ApiClient; DI resolves it when the client is constructed.
+builder.Services.AddHttpClient<ISubscriptionAuthorizationClient, SubscriptionAuthorizationClient>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+});
+
 // Forwarded-identity signing (P9.3b). The Web host signs every dispatched request with the circuit's
 // actor under the shared key, so the Api host (signature-mandatory since Commit 1) accepts it. The
 // signing key's constructor guards the secret, so a missing or under-length secret fails at startup.
@@ -168,7 +178,9 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapHub<DashboardHub>("/hubs/dashboard");
+// The hub requires an authenticated connection (P9.6): an unauthenticated negotiate is refused, and
+// each subscribe is further authorized per resource inside the hub against the Api host.
+app.MapHub<DashboardHub>("/hubs/dashboard").RequireAuthorization();
 
 // The operator login and logout. SignInAsync establishes a name-identifier-only principal for the
 // configured actor; the framework seeds the circuit from it. Antiforgery is validated in the handler

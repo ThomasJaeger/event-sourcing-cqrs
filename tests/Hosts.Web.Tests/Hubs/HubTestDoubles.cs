@@ -83,11 +83,15 @@ internal sealed class RecordingGroupManager : IGroupManager
     }
 }
 
-internal sealed class FakeHubCallerContext(string connectionId) : HubCallerContext
+internal sealed class FakeHubCallerContext(string connectionId, ClaimsPrincipal? user = null) : HubCallerContext
 {
     public override string ConnectionId { get; } = connectionId;
     public override string? UserIdentifier => null;
-    public override ClaimsPrincipal? User => null;
+
+    // HubCallerContext.User is a get-only abstract property, so the test supplies the principal through
+    // the optional constructor argument rather than a setter; it defaults to null, preserving the
+    // existing new FakeHubCallerContext("conn-1") call sites.
+    public override ClaimsPrincipal? User { get; } = user;
     public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
     public override IFeatureCollection Features => throw new NotSupportedException();
     public override CancellationToken ConnectionAborted => CancellationToken.None;
