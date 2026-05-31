@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 
@@ -19,17 +20,32 @@ public sealed record OrderDetailView(
     IReadOnlyList<OrderDetailTimelineRow> Timeline);
 
 // Returns the composed view for an order, or null when no order_detail header exists
-// (the order was never observed). AddApplication's assembly scan registers the
-// handler, so it needs no explicit DI line.
-public sealed record GetOrderDetail(Guid OrderId) : IQuery<OrderDetailView?>;
+// (the order was never observed) or when an owner-scoped principal asks for an order
+// it does not own. AddApplication's assembly scan registers the handler, so it needs
+// no explicit DI line. Requires ViewOrder, which Customer, Support, and Admin hold.
+public sealed record GetOrderDetail(Guid OrderId)
+    : IQuery<OrderDetailView?>, IAuthorizedQuery
+{
+    public static Permission RequiredPermission => Permission.ViewOrder;
+}
 
 public sealed class GetOrderDetailHandler : IQueryHandler<GetOrderDetail, OrderDetailView?>
 {
     private readonly IOrderDetailStore _store;
+    private readonly IQueryContextAccessor _context;
+    private readonly IPermissionAuthorizer _authorizer;
+    private readonly IResourceOwnershipResolver _ownership;
 
-    public GetOrderDetailHandler(IOrderDetailStore store)
+    public GetOrderDetailHandler(
+        IOrderDetailStore store,
+        IQueryContextAccessor context,
+        IPermissionAuthorizer authorizer,
+        IResourceOwnershipResolver ownership)
     {
         _store = store;
+        _context = context;
+        _authorizer = authorizer;
+        _ownership = ownership;
     }
 
     public async Task<OrderDetailView?> HandleAsync(GetOrderDetail query, CancellationToken ct)
@@ -41,8 +57,34 @@ public sealed class GetOrderDetailHandler : IQueryHandler<GetOrderDetail, OrderD
         {
             return null;
         }
+
+        // An owner-scoped principal (a Customer) sees only an order it owns; for any other order, return
+        // null so the endpoint's null-to-404 mapping hides the existence of another customer's order (no
+        // existence leak). Operational principals (Support, Admin) see any order.
+        var ownerId = OwnerScopedCustomerId();
+        if (ownerId is not null && header.CustomerId != ownerId.Value)
+        {
+            return null;
+        }
+
         var lines = await _store.GetLinesAsync(query.OrderId, ct);
         var timeline = await _store.GetTimelineAsync(query.OrderId, ct);
         return new OrderDetailView(header, lines, timeline);
+    }
+
+    // The customer id to filter by when the asking principal is owner-scoped (a Customer, which does not
+    // hold ViewCustomer), or null when the principal is operational (Support, Admin). The probe is
+    // permission-based, not a role-name check (ADR 0028). A non-authenticated query (the bare AskAsync
+    // path) is treated as operational, the same gate the authorization behavior uses.
+    private Guid? OwnerScopedCustomerId()
+    {
+        var context = _context.Current;
+        if (context is not { IsAuthenticatedUserQuery: true }
+            || _authorizer.IsAuthorized(context.Roles, Permission.ViewCustomer))
+        {
+            return null;
+        }
+
+        return _ownership.ResolveCustomerId(context.ActorId);
     }
 }

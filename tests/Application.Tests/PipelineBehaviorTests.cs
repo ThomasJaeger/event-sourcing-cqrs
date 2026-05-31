@@ -51,6 +51,7 @@ public sealed class PipelineBehaviorTests
             .AddSingleton<IQueryHandler<Echo, string>>(new RecordingEchoHandler(log))
             .AddSingleton<IQueryPipelineBehavior<Echo, string>>(new RecordingQueryBehavior(log, "first"))
             .AddSingleton<IQueryPipelineBehavior<Echo, string>>(new RecordingQueryBehavior(log, "second"))
+            .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 
@@ -78,6 +79,24 @@ public sealed class PipelineBehaviorTests
             typeof(AuthorizationCommandBehavior<>),
             typeof(IdempotencyBehavior<>),
             typeof(ValidationCommandBehavior<>));
+    }
+
+    [Fact]
+    public void Query_pipeline_registers_authorization_inside_logging()
+    {
+        // Registration order is the fold order outermost-to-innermost (QueryPipelineBuilder folds in
+        // reverse), so logging stays outermost and authorization sits inside it (ADR 0028).
+        var services = new ServiceCollection();
+        services.AddApplication();
+
+        var behaviors = services
+            .Where(d => d.ServiceType == typeof(IQueryPipelineBehavior<,>))
+            .Select(d => d.ImplementationType)
+            .ToArray();
+
+        behaviors.Should().Equal(
+            typeof(LoggingQueryBehavior<,>),
+            typeof(AuthorizationQueryBehavior<,>));
     }
 
     private sealed record DoThing : ICommand;

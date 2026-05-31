@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICausedCommandBus, CausedCommandBus>();
         services.AddSingleton<IQueryBus, QueryBus>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
+        services.AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>();
 
         // Query types resolve through QueryTypeRegistry for the /queries HTTP
         // endpoint's type-discriminator dispatch (ADR 0022). Populated from
@@ -73,6 +74,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(ValidationCommandBehavior<>));
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>));
+        services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(AuthorizationQueryBehavior<,>));
 
         services.AddScoped(typeof(IEventStoreRepository<>), typeof(EventStoreRepository<>));
         services.AddScoped(typeof(IProcessManagerRepository<>), typeof(ProcessManagerRepository<>));
@@ -84,6 +86,11 @@ public static class ServiceCollectionExtensions
         // throws here, at startup, rather than at the first authorization decision.
         services.AddSingleton(new RolePermissionRegistry(RolePermissionPolicy.Default));
         services.AddSingleton<IPermissionAuthorizer, PermissionAuthorizer>();
+
+        // Maps an authenticated actor to the customer it owns, so the ownership-filtering query handlers
+        // compare a resolved customer id against a read-model row. The P9.5 implementation is the
+        // actor-equals-customer convention; Phase 10 swaps it for an actor-to-customer mapping (ADR 0028).
+        services.AddSingleton<IResourceOwnershipResolver, ActorIsCustomerOwnershipResolver>();
 
         // Every concrete command in this assembly must declare a required permission by implementing
         // IAuthorizedCommand. The walk runs at composition, eager rather than in a factory, so a command
@@ -97,6 +104,17 @@ public static class ServiceCollectionExtensions
         if (undeclaredCommands.Count > 0)
         {
             throw new CommandPermissionDeclarationException(undeclaredCommands);
+        }
+
+        // The read-side twin of the command walk: every concrete query in this assembly must declare a
+        // required permission by implementing IAuthorizedQuery, so a query added without a declaration is
+        // a startup failure rather than an unenforced read. The Application assembly holds exactly the
+        // five read queries.
+        var undeclaredQueries = QueryPermissionValidation.FindUndeclared(
+            typeof(ServiceCollectionExtensions).Assembly.GetTypes());
+        if (undeclaredQueries.Count > 0)
+        {
+            throw new QueryPermissionDeclarationException(undeclaredQueries);
         }
 
         return services;

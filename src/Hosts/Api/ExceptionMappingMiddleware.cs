@@ -53,6 +53,11 @@ public sealed class ExceptionMappingMiddleware
             await WriteError(context, StatusCodes.Status403Forbidden,
                 new { code = "FORBIDDEN", message = ex.Message });
         }
+        catch (UnauthorizedQueryException ex)
+        {
+            await WriteError(context, StatusCodes.Status403Forbidden,
+                new { code = "FORBIDDEN", message = ex.Message });
+        }
         catch (Exception)
         {
             // The 500 body is deliberately generic: a leaked exception message can

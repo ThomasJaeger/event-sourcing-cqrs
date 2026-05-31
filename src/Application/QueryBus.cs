@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,13 @@ namespace EventSourcingCqrs.Application;
 // (closing the same generic with two different TResults on one class is a compile
 // error), so the cached invoker safely covers every AskAsync call against that
 // query type.
+//
+// Both overloads run one shared dispatch path that opens the scope, resolves the
+// query-context accessor, pushes the context for the pipeline's duration, and
+// restores the prior value in finally, exactly as CommandBus.DispatchAsync does.
+// The bare overload builds a non-authenticated context (Phase 9); the principal
+// overload builds an authenticated one carrying the actor and roles, which the
+// authorization behavior and the ownership-filtering handlers read off the accessor.
 public sealed class QueryBus : IQueryBus
 {
     private static readonly ConcurrentDictionary<Type, QueryInvoker> InvokerCache = new();
@@ -25,20 +33,59 @@ public sealed class QueryBus : IQueryBus
         _services = services;
     }
 
-    public async Task<TResult> AskAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
+    public Task<TResult> AskAsync<TResult>(IQuery<TResult> query, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
-        // Open a scope and resolve from it, awaiting the pipeline inside the using so
-        // the scope outlives the dispatch (ADR 0024). Returning pipeline() directly
-        // would dispose the scope before the handler ran.
+        return DispatchAsync(
+            query,
+            new QueryContext { ActorId = Guid.Empty },
+            ct);
+    }
+
+    public Task<TResult> AskAsync<TResult>(
+        IQuery<TResult> query, Guid actorId, IReadOnlyCollection<Role> roles, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(roles);
+        return DispatchAsync(
+            query,
+            new QueryContext
+            {
+                ActorId = actorId,
+                Roles = roles,
+                IsAuthenticatedUserQuery = true
+            },
+            ct);
+    }
+
+    // The one dispatch loop both overloads run: open a scope, resolve the handler,
+    // behaviors, and accessor, push the caller's context, await the pipeline inside
+    // the using so the scope outlives the dispatch (ADR 0024), and restore the prior
+    // accessor value in finally so nested dispatches and exception paths leak no
+    // context. Returning the pipeline directly would dispose the scope before the
+    // handler ran.
+    private async Task<TResult> DispatchAsync<TResult>(
+        IQuery<TResult> query, IQueryContext context, CancellationToken ct)
+    {
         using var scope = _services.CreateScope();
         var sp = scope.ServiceProvider;
         var invoker = InvokerCache.GetOrAdd(query.GetType(), t => BuildInvoker(t, typeof(TResult)));
         var handler = sp.GetRequiredService(invoker.HandlerType);
         var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
-        var pipeline = QueryPipelineBuilder.Build<TResult>(
-            behaviors, handler, query, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
-        return await pipeline();
+        var accessor = sp.GetRequiredService<IQueryContextAccessor>();
+
+        var previous = accessor.Current;
+        accessor.Current = context;
+        try
+        {
+            var pipeline = QueryPipelineBuilder.Build<TResult>(
+                behaviors, handler, query, invoker.HandleMethod, invoker.BehaviorHandleMethod, ct);
+            return await pipeline();
+        }
+        finally
+        {
+            accessor.Current = previous;
+        }
     }
 
     private static QueryInvoker BuildInvoker(Type queryType, Type resultType)

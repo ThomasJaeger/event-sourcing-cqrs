@@ -1,4 +1,7 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.Application.Tests.TestKit;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
@@ -11,14 +14,37 @@ public sealed class GetOrderDetailHandlerTests
 {
     private static readonly DateTime At = new(2026, 5, 20, 9, 0, 0, DateTimeKind.Utc);
 
+    private static readonly IPermissionAuthorizer Authorizer =
+        new PermissionAuthorizer(new RolePermissionRegistry(RolePermissionPolicy.Default));
+    private static readonly IResourceOwnershipResolver Ownership = new ActorIsCustomerOwnershipResolver();
+
+    private static GetOrderDetailHandler Handler(IOrderDetailStore store, IQueryContextAccessor accessor) =>
+        new(store, accessor, Authorizer, Ownership);
+
+    private static StubQueryContextAccessor NoContext => new() { Current = null };
+
+    // Support holds ViewCustomer, so it is operational and sees any order.
+    private static StubQueryContextAccessor Operational => new()
+    {
+        Current = new StubQueryContext { IsAuthenticatedUserQuery = true, Roles = new[] { Role.Support } },
+    };
+
+    // Customer does not hold ViewCustomer, so it is owner-scoped and sees only an order it owns.
+    private static StubQueryContextAccessor OwnerScoped(Guid actorId) => new()
+    {
+        Current = new StubQueryContext
+        {
+            IsAuthenticatedUserQuery = true,
+            ActorId = actorId,
+            Roles = new[] { Role.Customer },
+        },
+    };
+
     [Fact]
     public async Task HandleAsync_returns_the_composed_view_for_a_known_order()
     {
         var orderId = Guid.NewGuid();
-        var header = new OrderDetailRow(
-            orderId, Guid.NewGuid(), OrderStatus.Placed,
-            PlacedUtc: At, ShippedUtc: null, CancelledUtc: null, CompletedUtc: null, ReturnedUtc: null,
-            Total: new Money(50m, Currency.USD), ShippingAddress: null, LastUpdatedUtc: At);
+        var header = Header(orderId, Guid.NewGuid());
         var lines = new[]
         {
             new OrderDetailLineRow(orderId, Guid.NewGuid(), "SKU-1", 2, new Money(25m, Currency.USD)),
@@ -28,7 +54,7 @@ public sealed class GetOrderDetailHandlerTests
             new OrderDetailTimelineRow(orderId, 1, "OrderPlaced", At, """{"order_id":"x"}"""),
         };
         var store = new StubStore(header, lines, timeline);
-        var handler = new GetOrderDetailHandler(store);
+        var handler = Handler(store, NoContext);
 
         var result = await handler.HandleAsync(new GetOrderDetail(orderId), CancellationToken.None);
 
@@ -44,7 +70,7 @@ public sealed class GetOrderDetailHandlerTests
     public async Task HandleAsync_returns_null_for_an_unknown_order()
     {
         var store = new StubStore(null, [], []);
-        var handler = new GetOrderDetailHandler(store);
+        var handler = Handler(store, NoContext);
 
         var result = await handler.HandleAsync(new GetOrderDetail(Guid.NewGuid()), CancellationToken.None);
 
@@ -62,7 +88,7 @@ public sealed class GetOrderDetailHandlerTests
             PlacedUtc: null, ShippedUtc: null, CancelledUtc: null, CompletedUtc: null, ReturnedUtc: null,
             Total: null, ShippingAddress: null, LastUpdatedUtc: At);
         var store = new StubStore(header, [], []);
-        var handler = new GetOrderDetailHandler(store);
+        var handler = Handler(store, NoContext);
 
         var result = await handler.HandleAsync(new GetOrderDetail(orderId), CancellationToken.None);
 
@@ -71,6 +97,55 @@ public sealed class GetOrderDetailHandlerTests
         result.Lines.Should().BeEmpty();
         result.Timeline.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task HandleAsync_returns_the_view_for_an_owner_scoped_principal_querying_its_own_order()
+    {
+        var actor = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        // actor-equals-customer: the header's CustomerId is the actor id the resolver returns.
+        var store = new StubStore(Header(orderId, actor), [], []);
+        var handler = Handler(store, OwnerScoped(actor));
+
+        var result = await handler.HandleAsync(new GetOrderDetail(orderId), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Header.OrderId.Should().Be(orderId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_returns_null_for_an_owner_scoped_principal_querying_another_customers_order()
+    {
+        var actor = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        var store = new StubStore(Header(orderId, customerId: Guid.NewGuid()), [], []);
+        var handler = Handler(store, OwnerScoped(actor));
+
+        var result = await handler.HandleAsync(new GetOrderDetail(orderId), CancellationToken.None);
+
+        // Null, not a distinct forbidden signal: the endpoint maps null to 404 so a customer cannot tell
+        // an order it does not own from one that does not exist.
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_returns_the_view_for_an_operational_principal_regardless_of_owner()
+    {
+        var orderId = Guid.NewGuid();
+        var store = new StubStore(Header(orderId, customerId: Guid.NewGuid()), [], []);
+        var handler = Handler(store, Operational);
+
+        var result = await handler.HandleAsync(new GetOrderDetail(orderId), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Header.OrderId.Should().Be(orderId);
+    }
+
+    private static OrderDetailRow Header(Guid orderId, Guid customerId)
+        => new(
+            orderId, customerId, OrderStatus.Placed,
+            PlacedUtc: At, ShippedUtc: null, CancelledUtc: null, CompletedUtc: null, ReturnedUtc: null,
+            Total: new Money(50m, Currency.USD), ShippingAddress: null, LastUpdatedUtc: At);
 
     private sealed class StubStore : IOrderDetailStore
     {
