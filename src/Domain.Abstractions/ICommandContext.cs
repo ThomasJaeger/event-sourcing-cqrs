@@ -20,6 +20,12 @@ public interface ICommandContext
     // reads this to decide a command's required permission against the actor's roles.
     IReadOnlyCollection<Role> Roles { get; }
 
+    // True only on the authenticated user-dispatch path (the principal-carrying SendAsync overload).
+    // The command-authorization behavior gates on it: the caused, worker, and System fallback paths
+    // leave it false and pass through unenforced, so a throw never reaches the dispatch-failure wrapper
+    // that catches only domain and concurrency failures.
+    bool IsAuthenticatedUserDispatch { get; }
+
     string ServiceName { get; }
 
     // Set only on process-manager dispatch through CausedCommandBus (ADR 0014);

@@ -4,7 +4,7 @@ namespace EventSourcingCqrs.Hosts.Web;
 /// Base type for all failure responses surfaced by ApiClient. Consumers
 /// catch a specific subtype to handle a specific failure category, or
 /// catch ApiClientException to handle any Api-side failure uniformly.
-/// The four subtypes map to the Api host's middleware arms (400, 422,
+/// The five subtypes map to the Api host's middleware arms (400, 403, 422,
 /// 409) plus a catch-all for 500, 404 (the rare race where the aggregate
 /// vanished between query and dispatch), and any unrecognized response.
 /// </summary>
@@ -54,6 +54,17 @@ public sealed class ApiConcurrencyException : ApiClientException
         : base("The command conflicted with a concurrent update.")
     {
         ExpectedVersion = expectedVersion;
+    }
+}
+
+public sealed class ApiAuthorizationException : ApiClientException
+{
+    public string? Code { get; }
+
+    public ApiAuthorizationException(string message, string? code = null)
+        : base(message)
+    {
+        Code = code;
     }
 }
 

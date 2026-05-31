@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
 
 namespace EventSourcingCqrs.Application.Commands.Fulfillment;
 
-public sealed record DeliverShipment(Guid ShipmentId) : ICommand;
+public sealed record DeliverShipment(Guid ShipmentId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.DeliverShipment;
+}
 
 public sealed class DeliverShipmentHandler : ICommandHandler<DeliverShipment>
 {

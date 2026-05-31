@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing;
@@ -9,7 +10,10 @@ public sealed record AuthorizePayment(
     Guid PaymentId,
     Guid OrderId,
     Money Amount,
-    string PaymentMethodReference) : ICommand;
+    string PaymentMethodReference) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.AuthorizePayment;
+}
 
 // Pattern A explicit creation: no LoadAsync, no AggregateNotFoundException.
 // The factory creates a fresh aggregate, and SaveAsync appends with

@@ -62,11 +62,14 @@ public static class ServiceCollectionExtensions
 
         // Logging is outermost so its one-log-line-per-command guarantee covers
         // short-circuited validation failures and deduplicated duplicates alike.
-        // Idempotency sits inside logging and before validation (ADR 0016): a
+        // Authorization sits inside logging and before idempotency (ADR 0028): an
+        // unauthorized attempt is logged and consumes no idempotency storage.
+        // Idempotency sits inside authorization and before validation (ADR 0016): a
         // duplicate is logged but does no validation work and never reaches the
         // handler. Registration order is pipeline order outermost-to-innermost
         // (CommandPipelineBuilder folds in reverse).
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(LoggingCommandBehavior<>));
+        services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(AuthorizationCommandBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(ValidationCommandBehavior<>));
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>));
@@ -81,6 +84,20 @@ public static class ServiceCollectionExtensions
         // throws here, at startup, rather than at the first authorization decision.
         services.AddSingleton(new RolePermissionRegistry(RolePermissionPolicy.Default));
         services.AddSingleton<IPermissionAuthorizer, PermissionAuthorizer>();
+
+        // Every concrete command in this assembly must declare a required permission by implementing
+        // IAuthorizedCommand. The walk runs at composition, eager rather than in a factory, so a command
+        // added without a declaration is a startup failure rather than an unauthorized dispatch in
+        // production. This assembly holds exactly the user commands; the ProcessManagers-assembly timeout
+        // commands fall outside the walk by assembly boundary and declare their permission at the
+        // caused-command commit. The CommandTypeRegistry was rejected as the surface: it is host-dependent
+        // and registers only a subset, missing the process-manager-dispatched commands.
+        var undeclaredCommands = CommandPermissionValidation.FindUndeclared(
+            typeof(ServiceCollectionExtensions).Assembly.GetTypes());
+        if (undeclaredCommands.Count > 0)
+        {
+            throw new CommandPermissionDeclarationException(undeclaredCommands);
+        }
 
         return services;
     }

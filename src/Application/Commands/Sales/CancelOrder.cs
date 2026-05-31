@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
@@ -7,7 +8,10 @@ namespace EventSourcingCqrs.Application.Commands.Sales;
 // IssuedByUserId carries forward the aggregate's existing vocabulary; a future
 // domain-level rename to IssuedByActorId would align with the commit-5
 // ICommandContext.ActorId shape.
-public sealed record CancelOrder(Guid OrderId, string Reason, Guid IssuedByUserId) : ICommand;
+public sealed record CancelOrder(Guid OrderId, string Reason, Guid IssuedByUserId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.CancelOrder;
+}
 
 public sealed class CancelOrderHandler : ICommandHandler<CancelOrder>
 {

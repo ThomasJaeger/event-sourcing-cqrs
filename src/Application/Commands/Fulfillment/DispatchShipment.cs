@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -6,7 +7,10 @@ namespace EventSourcingCqrs.Application.Commands.Fulfillment;
 
 public sealed record DispatchShipment(
     Guid ShipmentId,
-    string CarrierReference) : ICommand;
+    string CarrierReference) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.DispatchShipment;
+}
 
 public sealed class DispatchShipmentHandler : ICommandHandler<DispatchShipment>
 {

@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
@@ -10,7 +11,10 @@ public sealed record AddOrderLine(
     Guid LineId,
     string Sku,
     int Quantity,
-    Money UnitPrice) : ICommand;
+    Money UnitPrice) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ManageOrderLines;
+}
 
 public sealed class AddOrderLineHandler : ICommandHandler<AddOrderLine>
 {

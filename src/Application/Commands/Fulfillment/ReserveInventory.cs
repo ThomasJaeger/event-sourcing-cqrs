@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -8,7 +9,10 @@ public sealed record ReserveInventory(
     Guid InventoryId,
     Guid OrderId,
     Guid LineId,
-    int Quantity) : ICommand;
+    int Quantity) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ReserveInventory;
+}
 
 public sealed class ReserveInventoryHandler : ICommandHandler<ReserveInventory>
 {

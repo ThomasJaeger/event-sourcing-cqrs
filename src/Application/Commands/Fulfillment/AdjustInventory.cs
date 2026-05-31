@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -7,7 +8,10 @@ namespace EventSourcingCqrs.Application.Commands.Fulfillment;
 public sealed record AdjustInventory(
     Guid InventoryId,
     int QuantityDelta,
-    string Reason) : ICommand;
+    string Reason) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.AdjustInventory;
+}
 
 public sealed class AdjustInventoryHandler : ICommandHandler<AdjustInventory>
 {

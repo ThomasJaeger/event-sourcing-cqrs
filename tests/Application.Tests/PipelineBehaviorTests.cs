@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Context;
+using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,6 +58,26 @@ public sealed class PipelineBehaviorTests
 
         result.Should().Be("hello");
         log.Should().Equal("first:before", "second:before", "handler", "second:after", "first:after");
+    }
+
+    [Fact]
+    public void Command_pipeline_registers_authorization_between_logging_and_idempotency()
+    {
+        // Registration order is the fold order outermost-to-innermost (CommandPipelineBuilder folds in
+        // reverse), so authorization sits inside logging and before idempotency and validation.
+        var services = new ServiceCollection();
+        services.AddApplication();
+
+        var behaviors = services
+            .Where(d => d.ServiceType == typeof(ICommandPipelineBehavior<>))
+            .Select(d => d.ImplementationType)
+            .ToArray();
+
+        behaviors.Should().Equal(
+            typeof(LoggingCommandBehavior<>),
+            typeof(AuthorizationCommandBehavior<>),
+            typeof(IdempotencyBehavior<>),
+            typeof(ValidationCommandBehavior<>));
     }
 
     private sealed record DoThing : ICommand;

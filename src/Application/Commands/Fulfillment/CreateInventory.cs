@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
 
 namespace EventSourcingCqrs.Application.Commands.Fulfillment;
 
-public sealed record CreateInventory(Guid InventoryId, string Sku) : ICommand;
+public sealed record CreateInventory(Guid InventoryId, string Sku) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.CreateInventory;
+}
 
 // Special shape among the Inventory handlers: no LoadAsync, no
 // AggregateNotFoundException. The factory creates a fresh aggregate, and

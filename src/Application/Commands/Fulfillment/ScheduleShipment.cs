@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -9,7 +10,10 @@ public sealed record ScheduleShipment(
     Guid ShipmentId,
     Guid OrderId,
     Address Destination,
-    IReadOnlyList<ShipmentLine> Lines) : ICommand;
+    IReadOnlyList<ShipmentLine> Lines) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ScheduleShipment;
+}
 
 // Special shape among the Shipment handlers: no LoadAsync, no
 // AggregateNotFoundException. The factory creates a fresh aggregate, and

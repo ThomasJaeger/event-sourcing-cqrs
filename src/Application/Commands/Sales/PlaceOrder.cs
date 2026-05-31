@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record PlaceOrder(Guid OrderId) : ICommand;
+public sealed record PlaceOrder(Guid OrderId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.PlaceOrder;
+}
 
 public sealed class PlaceOrderHandler : ICommandHandler<PlaceOrder>
 {

@@ -69,6 +69,7 @@ public sealed class CommandBus : ICommandBus
                 CausationCommandId = Guid.NewGuid(),
                 ActorId = actorId,
                 Roles = roles,
+                IsAuthenticatedUserDispatch = true,
                 ServiceName = options.ServiceName,
                 IdempotencyKey = idempotencyKey
             },

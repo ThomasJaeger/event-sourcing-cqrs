@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing;
@@ -7,7 +8,10 @@ namespace EventSourcingCqrs.Application.Commands.Billing;
 // CapturePayment carries no amount. The aggregate raises PaymentCaptured with
 // the authorized amount drawn from state; full-capture-only for v1. Partial
 // captures land as a separate command shape in Phase 12.
-public sealed record CapturePayment(Guid PaymentId) : ICommand;
+public sealed record CapturePayment(Guid PaymentId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.CapturePayment;
+}
 
 public sealed class CapturePaymentHandler : ICommandHandler<CapturePayment>
 {

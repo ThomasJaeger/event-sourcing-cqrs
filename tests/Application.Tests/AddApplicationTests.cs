@@ -44,6 +44,16 @@ public class AddApplicationTests
         registry.EnumerateQueries().Should().HaveCount(5);
     }
 
+    [Fact]
+    public void AddApplication_does_not_throw_when_every_command_declares_a_permission()
+    {
+        var services = new ServiceCollection();
+
+        var act = () => services.AddApplication();
+
+        act.Should().NotThrow();
+    }
+
     private sealed class TestPm : ProcessManager
     {
         public TestPm(StreamId streamId) : base(streamId) { }

@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record DraftOrder(Guid OrderId, Guid CustomerId) : ICommand;
+public sealed record DraftOrder(Guid OrderId, Guid CustomerId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.DraftOrder;
+}
 
 // Special shape among the Order handlers: no LoadAsync, no
 // AggregateNotFoundException. The factory creates a fresh aggregate, and

@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record RemoveOrderLine(Guid OrderId, Guid LineId) : ICommand;
+public sealed record RemoveOrderLine(Guid OrderId, Guid LineId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ManageOrderLines;
+}
 
 public sealed class RemoveOrderLineHandler : ICommandHandler<RemoveOrderLine>
 {

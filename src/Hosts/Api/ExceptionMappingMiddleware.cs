@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Domain.Abstractions;
 
 namespace EventSourcingCqrs.Hosts.Api;
@@ -46,6 +47,11 @@ public sealed class ExceptionMappingMiddleware
         {
             await WriteError(context, StatusCodes.Status404NotFound,
                 new { code = "NOT_FOUND", message = ex.Message, aggregateId = ex.AggregateId });
+        }
+        catch (UnauthorizedCommandException ex)
+        {
+            await WriteError(context, StatusCodes.Status403Forbidden,
+                new { code = "FORBIDDEN", message = ex.Message });
         }
         catch (Exception)
         {

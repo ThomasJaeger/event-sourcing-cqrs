@@ -22,8 +22,8 @@ namespace EventSourcingCqrs.Hosts.Web;
 // resolved client, not in a shared DelegatingHandler that would cross circuits.
 //
 // Non-2xx responses map to the ApiClientException hierarchy by status code: 400 to
-// ApiValidationException, 422 to ApiBusinessRuleException, 409 to
-// ApiConcurrencyException, everything else (500, the rare command-path 404, and any
+// ApiValidationException, 403 to ApiAuthorizationException, 422 to ApiBusinessRuleException,
+// 409 to ApiConcurrencyException, everything else (500, the rare command-path 404, and any
 // unrecognized status) to ApiInfrastructureException. The structured error body the
 // Api host's ExceptionMappingMiddleware emits is read into ApiErrorBody and carried
 // onto the thrown exception so the Web UI can render a category-specific message.
@@ -147,6 +147,10 @@ internal sealed class ApiClient : IApiClient
                     body?.Message ?? "The command violated a business rule.");
             case 409:
                 throw new ApiConcurrencyException(body?.ExpectedVersion ?? -1);
+            case 403:
+                throw new ApiAuthorizationException(
+                    body?.Message ?? "The principal is not authorized to perform this action.",
+                    body?.Code);
             default:
                 throw new ApiInfrastructureException(
                     body?.Message ?? $"Api request failed with status {status}.",

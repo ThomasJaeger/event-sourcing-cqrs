@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing;
 
 namespace EventSourcingCqrs.Application.Commands.Billing;
 
-public sealed record VoidPayment(Guid PaymentId, string Reason) : ICommand;
+public sealed record VoidPayment(Guid PaymentId, string Reason) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.VoidPayment;
+}
 
 public sealed class VoidPaymentHandler : ICommandHandler<VoidPayment>
 {

@@ -30,6 +30,11 @@ public sealed class CommandContext : ICommandContext
     // seam, and the System fallback leave it empty without restating it.
     public IReadOnlyCollection<Role> Roles { get; init; } = [];
 
+    // True only on the authenticated user-dispatch path. Defaults false, so the bare overloads, the
+    // CausedCommandBus seam, and the System fallback leave it false; the authorization behavior treats
+    // false as a pass-through.
+    public bool IsAuthenticatedUserDispatch { get; init; }
+
     public required string ServiceName { get; init; }
 
     // Non-required: only the CausedCommandBus seam sets it (ADR 0014). The

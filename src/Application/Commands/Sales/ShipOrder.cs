@@ -1,10 +1,14 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record ShipOrder(Guid OrderId, string Carrier, string TrackingNumber) : ICommand;
+public sealed record ShipOrder(Guid OrderId, string Carrier, string TrackingNumber) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ShipOrder;
+}
 
 public sealed class ShipOrderHandler : ICommandHandler<ShipOrder>
 {

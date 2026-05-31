@@ -15,6 +15,7 @@ public static class RolePermissionPolicy
         var customer = new HashSet<Permission>
         {
             Permission.PlaceOrder,
+            Permission.DraftOrder,
             Permission.ViewOrder,
             Permission.CancelOrder,
             Permission.ManageOrderLines,
@@ -29,16 +30,22 @@ public static class RolePermissionPolicy
             Permission.ProcessReturn,
         };
 
+        // The System role's set equals the caused-dispatch command set exactly (P9.4): the commands a
+        // process manager or a compensation routine dispatches under the system actor. Least privilege,
+        // so it drops CapturePayment (dispatched by nothing in v1), RefundPayment (user-only), and
+        // DispatchShipment (user-only), and adds the compensation dispatches CancelOrder, VoidPayment,
+        // and AdjustInventory. Enforcement does not touch the caused path yet, so this pre-stages the
+        // caused-command commit with no P9.4 runtime effect.
         var system = new HashSet<Permission>
         {
+            Permission.AuthorizePayment,
             Permission.ReserveInventory,
             Permission.ReleaseInventory,
-            Permission.AuthorizePayment,
-            Permission.CapturePayment,
-            Permission.RefundPayment,
             Permission.ScheduleShipment,
-            Permission.DispatchShipment,
             Permission.MarkOrderCompleted,
+            Permission.CancelOrder,
+            Permission.VoidPayment,
+            Permission.AdjustInventory,
         };
 
         // Admin holds every permission by definition, computed from the enumeration so the

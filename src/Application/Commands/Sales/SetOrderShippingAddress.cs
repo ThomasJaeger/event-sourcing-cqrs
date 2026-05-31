@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
@@ -5,7 +6,10 @@ using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record SetOrderShippingAddress(Guid OrderId, Address ShippingAddress) : ICommand;
+public sealed record SetOrderShippingAddress(Guid OrderId, Address ShippingAddress) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.ManageOrderLines;
+}
 
 public sealed class SetOrderShippingAddressHandler : ICommandHandler<SetOrderShippingAddress>
 {

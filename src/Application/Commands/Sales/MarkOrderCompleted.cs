@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
@@ -8,7 +9,10 @@ namespace EventSourcingCqrs.Application.Commands.Sales;
 // delivered (Decision 13). A bounded-context command Sales owns, so it lives in
 // Application alongside the other Order commands, unlike the PM-internal timeout
 // commands that live in ProcessManagers.
-public sealed record MarkOrderCompleted(Guid OrderId) : ICommand;
+public sealed record MarkOrderCompleted(Guid OrderId) : IAuthorizedCommand
+{
+    public static Permission RequiredPermission => Permission.MarkOrderCompleted;
+}
 
 public sealed class MarkOrderCompletedHandler : ICommandHandler<MarkOrderCompleted>
 {
