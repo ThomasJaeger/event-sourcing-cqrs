@@ -29,7 +29,7 @@ public class DeliverShipmentTests : IClassFixture<ApiFixture>
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Shipment>(shipmentId), fromVersion: 0);
+            StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentId), fromVersion: 0);
         envelopes.Should().HaveCount(3);
         envelopes[2].EventType.Should().Be("ShipmentDelivered");
     }

@@ -18,7 +18,7 @@ internal static class PaymentSeed
         {
             new PaymentAuthorized(paymentId, Guid.NewGuid(), Amount, "pm-ref-test", SeedUtc),
         };
-        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Payment>(paymentId), events, ct);
+        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Payment>(WellKnownTenants.Default, paymentId), events, ct);
     }
 
     public static Task CapturedAsync(IEventStore eventStore, Guid paymentId, CancellationToken ct = default)
@@ -28,6 +28,6 @@ internal static class PaymentSeed
             new PaymentAuthorized(paymentId, Guid.NewGuid(), Amount, "pm-ref-test", SeedUtc),
             new PaymentCaptured(paymentId, Amount, SeedUtc),
         };
-        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Payment>(paymentId), events, ct);
+        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Payment>(WellKnownTenants.Default, paymentId), events, ct);
     }
 }

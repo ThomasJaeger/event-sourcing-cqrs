@@ -30,7 +30,7 @@ public class RemoveOrderLineTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Order>(orderId), fromVersion: 0);
+            StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId), fromVersion: 0);
         envelopes.Should().HaveCount(3);
         envelopes[2].EventType.Should().Be("OrderLineRemoved");
     }

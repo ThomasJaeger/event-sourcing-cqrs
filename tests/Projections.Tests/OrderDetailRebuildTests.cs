@@ -140,7 +140,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
         var placed = new OrderPlaced(orderId, customerId, new Money(42.50m, Currency.USD), BaseTime.AddHours(1));
-        var stream = StreamId.ForAggregate<Order>(orderId);
+        var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
         await eventStore.AppendAsync(stream, 0,
         [
             Env(stream, 1, new OrderDrafted(orderId, customerId, BaseTime)),
@@ -188,23 +188,23 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var a2 = Guid.NewGuid();
         var shipA = Guid.NewGuid();
         var payA = Guid.NewGuid();
-        var streamOA = StreamId.ForAggregate<Order>(orderA);
-        var streamShipA = StreamId.ForAggregate<Shipment>(shipA);
-        var streamPayA = StreamId.ForAggregate<Payment>(payA);
+        var streamOA = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderA);
+        var streamShipA = StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipA);
+        var streamPayA = StreamId.ForAggregate<Payment>(WellKnownTenants.Default, payA);
 
         var custB = Guid.NewGuid();
         var orderB = Guid.NewGuid();
         var b1 = Guid.NewGuid();
         var shipB = Guid.NewGuid();
         var payB = Guid.NewGuid();
-        var streamOB = StreamId.ForAggregate<Order>(orderB);
-        var streamShipB = StreamId.ForAggregate<Shipment>(shipB);
-        var streamPayB = StreamId.ForAggregate<Payment>(payB);
+        var streamOB = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderB);
+        var streamShipB = StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipB);
+        var streamPayB = StreamId.ForAggregate<Payment>(WellKnownTenants.Default, payB);
 
         var custC = Guid.NewGuid();
         var orderC = Guid.NewGuid();
         var c1 = Guid.NewGuid();
-        var streamOC = StreamId.ForAggregate<Order>(orderC);
+        var streamOC = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderC);
 
         var money = new Money(50m, Currency.USD);
 
@@ -272,8 +272,8 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
 
         // Stranded (positions 25-26): no ShipmentScheduled or PaymentAuthorized
         // recorded these, so the handlers resolve null and no-op with a debug log.
-        var streamShipX = StreamId.ForAggregate<Shipment>(Guid.NewGuid());
-        var streamPayX = StreamId.ForAggregate<Payment>(Guid.NewGuid());
+        var streamShipX = StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, Guid.NewGuid());
+        var streamPayX = StreamId.ForAggregate<Payment>(WellKnownTenants.Default, Guid.NewGuid());
         await eventStore.AppendAsync(streamShipX, 0,
         [
             Env(streamShipX, 1, new ShipmentDelivered(Guid.NewGuid(), BaseTime.AddHours(2))),

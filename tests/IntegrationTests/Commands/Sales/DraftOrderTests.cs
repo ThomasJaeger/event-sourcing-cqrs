@@ -29,7 +29,7 @@ public class DraftOrderTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Order>(orderId), fromVersion: 0);
+            StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId), fromVersion: 0);
         envelopes.Should().ContainSingle();
         envelopes[0].EventType.Should().Be("OrderDrafted");
     }

@@ -68,7 +68,7 @@ internal sealed class ReturnProcessManagerTestHarness
 
     public Task<ReturnProcessManager?> LoadPm(Guid orderId)
         => _pms.LoadAsync(
-            StreamId.ForProcessManager(StreamPrefixes.ReturnPm, orderId),
+            StreamId.ForProcessManager(StreamPrefixes.ReturnPm, WellKnownTenants.Default, orderId),
             sid => new ReturnProcessManager(sid),
             CancellationToken.None);
 

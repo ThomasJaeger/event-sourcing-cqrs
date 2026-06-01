@@ -26,7 +26,7 @@ public class PostgresEventStore_ProcessManager_Tests : IClassFixture<PostgresFix
             CreateJsonOptions());
 
     private static StreamId PmStream()
-        => StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        => StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     [Fact]
     public async Task Append_then_read_round_trips_pm_events()

@@ -146,9 +146,9 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         var orderB = Guid.NewGuid();
         var orderC = Guid.NewGuid();
         var customer = Guid.NewGuid();
-        var streamA = StreamId.ForAggregate<Order>(orderA);
-        var streamB = StreamId.ForAggregate<Order>(orderB);
-        var streamC = StreamId.ForAggregate<Order>(orderC);
+        var streamA = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderA);
+        var streamB = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderB);
+        var streamC = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderC);
 
         await eventStore.AppendAsync(streamA, 0,
         [
@@ -192,7 +192,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         // OrderId mapping; ShipmentReturned, carrying only ShipmentId, resolves
         // order A through it and marks it returned (ADR 0020).
         var shipmentA = Guid.NewGuid();
-        var shipmentStreamA = StreamId.ForAggregate<Shipment>(shipmentA);
+        var shipmentStreamA = StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentA);
         await eventStore.AppendAsync(shipmentStreamA, 0,
         [
             Env(shipmentStreamA, 1, new ShipmentScheduled(

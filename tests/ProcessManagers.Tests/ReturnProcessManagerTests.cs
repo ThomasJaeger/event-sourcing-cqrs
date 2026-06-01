@@ -14,7 +14,7 @@ namespace EventSourcingCqrs.ProcessManagers.Tests;
 public sealed class ReturnProcessManagerTests
 {
     private static StreamId NewStream() =>
-        StreamId.ForProcessManager(StreamPrefixes.ReturnPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.ReturnPm, WellKnownTenants.Default, Guid.NewGuid());
 
     private static ReturnProcessManager NewPm() => new(NewStream());
 

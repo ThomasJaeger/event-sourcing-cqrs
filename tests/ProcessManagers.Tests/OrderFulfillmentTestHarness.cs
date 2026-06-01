@@ -166,7 +166,7 @@ internal sealed class OrderFulfillmentTestHarness
 
     public Task<OrderFulfillmentProcessManager?> LoadPm(Guid orderId)
         => _pms.LoadAsync(
-            StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, orderId),
+            StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId),
             sid => new OrderFulfillmentProcessManager(sid),
             CancellationToken.None);
 

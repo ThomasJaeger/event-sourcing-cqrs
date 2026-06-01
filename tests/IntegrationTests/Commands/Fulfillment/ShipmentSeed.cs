@@ -20,7 +20,7 @@ internal static class ShipmentSeed
         {
             new ShipmentScheduled(shipmentId, Guid.NewGuid(), Destination, new[] { line }, SeedUtc),
         };
-        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(shipmentId), events, ct);
+        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentId), events, ct);
     }
 
     public static Task DispatchedAsync(IEventStore eventStore, Guid shipmentId, CancellationToken ct = default)
@@ -31,7 +31,7 @@ internal static class ShipmentSeed
             new ShipmentScheduled(shipmentId, Guid.NewGuid(), Destination, new[] { line }, SeedUtc),
             new ShipmentDispatched(shipmentId, "TestCarrier-REF", SeedUtc),
         };
-        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(shipmentId), events, ct);
+        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentId), events, ct);
     }
 
     public static Task DeliveredAsync(IEventStore eventStore, Guid shipmentId, CancellationToken ct = default)
@@ -43,6 +43,6 @@ internal static class ShipmentSeed
             new ShipmentDispatched(shipmentId, "TestCarrier-REF", SeedUtc),
             new ShipmentDelivered(shipmentId, SeedUtc),
         };
-        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(shipmentId), events, ct);
+        return EventStoreSeed.AppendAsync(eventStore, StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentId), events, ct);
     }
 }

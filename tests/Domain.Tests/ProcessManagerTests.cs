@@ -7,7 +7,7 @@ namespace EventSourcingCqrs.Domain.Tests;
 public class ProcessManagerTests
 {
     private static readonly StreamId Stream =
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     [Fact]
     public void RecordTransition_applies_enqueues_and_increments_version()

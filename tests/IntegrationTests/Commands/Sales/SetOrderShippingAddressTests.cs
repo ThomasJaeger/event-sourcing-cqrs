@@ -39,7 +39,7 @@ public class SetOrderShippingAddressTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Order>(orderId), fromVersion: 0);
+            StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId), fromVersion: 0);
         envelopes.Should().HaveCount(2);
         envelopes[1].EventType.Should().Be("ShippingAddressSet");
     }

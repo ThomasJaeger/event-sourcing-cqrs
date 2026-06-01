@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests;
 public class InMemoryEventStore_ProcessManager_Tests
 {
     private static readonly StreamId PmStream =
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
     private static readonly DateTime At = new(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]

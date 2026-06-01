@@ -9,7 +9,7 @@ namespace EventSourcingCqrs.ProcessManagers.Returns;
 internal static class ReturnStreams
 {
     public static StreamId For(Guid orderId) =>
-        StreamId.ForProcessManager(StreamPrefixes.ReturnPm, orderId);
+        StreamId.ForProcessManager(StreamPrefixes.ReturnPm, WellKnownTenants.Default, orderId);
 
     public static ReturnProcessManager New(StreamId streamId) => new(streamId);
 }

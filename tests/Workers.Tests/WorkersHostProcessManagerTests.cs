@@ -45,7 +45,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
             var orderId = Guid.NewGuid();
             var customerId = Guid.NewGuid();
             var lineId = Guid.NewGuid();
-            var stream = StreamId.ForAggregate<Order>(orderId);
+            var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
 
             // No inventory exists for SKU-1, so the OF PM authorizes payment, fails
             // to reserve, then voids and cancels end-to-end through the real
@@ -87,7 +87,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
             var orderId = Guid.NewGuid();
             var shipmentId = Guid.NewGuid();
             var lines = new List<ShipmentLine> { new(orderId, Guid.NewGuid(), "SKU-UNMAPPED", 1) };
-            var stream = StreamId.ForAggregate<Shipment>(shipmentId);
+            var stream = StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, shipmentId);
 
             // No SKU-to-inventory mapping exists, so the Return PM loads the
             // shipment, fails the lookup, and goes Stuck end-to-end.
@@ -120,7 +120,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
     {
         using var scope = host.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IProcessManagerRepository<TPm>>();
-        return await repo.LoadAsync(StreamId.ForProcessManager(prefix, orderId), factory, ct);
+        return await repo.LoadAsync(StreamId.ForProcessManager(prefix, WellKnownTenants.Default, orderId), factory, ct);
     }
 
     private static async Task<TPm?> PollAsync<TPm>(

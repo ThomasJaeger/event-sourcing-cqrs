@@ -29,7 +29,7 @@ public class AdjustInventoryTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Inventory>(inventoryId), fromVersion: 0);
+            StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, inventoryId), fromVersion: 0);
         envelopes.Should().HaveCount(2);
         envelopes[1].EventType.Should().Be("InventoryAdjusted");
     }

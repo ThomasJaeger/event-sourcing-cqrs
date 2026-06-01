@@ -44,7 +44,7 @@ public class CommandMetadataEndToEndTests : IClassFixture<PostgresFixture>
             await bus.SendAsync(new DraftOrder(orderId, customerId), correlationId, cts.Token);
 
             var envelopes = await eventStore.ReadStreamAsync(
-                StreamId.ForAggregate<Order>(orderId), fromVersion: 0, cts.Token);
+                StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId), fromVersion: 0, cts.Token);
             envelopes.Should().ContainSingle();
             var metadata = envelopes[0].Metadata;
             metadata.CorrelationId.Should().Be(correlationId);

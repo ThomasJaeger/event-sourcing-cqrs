@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.ProcessManagers.Tests;
 public sealed class IdempotencyKeysTests
 {
     private static StreamId PmStream() =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     [Fact]
     public void ForProcessManager_without_a_sub_id_joins_stream_and_step()
@@ -34,7 +34,7 @@ public sealed class IdempotencyKeysTests
     [Fact]
     public void ForProcessManager_rejects_a_non_process_manager_stream()
     {
-        var aggregateStream = StreamId.ForAggregate<Order>(Guid.NewGuid());
+        var aggregateStream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, Guid.NewGuid());
 
         var act = () => IdempotencyKeys.ForProcessManager(aggregateStream, "reserve");
 

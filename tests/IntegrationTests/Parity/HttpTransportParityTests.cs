@@ -340,8 +340,8 @@ public sealed class HttpTransportParityTests : IClassFixture<ApiFixture>
         SeedAsync(InventoryStream(id),
             new Domain.Fulfillment.Events.InventoryCreated(id, sku, Seed));
 
-    private static StreamId OrderStream(Guid id) => StreamId.ForAggregate<Order>(id);
-    private static StreamId InventoryStream(Guid id) => StreamId.ForAggregate<Inventory>(id);
-    private static StreamId ShipmentStream(Guid id) => StreamId.ForAggregate<Shipment>(id);
-    private static StreamId PaymentStream(Guid id) => StreamId.ForAggregate<Payment>(id);
+    private static StreamId OrderStream(Guid id) => StreamId.ForAggregate<Order>(WellKnownTenants.Default, id);
+    private static StreamId InventoryStream(Guid id) => StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, id);
+    private static StreamId ShipmentStream(Guid id) => StreamId.ForAggregate<Shipment>(WellKnownTenants.Default, id);
+    private static StreamId PaymentStream(Guid id) => StreamId.ForAggregate<Payment>(WellKnownTenants.Default, id);
 }

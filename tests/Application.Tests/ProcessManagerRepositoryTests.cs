@@ -9,7 +9,7 @@ namespace EventSourcingCqrs.Application.Tests;
 public class ProcessManagerRepositoryTests
 {
     private static readonly StreamId Stream =
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     private static ProcessManagerRepository<TestPm> NewRepository(IEventStore store)
         => new(store, new AsyncLocalCommandContextAccessor());

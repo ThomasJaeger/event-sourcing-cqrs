@@ -9,7 +9,7 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 internal static class OrderFulfillmentStreams
 {
     public static StreamId For(Guid orderId) =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, orderId);
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
 
     public static OrderFulfillmentProcessManager New(StreamId streamId) => new(streamId);
 }

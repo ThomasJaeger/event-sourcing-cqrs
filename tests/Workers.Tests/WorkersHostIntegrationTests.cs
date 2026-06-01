@@ -50,7 +50,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
         try
         {
             var orderId = Guid.NewGuid();
-            var stream = StreamId.ForAggregate<Order>(orderId);
+            var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
             var envelope = BuildEnvelope(
                 streamId: stream,
                 streamVersion: 1,
@@ -95,8 +95,8 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
         var when = new DateTime(2026, 5, 16, 12, 0, 0, DateTimeKind.Utc);
 
         var eventStore = host.Services.GetRequiredService<IEventStore>();
-        var streamA = StreamId.ForAggregate<Inventory>(firstOwner);
-        var streamB = StreamId.ForAggregate<Inventory>(secondOwner);
+        var streamA = StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, firstOwner);
+        var streamB = StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, secondOwner);
         await eventStore.AppendAsync(
             streamA, 0, [BuildEnvelope(streamA, 1, new InventoryCreated(firstOwner, "SKU-1", when))], cts.Token);
         await eventStore.AppendAsync(

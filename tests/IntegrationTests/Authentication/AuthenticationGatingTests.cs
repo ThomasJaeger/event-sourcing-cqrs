@@ -66,7 +66,7 @@ public class AuthenticationGatingTests : IClassFixture<ApiFixture>
         using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IEventStore>();
         var envelopes = await store.ReadStreamAsync(
-            StreamId.ForAggregate<Inventory>(inventoryId), fromVersion: 0, CancellationToken.None);
+            StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, inventoryId), fromVersion: 0, CancellationToken.None);
 
         envelopes.Should().ContainSingle();
         envelopes[0].Metadata.ActorId.Should().Be(ForwardedIdentityTestHeader.DefaultActorId);

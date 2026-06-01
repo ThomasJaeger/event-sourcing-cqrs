@@ -18,7 +18,7 @@ public sealed class OrderFulfillmentProcessManagerTests
     private static readonly Money Total = new(149.99m, Currency.USD);
 
     private static StreamId NewStream() =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, Guid.NewGuid());
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     private static OrderFulfillmentProcessManager NewPm() => new(NewStream());
 

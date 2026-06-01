@@ -129,9 +129,9 @@ public class InventoryDashboardRebuildTests : IClassFixture<PostgresFixture>
         var l2 = Guid.NewGuid();
         var orderC = Guid.NewGuid();
         var lineC = Guid.NewGuid();
-        var streamA = StreamId.ForAggregate<Inventory>(invA);
-        var streamB = StreamId.ForAggregate<Inventory>(invB);
-        var streamC = StreamId.ForAggregate<Inventory>(invC);
+        var streamA = StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, invA);
+        var streamB = StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, invB);
+        var streamC = StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, invC);
 
         await eventStore.AppendAsync(streamA, 0,
         [

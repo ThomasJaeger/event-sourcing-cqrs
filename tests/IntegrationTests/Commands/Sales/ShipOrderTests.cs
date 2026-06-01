@@ -29,7 +29,7 @@ public class ShipOrderTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Order>(orderId), fromVersion: 0);
+            StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId), fromVersion: 0);
         envelopes.Should().HaveCount(5);
         envelopes[4].EventType.Should().Be("OrderShipped");
     }

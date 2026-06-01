@@ -27,7 +27,7 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
 
     public async Task<TAggregate?> LoadAsync(Guid id, CancellationToken ct)
     {
-        var streamId = StreamId.ForAggregate<TAggregate>(id);
+        var streamId = StreamId.ForAggregate<TAggregate>(WellKnownTenants.Default, id);
         var envelopes = await _store.ReadStreamAsync(streamId, fromVersion: 0, ct);
         if (envelopes.Count == 0)
         {
@@ -51,7 +51,7 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
         }
 
         var expectedVersion = aggregate.Version - events.Count;
-        var streamId = StreamId.ForAggregate<TAggregate>(aggregate.Id);
+        var streamId = StreamId.ForAggregate<TAggregate>(WellKnownTenants.Default, aggregate.Id);
         var envelopes = BuildEnvelopes(streamId, expectedVersion, events);
         await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
     }

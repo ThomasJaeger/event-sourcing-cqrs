@@ -423,7 +423,7 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
     }
 
     private static StreamId PmStream(Guid orderId) =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, orderId);
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
 
     private static Money Usd(decimal amount) => new(amount, Currency.USD);
 }

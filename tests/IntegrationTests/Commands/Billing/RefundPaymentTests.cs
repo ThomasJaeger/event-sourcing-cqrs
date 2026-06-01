@@ -29,7 +29,7 @@ public class RefundPaymentTests : IClassFixture<ApiFixture>
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Payment>(paymentId), fromVersion: 0);
+            StreamId.ForAggregate<Payment>(WellKnownTenants.Default, paymentId), fromVersion: 0);
         envelopes.Should().HaveCount(3);
         envelopes[2].EventType.Should().Be("PaymentRefunded");
     }

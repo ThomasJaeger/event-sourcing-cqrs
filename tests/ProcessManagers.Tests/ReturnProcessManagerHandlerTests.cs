@@ -38,7 +38,7 @@ public sealed class ReturnProcessManagerHandlerTests
 
         await harness.Receive(new ShipmentReturned(shipmentId, "Customer return", Now));
 
-        var stream = StreamId.ForProcessManager(StreamPrefixes.ReturnPm, orderId);
+        var stream = StreamId.ForProcessManager(StreamPrefixes.ReturnPm, WellKnownTenants.Default, orderId);
         harness.Dispatched.Where(d => d.Command is AdjustInventory).Select(d => d.IdempotencyKey)
             .Should().BeEquivalentTo(new[]
             {

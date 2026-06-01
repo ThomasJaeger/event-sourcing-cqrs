@@ -119,9 +119,9 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
         var orderA = Guid.NewGuid();
         var orderB = Guid.NewGuid();
         var orderC = Guid.NewGuid();
-        var streamA = StreamId.ForAggregate<Order>(orderA);
-        var streamB = StreamId.ForAggregate<Order>(orderB);
-        var streamC = StreamId.ForAggregate<Order>(orderC);
+        var streamA = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderA);
+        var streamB = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderB);
+        var streamC = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderC);
 
         await eventStore.AppendAsync(streamA, 0,
         [

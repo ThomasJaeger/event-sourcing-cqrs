@@ -28,7 +28,7 @@ public class CreateInventoryTests : IClassFixture<ApiFixture>
 
         var eventStore = _fixture.Factory.Services.GetRequiredService<IEventStore>();
         var envelopes = await eventStore.ReadStreamAsync(
-            StreamId.ForAggregate<Inventory>(inventoryId), fromVersion: 0);
+            StreamId.ForAggregate<Inventory>(WellKnownTenants.Default, inventoryId), fromVersion: 0);
         envelopes.Should().ContainSingle();
         envelopes[0].EventType.Should().Be("InventoryCreated");
     }
