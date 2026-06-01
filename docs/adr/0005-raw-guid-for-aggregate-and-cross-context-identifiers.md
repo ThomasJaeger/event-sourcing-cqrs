@@ -24,7 +24,7 @@ Phase 4 introduces three new aggregates (Inventory, Shipment, Payment) whose eve
 
 ## Decision
 
-Cross-context identifiers in this reference implementation travel by raw `Guid`. The rule applies to `OrderId`, `CustomerId`, and by precedent to any future cross-context identifier that another bounded context refers to by reference rather than by definition.
+Cross-context identifiers in this reference implementation travel by raw `Guid`. The rule applies to `OrderId`, `CustomerId`, and by precedent to any future cross-context identifier that another bounded context refers to by reference rather than by definition. The sole exception is TenantId, the tenant-isolation discriminator, carved out as a security-justified typed identifier by ADR 0029; the raw-Guid rule above continues to govern every other cross-context identifier, including ActorId.
 
 Concretely for Phase 4: Inventory, Shipment, and Payment events declare `Guid OrderId, Guid CustomerId` (and `Guid InventoryId`, `Guid ShipmentId`, `Guid PaymentId` for their own aggregate IDs). Command records and handlers follow the same shape. `AggregateRoot.Id` stays `Guid`; no generic `AggregateRoot<TId>` introduced.
 
