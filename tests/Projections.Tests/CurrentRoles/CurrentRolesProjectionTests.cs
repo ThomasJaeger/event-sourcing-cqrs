@@ -86,5 +86,6 @@ public class CurrentRolesProjectionTests
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: At);
+            OccurredUtc: At,
+            Tenant: WellKnownTenants.Default);
 }

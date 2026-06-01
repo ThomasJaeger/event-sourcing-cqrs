@@ -97,6 +97,7 @@ public class OrderIdToPaymentIdProjectionTests
                 ActorId: Guid.Empty,
                 Source: "test",
                 SchemaVersion: 1,
-                OccurredUtc: AuthorizedAt),
+                OccurredUtc: AuthorizedAt,
+                Tenant: WellKnownTenants.Default),
             position);
 }

@@ -14,6 +14,7 @@ internal static class PostgresEventStoreTestKit
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new TenantIdJsonConverter() },
         };
 
     public static EventTypeRegistry CreateRegistry()
@@ -33,7 +34,8 @@ internal static class PostgresEventStoreTestKit
         IDomainEvent payload,
         DateTime? occurredUtc = null,
         Guid? correlationId = null,
-        Guid? eventId = null)
+        Guid? eventId = null,
+        TenantId? tenant = null)
     {
         var when = occurredUtc ?? new DateTime(2026, 5, 12, 12, 0, 0, DateTimeKind.Utc);
         var id = eventId ?? Guid.NewGuid();
@@ -44,7 +46,8 @@ internal static class PostgresEventStoreTestKit
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: when);
+            OccurredUtc: when,
+            Tenant: tenant ?? WellKnownTenants.Default);
         return new EventEnvelope(
             StreamId: streamId,
             StreamVersion: streamVersion,

@@ -30,7 +30,8 @@ internal static class EventStoreSeed
             ActorId: Guid.Empty,
             Source: "integration-test-seed",
             SchemaVersion: 1,
-            OccurredUtc: SeedUtc);
+            OccurredUtc: SeedUtc,
+            Tenant: WellKnownTenants.Default);
         return new EventEnvelope(
             StreamId: streamId,
             StreamVersion: streamVersion,

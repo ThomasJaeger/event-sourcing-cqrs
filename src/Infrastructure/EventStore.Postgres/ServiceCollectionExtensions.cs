@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new TenantIdJsonConverter() },
         });
 
         services.AddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();

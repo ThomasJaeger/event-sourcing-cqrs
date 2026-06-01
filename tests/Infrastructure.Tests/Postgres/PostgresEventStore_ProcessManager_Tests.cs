@@ -139,7 +139,8 @@ public class PostgresEventStore_ProcessManager_Tests : IClassFixture<PostgresFix
                 ActorId: Guid.Empty,
                 Source: "test",
                 SchemaVersion: 1,
-                OccurredUtc: At);
+                OccurredUtc: At,
+                Tenant: WellKnownTenants.Default);
             envelopes[i] = new ProcessManagerEventEnvelope(
                 StreamId: streamId,
                 StreamVersion: i + 1,

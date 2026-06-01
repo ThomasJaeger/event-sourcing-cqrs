@@ -177,5 +177,6 @@ internal sealed class OrderFulfillmentTestHarness
         ActorId: Guid.NewGuid(),
         Source: "test",
         SchemaVersion: 1,
-        OccurredUtc: DateTime.UtcNow);
+        OccurredUtc: DateTime.UtcNow,
+        Tenant: WellKnownTenants.Default);
 }

@@ -160,8 +160,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IDomainEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
-            var metadata = JsonSerializer.Deserialize<EventMetadata>(
-                metadataJson, _jsonOptions)!;
+            var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             envelopes.Add(new EventEnvelope(
                 StreamId: streamId,
@@ -286,8 +285,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IProcessManagerEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
-            var metadata = JsonSerializer.Deserialize<EventMetadata>(
-                metadataJson, _jsonOptions)!;
+            var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             envelopes.Add(new ProcessManagerEventEnvelope(
                 StreamId: streamId,
@@ -356,8 +354,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IDomainEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
-            var metadata = JsonSerializer.Deserialize<EventMetadata>(
-                metadataJson, _jsonOptions)!;
+            var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             yield return new EventEnvelope(
                 StreamId: streamId,

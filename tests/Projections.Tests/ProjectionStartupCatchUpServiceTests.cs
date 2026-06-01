@@ -93,7 +93,8 @@ public class ProjectionStartupCatchUpServiceTests
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: At);
+            OccurredUtc: At,
+            Tenant: WellKnownTenants.Default);
         return new EventEnvelope(
             StreamId: StreamId.Parse($"test:{Guid.NewGuid():N}"),
             StreamVersion: 1,

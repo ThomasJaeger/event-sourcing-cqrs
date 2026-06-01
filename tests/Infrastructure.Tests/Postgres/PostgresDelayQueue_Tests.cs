@@ -184,7 +184,8 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
             ActorId: Guid.NewGuid(),
             Source: "Sales",
             SchemaVersion: 1,
-            OccurredUtc: new DateTime(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc));
+            OccurredUtc: new DateTime(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc),
+            Tenant: WellKnownTenants.Default);
 
     private static Task ScheduleAsync(
         PostgresDelayQueue queue, StreamId stream, string step, string idempotencyKey)

@@ -331,7 +331,8 @@ public sealed class DelayQueueProcessor : BackgroundService
             ActorId: row.ActorId,
             Source: row.ServiceName,
             SchemaVersion: 1,
-            OccurredUtc: nowUtc);
+            OccurredUtc: nowUtc,
+            Tenant: WellKnownTenants.Default);
         var actor = new SystemActor(row.ActorId, row.ServiceName);
 
         await _causedCommandBus.SendAsync(command, causingMetadata, actor, row.IdempotencyKey, ct);

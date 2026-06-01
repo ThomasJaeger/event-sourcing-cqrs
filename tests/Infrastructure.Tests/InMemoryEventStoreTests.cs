@@ -96,7 +96,8 @@ public class InMemoryEventStoreTests
                 ActorId: Guid.Empty,
                 Source: "test",
                 SchemaVersion: 1,
-                OccurredUtc: At);
+                OccurredUtc: At,
+                Tenant: WellKnownTenants.Default);
             envelopes[i] = new EventEnvelope(
                 StreamId: streamId,
                 StreamVersion: baseVersion + i + 1,

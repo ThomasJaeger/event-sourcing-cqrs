@@ -106,5 +106,6 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
             ActorId: Guid.Empty,
             Source: "Workers",
             SchemaVersion: 1,
-            OccurredUtc: DateTime.UtcNow);
+            OccurredUtc: DateTime.UtcNow,
+            Tenant: WellKnownTenants.Default);
 }

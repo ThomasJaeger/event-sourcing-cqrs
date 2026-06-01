@@ -18,7 +18,8 @@ public sealed class CausedCommandBusTests
             ActorId: Guid.NewGuid(),
             Source: "Sales",
             SchemaVersion: 1,
-            OccurredUtc: new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc));
+            OccurredUtc: new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc),
+            Tenant: WellKnownTenants.Default);
 
     [Fact]
     public async Task SendAsync_threads_correlation_and_causation_from_the_causing_event()

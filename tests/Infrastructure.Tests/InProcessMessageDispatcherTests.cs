@@ -143,7 +143,8 @@ public class InProcessMessageDispatcherTests
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: At);
+            OccurredUtc: At,
+            Tenant: WellKnownTenants.Default);
 
     public sealed record TestDispatchEvent(string Note) : IDomainEvent;
 

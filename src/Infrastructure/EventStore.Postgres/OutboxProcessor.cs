@@ -337,8 +337,7 @@ public sealed class OutboxProcessor : BackgroundService
         var clrType = _registry.TypeFor(row.EventType);
         var payload = (IDomainEvent)JsonSerializer.Deserialize(
             row.PayloadJson, clrType, _jsonOptions)!;
-        var metadata = JsonSerializer.Deserialize<EventMetadata>(
-            row.MetadataJson, _jsonOptions)!;
+        var metadata = EventMetadataReader.Read(row.MetadataJson, _jsonOptions);
         return new OutboxMessage(
             OutboxId: row.OutboxId,
             EventId: row.EventId,

@@ -144,7 +144,8 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
             ActorId: Guid.Empty,
             Source: "integration-test",
             SchemaVersion: 1,
-            OccurredUtc: when);
+            OccurredUtc: when,
+            Tenant: WellKnownTenants.Default);
         return new EventEnvelope(
             StreamId: streamId,
             StreamVersion: streamVersion,

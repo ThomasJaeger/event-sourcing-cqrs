@@ -378,5 +378,6 @@ public class OrderListProjectionTests
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: occurredUtc);
+            OccurredUtc: occurredUtc,
+            Tenant: WellKnownTenants.Default);
 }

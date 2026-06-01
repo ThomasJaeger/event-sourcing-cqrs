@@ -101,7 +101,8 @@ public class ProjectionReplayerTests
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: At);
+            OccurredUtc: At,
+            Tenant: WellKnownTenants.Default);
 
     // Public so the replayer, which lives in another assembly, can reflect over
     // the projection and construct EventContext<ReplayTestEvent> without an

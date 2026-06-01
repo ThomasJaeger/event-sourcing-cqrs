@@ -16,7 +16,8 @@ public class CommandOutcomeTests
             ActorId: Guid.NewGuid(),
             Source: "Sales",
             SchemaVersion: 1,
-            OccurredUtc: new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc));
+            OccurredUtc: new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc),
+            Tenant: WellKnownTenants.Default);
 
     [Fact]
     public void Success_sets_the_flag_and_leaves_failure_null()

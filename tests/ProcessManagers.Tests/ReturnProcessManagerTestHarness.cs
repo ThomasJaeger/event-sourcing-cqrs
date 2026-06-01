@@ -79,5 +79,6 @@ internal sealed class ReturnProcessManagerTestHarness
         ActorId: Guid.NewGuid(),
         Source: "test",
         SchemaVersion: 1,
-        OccurredUtc: DateTime.UtcNow);
+        OccurredUtc: DateTime.UtcNow,
+        Tenant: WellKnownTenants.Default);
 }

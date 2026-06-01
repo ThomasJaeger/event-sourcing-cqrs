@@ -171,7 +171,8 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: BaseTime);
+            OccurredUtc: BaseTime,
+            Tenant: WellKnownTenants.Default);
         return new EventEnvelope(
             StreamId: streamId,
             StreamVersion: version,
@@ -238,6 +239,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new TenantIdJsonConverter() },
         };
 
     private sealed record RebuildContext(

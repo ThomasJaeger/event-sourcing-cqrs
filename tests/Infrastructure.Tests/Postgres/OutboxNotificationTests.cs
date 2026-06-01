@@ -177,7 +177,8 @@ public class OutboxNotificationTests : IClassFixture<PostgresFixture>
             ActorId: Guid.Empty,
             Source: "test",
             SchemaVersion: 1,
-            OccurredUtc: when);
+            OccurredUtc: when,
+            Tenant: WellKnownTenants.Default);
         var metadataJson = JsonSerializer.Serialize(metadata, json);
 
         await using var conn = await dataSource.OpenConnectionAsync();

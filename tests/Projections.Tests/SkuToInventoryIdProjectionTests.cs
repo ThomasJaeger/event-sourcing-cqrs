@@ -92,6 +92,7 @@ public class SkuToInventoryIdProjectionTests
                 ActorId: Guid.Empty,
                 Source: "test",
                 SchemaVersion: 1,
-                OccurredUtc: CreatedAt),
+                OccurredUtc: CreatedAt,
+                Tenant: WellKnownTenants.Default),
             position);
 }

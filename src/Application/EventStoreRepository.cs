@@ -111,5 +111,6 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
             ActorId: Guid.Empty,
             Source: "Workers",
             SchemaVersion: 1,
-            OccurredUtc: DateTime.UtcNow);
+            OccurredUtc: DateTime.UtcNow,
+            Tenant: WellKnownTenants.Default);
 }
