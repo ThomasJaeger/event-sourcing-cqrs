@@ -18,16 +18,19 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
 {
     private readonly IEventStore _store;
     private readonly ICommandContextAccessor _accessor;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
-    public EventStoreRepository(IEventStore store, ICommandContextAccessor accessor)
+    public EventStoreRepository(
+        IEventStore store, ICommandContextAccessor accessor, ICurrentTenantAccessor tenantAccessor)
     {
         _store = store;
         _accessor = accessor;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<TAggregate?> LoadAsync(Guid id, CancellationToken ct)
     {
-        var streamId = StreamId.ForAggregate<TAggregate>(WellKnownTenants.Default, id);
+        var streamId = StreamId.ForAggregate<TAggregate>(ResolveTenant(), id);
         var envelopes = await _store.ReadStreamAsync(streamId, fromVersion: 0, ct);
         if (envelopes.Count == 0)
         {
@@ -51,10 +54,22 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
         }
 
         var expectedVersion = aggregate.Version - events.Count;
-        var streamId = StreamId.ForAggregate<TAggregate>(WellKnownTenants.Default, aggregate.Id);
-        var envelopes = BuildEnvelopes(streamId, expectedVersion, events);
+        var tenant = ResolveTenant();
+        var streamId = StreamId.ForAggregate<TAggregate>(tenant, aggregate.Id);
+        var envelopes = BuildEnvelopes(streamId, expectedVersion, events, tenant);
         await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
     }
+
+    // The tenant tracks command-context presence. On the command path the bus set
+    // the tenant alongside the context, so a present context with an unset tenant
+    // is a wiring regression. Off the command path (worker writes, the
+    // direct-construction tests) the default tenant is the honest value. One
+    // resolved tenant feeds both the stream id and the metadata so they cannot
+    // disagree.
+    private TenantId ResolveTenant()
+        => _accessor.Current is null
+            ? WellKnownTenants.Default
+            : _tenantAccessor.Current ?? throw new MissingTenantContextException();
 
     // Stamps metadata from the current command context, chaining causation
     // across multiple events in the same SaveAsync batch (the first event is
@@ -68,7 +83,8 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
     private IReadOnlyList<EventEnvelope> BuildEnvelopes(
         StreamId streamId,
         int baseVersion,
-        IReadOnlyList<IDomainEvent> events)
+        IReadOnlyList<IDomainEvent> events,
+        TenantId tenant)
     {
         var context = _accessor.Current;
         var envelopes = new EventEnvelope[events.Count];
@@ -81,7 +97,7 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
             {
                 metadata = context is null
                     ? BuildFallbackMetadata()
-                    : EventMetadata.ForCommand(context, schemaVersion: 1);
+                    : EventMetadata.ForCommand(context, tenant, schemaVersion: 1);
             }
             else
             {

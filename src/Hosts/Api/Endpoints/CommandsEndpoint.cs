@@ -75,7 +75,7 @@ public static class CommandsEndpoint
         }
         var principal = await principalFactory.CreateAsync(actorId, ct);
 
-        await bus.SendAsync(command, principal.ActorId, principal.Roles, idempotencyKey, ct);
+        await bus.SendAsync(command, principal.ActorId, principal.Roles, principal.Tenant, idempotencyKey, ct);
         return Results.Accepted(value: new CommandAcceptedResponse(DateTime.UtcNow));
     }
 }

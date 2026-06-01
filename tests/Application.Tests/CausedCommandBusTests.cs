@@ -116,6 +116,7 @@ public sealed class CausedCommandBusTests
             .AddSingleton<ICommandHandler<DoThing>>(nesting)
             .AddSingleton<ICommandHandler<DoOther>>(inner)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var caused = new CausedCommandBus(new CommandBus(services));
         nesting.Inner = caused;
@@ -139,6 +140,7 @@ public sealed class CausedCommandBusTests
         var services = new ServiceCollection()
             .AddSingleton(handler)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         return new CausedCommandBus(new CommandBus(services));
     }

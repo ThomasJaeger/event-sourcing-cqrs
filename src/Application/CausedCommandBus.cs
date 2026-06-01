@@ -44,6 +44,8 @@ public sealed class CausedCommandBus : ICausedCommandBus
             ServiceName: actor.ServiceName,
             IdempotencyKey: idempotencyKey);
 
-        return _bus.SendWithContextAsync(command, fragment, ct);
+        // A caused event belongs to the same tenant as the event that caused it, so the new command
+        // carries the causing event's tenant (ADR 0014's metadata-to-context translation).
+        return _bus.SendWithContextAsync(command, fragment, causingEventMetadata.Tenant, ct);
     }
 }

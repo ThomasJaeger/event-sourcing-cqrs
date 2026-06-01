@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IQueryBus, QueryBus>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
         services.AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>();
+        services.AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>();
 
         // Query types resolve through QueryTypeRegistry for the /queries HTTP
         // endpoint's type-discriminator dispatch (ADR 0022). Populated from

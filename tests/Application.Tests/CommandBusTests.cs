@@ -16,6 +16,7 @@ public sealed class CommandBusTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(handler)
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
         var command = new DoThing("hello");
@@ -30,6 +31,7 @@ public sealed class CommandBusTests
     {
         var services = new ServiceCollection()
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -45,6 +47,7 @@ public sealed class CommandBusTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(handler)
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
         using var cts = new CancellationTokenSource();
@@ -62,6 +65,7 @@ public sealed class CommandBusTests
         var services = new ServiceCollection()
             .AddScoped<ICommandHandler<DoThing>, RecordingHandler>()
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var bus = new CommandBus(services);
 

@@ -15,11 +15,10 @@ public sealed record EventMetadata(
     // Stamps metadata for the first event a command handler raises. The
     // command's bus-generated CommandId becomes the event's CausationId, so
     // every event's causation chain ultimately points back to a command. The
-    // tenant is WellKnownTenants.Default for now; the per-tenant accessor that
-    // supplies a real value lands in a later slice. The member is non-nullable
-    // with no default precisely so the compiler pins this and every other
-    // construction site at the point that switch happens.
-    public static EventMetadata ForCommand(ICommandContext context, int schemaVersion = 1)
+    // tenant is supplied by the caller, which on the command path reads it from
+    // the current-tenant accessor; one resolved tenant feeds both the stream id
+    // and the metadata so the two cannot disagree.
+    public static EventMetadata ForCommand(ICommandContext context, TenantId tenant, int schemaVersion = 1)
         => new(
             EventId: Guid.NewGuid(),
             CorrelationId: context.CorrelationId,
@@ -28,7 +27,7 @@ public sealed record EventMetadata(
             Source: context.ServiceName,
             SchemaVersion: schemaVersion,
             OccurredUtc: context.UtcNow().UtcDateTime,
-            Tenant: WellKnownTenants.Default);
+            Tenant: tenant);
 
     // Stamps metadata for an event caused by the prior event in the same
     // SaveAsync batch (Ch 8 line 1066). CausationId points to the prior event's

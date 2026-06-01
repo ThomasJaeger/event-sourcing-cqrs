@@ -22,7 +22,7 @@ public class EventStoreRepositoryTests
     public async Task SaveAsync_then_LoadAsync_round_trip_returns_equivalent_aggregate()
     {
         var store = new InMemoryEventStore();
-        var repo = new EventStoreRepository<Order>(store, new StubAccessor());
+        var repo = new EventStoreRepository<Order>(store, new StubAccessor(), new StubTenantAccessor());
 
         var order = Order.Draft(OrderId, CustomerId, At);
         order.AddLine(LineId, "SKU-1", 2, TenUsd, At);
@@ -46,7 +46,7 @@ public class EventStoreRepositoryTests
     public async Task SaveAsync_with_no_uncommitted_events_is_a_noop()
     {
         var store = new InMemoryEventStore();
-        var repo = new EventStoreRepository<Order>(store, new StubAccessor());
+        var repo = new EventStoreRepository<Order>(store, new StubAccessor(), new StubTenantAccessor());
 
         var order = Order.Draft(OrderId, CustomerId, At);
         await repo.SaveAsync(order, CancellationToken.None);

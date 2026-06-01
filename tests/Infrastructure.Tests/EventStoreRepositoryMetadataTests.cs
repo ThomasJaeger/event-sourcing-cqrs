@@ -34,7 +34,8 @@ public class EventStoreRepositoryMetadataTests
                 ServiceName = "Api"
             }
         };
-        var repo = new EventStoreRepository<Order>(store, accessor);
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
         var order = Order.Draft(OrderId, CustomerId, At);
 
         await repo.SaveAsync(order, CancellationToken.None);
@@ -46,6 +47,7 @@ public class EventStoreRepositoryMetadataTests
         metadata.CausationId.Should().Be(commandId);
         metadata.ActorId.Should().Be(actorId);
         metadata.Source.Should().Be("Api");
+        metadata.Tenant.Should().Be(WellKnownTenants.Default);
     }
 
     [Fact]
@@ -53,7 +55,7 @@ public class EventStoreRepositoryMetadataTests
     {
         var store = new InMemoryEventStore();
         var accessor = new StubAccessor { Current = null };
-        var repo = new EventStoreRepository<Order>(store, accessor);
+        var repo = new EventStoreRepository<Order>(store, accessor, new StubTenantAccessor());
         var order = Order.Draft(OrderId, CustomerId, At);
 
         await repo.SaveAsync(order, CancellationToken.None);
@@ -64,6 +66,7 @@ public class EventStoreRepositoryMetadataTests
         metadata.CausationId.Should().Be(Guid.Empty);
         metadata.ActorId.Should().Be(Guid.Empty);
         metadata.Source.Should().Be("Workers");
+        metadata.Tenant.Should().Be(WellKnownTenants.Default);
     }
 
     [Fact]
@@ -75,7 +78,8 @@ public class EventStoreRepositoryMetadataTests
         {
             Current = new StubContext { CausationCommandId = commandId }
         };
-        var repo = new EventStoreRepository<Order>(store, accessor);
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
 
         var order = Order.Draft(OrderId, CustomerId, At);
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
@@ -97,7 +101,8 @@ public class EventStoreRepositoryMetadataTests
         {
             Current = new StubContext { CorrelationId = correlationId }
         };
-        var repo = new EventStoreRepository<Order>(store, accessor);
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
 
         var order = Order.Draft(OrderId, CustomerId, At);
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);

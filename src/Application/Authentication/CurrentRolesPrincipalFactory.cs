@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Access.ReadModels;
 
 namespace EventSourcingCqrs.Application.Authentication;
@@ -22,6 +23,8 @@ public sealed class CurrentRolesPrincipalFactory : IPrincipalFactory
     public async Task<AuthenticatedPrincipal> CreateAsync(Guid actorId, CancellationToken ct)
     {
         var roles = await _store.GetRolesForUserAsync(actorId, ct);
-        return new AuthenticatedPrincipal(actorId, roles);
+        // The tenant is the default until per-user tenant onboarding lands a real lookup. The carrier
+        // and the set point do not change when it does; only this value does.
+        return new AuthenticatedPrincipal(actorId, roles, WellKnownTenants.Default);
     }
 }

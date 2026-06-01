@@ -18,6 +18,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -41,10 +42,12 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
-        await bus.SendAsync(new DoThing(), actorId, roles, idempotencyKey: null, CancellationToken.None);
+        await bus.SendAsync(
+            new DoThing(), actorId, roles, WellKnownTenants.Default, idempotencyKey: null, CancellationToken.None);
 
         // The bare overloads keep ActorId = Guid.Empty (the tests above); the principal overload is
         // the only path that stamps a real actor and the actor's roles onto the context.
@@ -59,6 +62,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(new ContextCapturingHandler(accessor))
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -74,6 +78,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(new ThrowingHandler())
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -92,6 +97,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -109,6 +115,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -125,6 +132,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -151,6 +159,7 @@ public sealed class CommandBusContextTests
         var services = new ServiceCollection()
             .AddSingleton<ICommandHandler<DoThing>>(capture)
             .AddSingleton<ICommandContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor>(new AsyncLocalCurrentTenantAccessor())
             .AddSingleton<IIdempotencyStore>(store)
             .AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>))
             .BuildServiceProvider();

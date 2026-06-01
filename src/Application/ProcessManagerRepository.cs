@@ -16,11 +16,14 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
 {
     private readonly IEventStore _store;
     private readonly ICommandContextAccessor _accessor;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
-    public ProcessManagerRepository(IEventStore store, ICommandContextAccessor accessor)
+    public ProcessManagerRepository(
+        IEventStore store, ICommandContextAccessor accessor, ICurrentTenantAccessor tenantAccessor)
     {
         _store = store;
         _accessor = accessor;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<TPm?> LoadAsync(
@@ -76,7 +79,10 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
             {
                 metadata = context is null
                     ? BuildFallbackMetadata()
-                    : EventMetadata.ForCommand(context, schemaVersion: 1);
+                    : EventMetadata.ForCommand(
+                        context,
+                        _tenantAccessor.Current ?? throw new MissingTenantContextException(),
+                        schemaVersion: 1);
             }
             else
             {

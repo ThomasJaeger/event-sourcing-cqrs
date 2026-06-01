@@ -115,6 +115,7 @@ internal sealed class OrderFulfillmentTestHarness
 {
     private readonly InMemoryEventStore _store = new();
     private readonly ICommandContextAccessor _accessor = new AsyncLocalCommandContextAccessor();
+    private readonly ICurrentTenantAccessor _tenantAccessor = new AsyncLocalCurrentTenantAccessor();
     private readonly StubSkuToInventoryIdStore _skuLookup = new();
     private readonly EventStoreRepository<Order> _orders;
     private readonly EventStoreRepository<Shipment> _shipments;
@@ -126,16 +127,33 @@ internal sealed class OrderFulfillmentTestHarness
 
     public OrderFulfillmentTestHarness()
     {
-        _orders = new EventStoreRepository<Order>(_store, _accessor);
-        _shipments = new EventStoreRepository<Shipment>(_store, _accessor);
-        _pms = new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor);
+        _orders = new EventStoreRepository<Order>(_store, _accessor, _tenantAccessor);
+        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor);
+        _pms = new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor, _tenantAccessor);
         Bus = new RecordingCausedCommandBus();
         DelayQueue = new RecordingDelayQueue();
         var compensation = new OrderFulfillmentCompensation(Bus, _pms, DelayQueue);
         _handler = new OrderFulfillmentProcessManagerHandler(
             Bus, _pms, _orders, _shipments, _skuLookup, compensation, DelayQueue);
-        _paymentTimeoutHandler = new TimeoutAwaitingPaymentForOrderHandler(_pms, compensation, _accessor);
-        _dispatchTimeoutHandler = new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor);
+        _paymentTimeoutHandler =
+            new TimeoutAwaitingPaymentForOrderHandler(_pms, compensation, _accessor, _tenantAccessor);
+        _dispatchTimeoutHandler =
+            new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor, _tenantAccessor);
+    }
+
+    // Sets a command context and a tenant on the ambient accessors, simulating a caused-command
+    // dispatch arriving at a timeout handler. Pins Option 1's independence: the metadata tenant tracks
+    // the context while the PM stream-id load stays Default.
+    public void EnterCommandContext(TenantId tenant)
+    {
+        _accessor.Current = new CommandContext
+        {
+            CorrelationId = Guid.NewGuid(),
+            CausationCommandId = Guid.NewGuid(),
+            ActorId = Guid.Empty,
+            ServiceName = "Workers"
+        };
+        _tenantAccessor.Current = tenant;
     }
 
     public RecordingCausedCommandBus Bus { get; }

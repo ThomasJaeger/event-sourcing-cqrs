@@ -7,6 +7,11 @@ internal sealed class StubAccessor : ICommandContextAccessor
     public ICommandContext? Current { get; set; }
 }
 
+internal sealed class StubTenantAccessor : ICurrentTenantAccessor
+{
+    public TenantId? Current { get; set; }
+}
+
 internal sealed class StubContext : ICommandContext
 {
     public Guid CorrelationId { get; init; } = Guid.Empty;

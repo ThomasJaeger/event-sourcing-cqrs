@@ -35,7 +35,7 @@ internal sealed class ShipmentTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Shipment>(Store, Accessor);
+        Repository = new EventStoreRepository<Shipment>(Store, Accessor, new StubTenantAccessor());
     }
 
     public async Task SeedScheduledAsync()

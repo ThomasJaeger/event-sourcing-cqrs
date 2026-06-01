@@ -14,15 +14,18 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
     private readonly IProcessManagerRepository<OrderFulfillmentProcessManager> _pms;
     private readonly OrderFulfillmentCompensation _compensation;
     private readonly ICommandContextAccessor _accessor;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
     public TimeoutAwaitingDispatchForOrderHandler(
         IProcessManagerRepository<OrderFulfillmentProcessManager> pms,
         OrderFulfillmentCompensation compensation,
-        ICommandContextAccessor accessor)
+        ICommandContextAccessor accessor,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _pms = pms;
         _compensation = compensation;
         _accessor = accessor;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task HandleAsync(TimeoutAwaitingDispatchForOrder command, CancellationToken ct)
@@ -37,7 +40,15 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
             return;
         }
 
-        var causing = EventMetadata.ForCommand(_accessor.Current ?? CommandContext.System);
+        // The metadata tenant tracks the command context: a real context means the bus set the tenant
+        // too (an unset tenant there is a wiring regression); no context means the System fallback and
+        // the default tenant. The OrderFulfillmentStreams.For load above stays Default by design,
+        // independent of this metadata tenant (Option 1).
+        var context = _accessor.Current;
+        var causing = context is null
+            ? EventMetadata.ForCommand(CommandContext.System, WellKnownTenants.Default)
+            : EventMetadata.ForCommand(
+                context, _tenantAccessor.Current ?? throw new MissingTenantContextException());
         await _compensation.CompensateWithReleasesAsync(
             pm, $"Shipment dispatch timed out for order {command.OrderId}.", causing, ct);
     }

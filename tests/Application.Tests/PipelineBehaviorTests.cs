@@ -19,6 +19,7 @@ public sealed class PipelineBehaviorTests
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new RecordingCommandBehavior(log, "first"))
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new RecordingCommandBehavior(log, "second"))
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 
@@ -35,6 +36,7 @@ public sealed class PipelineBehaviorTests
             .AddSingleton<ICommandHandler<DoThing>>(new RecordingCommandHandler(log))
             .AddSingleton<ICommandPipelineBehavior<DoThing>>(new SkipNextBehavior(log))
             .AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new CommandBus(services);
 

@@ -336,6 +336,26 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
     }
 
     [Fact]
+    public async Task AwaitingPayment_timeout_under_a_context_loads_the_pm_at_default_and_stamps_the_context_tenant()
+    {
+        // Option 1 independence: the stream-id load stays Default while the metadata tenant tracks the
+        // command context. With a non-default tenant on the context, the PM is still found and cancelled
+        // at its Default stream, and the compensation command carries the context tenant on its metadata.
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        var otherTenant = TenantId.From(Guid.NewGuid());
+        await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+
+        harness.EnterCommandContext(otherTenant);
+        await harness.DispatchTimeoutAwaitingPayment(orderId);
+
+        var cancel = harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle().Which;
+        cancel.Metadata.Tenant.Should().Be(otherTenant);
+        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
     public async Task AwaitingPayment_timeout_after_payment_authorized_is_a_no_op()
     {
         var harness = new OrderFulfillmentTestHarness();

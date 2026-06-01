@@ -28,7 +28,7 @@ internal sealed class OrderTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Order>(Store, Accessor);
+        Repository = new EventStoreRepository<Order>(Store, Accessor, new StubTenantAccessor());
     }
 
     public async Task SeedDraftedAsync()

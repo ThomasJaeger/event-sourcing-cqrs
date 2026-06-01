@@ -25,7 +25,7 @@ internal sealed class InventoryTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Inventory>(Store, Accessor);
+        Repository = new EventStoreRepository<Inventory>(Store, Accessor, new StubTenantAccessor());
     }
 
     public async Task SeedCreatedAsync()

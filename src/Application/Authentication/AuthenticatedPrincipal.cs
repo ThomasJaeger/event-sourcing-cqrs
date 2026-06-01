@@ -7,4 +7,4 @@ namespace EventSourcingCqrs.Application.Authentication;
 // claim the forwarding service asserts: a principal's Roles come from the current-roles read model
 // (the authoritative source), not from the forwarded claim, so the two are different types even
 // though their shape matches.
-public sealed record AuthenticatedPrincipal(Guid ActorId, IReadOnlyCollection<Role> Roles);
+public sealed record AuthenticatedPrincipal(Guid ActorId, IReadOnlyCollection<Role> Roles, TenantId Tenant);

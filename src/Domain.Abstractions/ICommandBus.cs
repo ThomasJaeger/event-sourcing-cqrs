@@ -26,6 +26,7 @@ public interface ICommandBus
         ICommand command,
         Guid actorId,
         IReadOnlyCollection<Role> roles,
+        TenantId tenant,
         string? idempotencyKey,
         CancellationToken ct);
 }

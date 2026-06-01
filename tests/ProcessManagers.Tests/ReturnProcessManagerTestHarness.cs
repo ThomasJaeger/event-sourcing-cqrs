@@ -35,6 +35,7 @@ internal sealed class ReturnProcessManagerTestHarness
 {
     private readonly InMemoryEventStore _store = new();
     private readonly ICommandContextAccessor _accessor = new AsyncLocalCommandContextAccessor();
+    private readonly ICurrentTenantAccessor _tenantAccessor = new AsyncLocalCurrentTenantAccessor();
     private readonly StubSkuToInventoryIdStore _skuLookup = new();
     private readonly StubOrderIdToPaymentIdStore _paymentLookup = new();
     private readonly EventStoreRepository<Shipment> _shipments;
@@ -44,8 +45,8 @@ internal sealed class ReturnProcessManagerTestHarness
 
     public ReturnProcessManagerTestHarness()
     {
-        _shipments = new EventStoreRepository<Shipment>(_store, _accessor);
-        _pms = new ProcessManagerRepository<ReturnProcessManager>(_store, _accessor);
+        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor);
+        _pms = new ProcessManagerRepository<ReturnProcessManager>(_store, _accessor, _tenantAccessor);
         Bus = new RecordingCausedCommandBus();
         _handler = new ReturnProcessManagerHandler(Bus, _pms, _shipments, _skuLookup, _paymentLookup);
     }

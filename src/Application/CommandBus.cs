@@ -57,6 +57,7 @@ public sealed class CommandBus : ICommandBus
         ICommand command,
         Guid actorId,
         IReadOnlyCollection<Role> roles,
+        TenantId tenant,
         string? idempotencyKey,
         CancellationToken ct)
     {
@@ -73,6 +74,7 @@ public sealed class CommandBus : ICommandBus
                 ServiceName = options.ServiceName,
                 IdempotencyKey = idempotencyKey
             },
+            tenant,
             ct);
     }
 
@@ -93,6 +95,9 @@ public sealed class CommandBus : ICommandBus
                 ServiceName = options.ServiceName,
                 IdempotencyKey = idempotencyKey
             },
+            // The bare path carries no principal and no causing event, so the default tenant is the
+            // honest value (the no-principal funnel; see the SendInternal callers).
+            WellKnownTenants.Default,
             ct);
 
     // Process-manager dispatch enters here through CausedCommandBus (ADR 0014).
@@ -103,7 +108,7 @@ public sealed class CommandBus : ICommandBus
     // dispatch runs in SystemActor mode under Role.System (the single source on
     // SystemActor), so the authorization behavior enforces the caused path.
     internal Task SendWithContextAsync(
-        ICommand command, CausedDispatchFragment fragment, CancellationToken ct)
+        ICommand command, CausedDispatchFragment fragment, TenantId tenant, CancellationToken ct)
         => DispatchAsync(
             command,
             (timeProvider, _) => new CommandContext(timeProvider)
@@ -116,6 +121,7 @@ public sealed class CommandBus : ICommandBus
                 ServiceName = fragment.ServiceName,
                 IdempotencyKey = fragment.IdempotencyKey
             },
+            tenant,
             ct);
 
     // The one dispatch loop both entry points run: open a scope, resolve the
@@ -127,6 +133,7 @@ public sealed class CommandBus : ICommandBus
     private async Task DispatchAsync(
         ICommand command,
         Func<TimeProvider, ApplicationOptions, CommandContext> buildContext,
+        TenantId tenant,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -136,13 +143,19 @@ public sealed class CommandBus : ICommandBus
         var handler = sp.GetRequiredService(invoker.HandlerType);
         var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
         var accessor = sp.GetRequiredService<ICommandContextAccessor>();
+        var tenantAccessor = sp.GetRequiredService<ICurrentTenantAccessor>();
         var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
         var options = sp.GetService<ApplicationOptions>() ?? new ApplicationOptions();
 
         var context = buildContext(timeProvider, options);
 
+        // The tenant is pushed onto its accessor in the same block as the command
+        // context, so a handler that finds a context also finds the tenant. Both
+        // restore in finally so a nested dispatch sees its parent's values.
         var previous = accessor.Current;
+        var previousTenant = tenantAccessor.Current;
         accessor.Current = context;
+        tenantAccessor.Current = tenant;
         try
         {
             var pipeline = CommandPipelineBuilder.Build(
@@ -152,6 +165,7 @@ public sealed class CommandBus : ICommandBus
         finally
         {
             accessor.Current = previous;
+            tenantAccessor.Current = previousTenant;
         }
     }
 

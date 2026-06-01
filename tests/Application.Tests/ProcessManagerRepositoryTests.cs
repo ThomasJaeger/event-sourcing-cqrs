@@ -12,7 +12,7 @@ public class ProcessManagerRepositoryTests
         StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     private static ProcessManagerRepository<TestPm> NewRepository(IEventStore store)
-        => new(store, new AsyncLocalCommandContextAccessor());
+        => new(store, new AsyncLocalCommandContextAccessor(), new AsyncLocalCurrentTenantAccessor());
 
     private static TestPm Factory(StreamId sid) => new(sid);
 
