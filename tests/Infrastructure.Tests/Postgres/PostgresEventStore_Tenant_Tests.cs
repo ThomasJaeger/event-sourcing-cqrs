@@ -115,6 +115,37 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         read[0].Metadata.Tenant.Should().Be(OtherTenant);
     }
 
+    [Fact]
+    public async Task A_new_event_has_its_tenant_in_the_generated_tenant_id_column()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var store = new PostgresEventStore(
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+        var streamId = NewStreamId();
+        await store.AppendAsync(
+            streamId, 0,
+            [BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 5m), tenant: OtherTenant)],
+            CancellationToken.None);
+
+        var tenantId = await ScalarAsync<Guid>(connStr, "SELECT tenant_id FROM event_store.events");
+
+        tenantId.Should().Be(OtherTenant.Value);
+    }
+
+    [Fact]
+    public async Task A_legacy_row_has_the_default_tenant_in_the_generated_tenant_id_column()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var streamId = NewStreamId();
+        await InsertLegacyEventAsync(connStr, streamId, tenantIdJson: null);
+
+        var tenantId = await ScalarAsync<Guid>(connStr, "SELECT tenant_id FROM event_store.events");
+
+        tenantId.Should().Be(WellKnownTenants.Default.Value);
+    }
+
     // Inserts a pre-tenancy events row whose metadata blob carries the usual keys
     // but no tenant. tenantIdJson null omits the key entirely; "null" writes an
     // explicit JSON null. Both are the legacy shapes the read seam tolerates.
@@ -141,6 +172,16 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, payloadJson);
         cmd.Parameters.AddWithValue("metadata", NpgsqlDbType.Jsonb, metadataJson);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<T> ScalarAsync<T>(string connStr, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connStr);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        var result = await cmd.ExecuteScalarAsync();
+        return (T)result!;
     }
 
     private sealed record TenantPmEvent(int Step) : IProcessManagerEvent;
