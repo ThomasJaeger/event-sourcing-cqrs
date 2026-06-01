@@ -63,9 +63,9 @@ references them. TenantId behaves like StreamId, not like Money.
 - A tenant value cannot be constructed empty or default, so a structurally invalid tenant
   cannot reach a discriminator predicate. The type system, not handler discipline, holds this
   boundary.
-- Downstream Phase 10 commits consume the type: the stream-id format gains a tenant segment,
-  event metadata carries the tenant, and the current-tenant accessor is typed by it. Those
-  land in their own commits; this ADR records only the type.
+- Phase 10 commits consume the type: the stream-id format gains a tenant segment, event
+  metadata carries the tenant, and the current-tenant accessor (ADR 0031) is typed by it.
+  This ADR records only the type.
 - The pedagogical note in ADR 0005, that a reader finishing the typed-wrapper chapter finds no
   worked typed-id example in the reference implementation, is now partly answered: TenantId is
   one, justified on a security boundary rather than as general DDD advocacy.

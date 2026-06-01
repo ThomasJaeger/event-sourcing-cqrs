@@ -6,7 +6,7 @@ Accepted (May 2026). Opened at P10.2 for the stream-id and corpus-migration grou
 
 ## Context
 
-Multi-tenancy by a shared-schema discriminator (the tenant-isolation ADR) requires the tenant to appear in the stream id, in event metadata, and on every read-model row. The existing event corpus predates tenancy: every persisted stream id is two-segment and no event metadata carries a tenant. Events are immutable in this system, never mutated and never rewritten, and an aggregate's stream id cannot change mid-stream because rehydration reads by stream id. A migration strategy must add the tenant without rewriting a single historical stream id or event fact.
+Multi-tenancy by a shared-schema discriminator (ADR 0031) requires the tenant to appear in the stream id, in event metadata, and on every read-model row. The existing event corpus predates tenancy: every persisted stream id is two-segment and no event metadata carries a tenant. Events are immutable in this system, never mutated and never rewritten, and an aggregate's stream id cannot change mid-stream because rehydration reads by stream id. A migration strategy must add the tenant without rewriting a single historical stream id or event fact.
 
 ## Decision
 
@@ -25,4 +25,4 @@ The events table gains an indexed `tenant_id` column, and every read-model table
 
 ## Relationship to other ADRs
 
-ADR 0011 is amended for the tenant-after-prefix stream-id format. ADR 0029 defines the typed `TenantId` this migration keys off. The tenant-isolation ADR (the discriminator model) is the parent decision this migration serves. ADR 0013 prefix-family routing is unchanged.
+ADR 0011 is amended for the tenant-after-prefix stream-id format. ADR 0029 defines the typed `TenantId` this migration keys off. ADR 0031 (the discriminator model) is the parent decision this migration serves. ADR 0013 prefix-family routing is unchanged.
