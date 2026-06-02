@@ -16,6 +16,7 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddSingleton<IQueryHandler<Echo, string>>(handler)
             .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 
@@ -29,6 +30,7 @@ public sealed class QueryBusTests
     {
         var services = new ServiceCollection()
             .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 
@@ -44,6 +46,7 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddSingleton<IQueryHandler<Echo, string>>(handler)
             .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
         using var cts = new CancellationTokenSource();
@@ -63,6 +66,7 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddScoped<IQueryHandler<Echo, string>, EchoHandler>()
             .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         var bus = new QueryBus(services);
 
@@ -81,10 +85,11 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddSingleton<IQueryHandler<Echo, string>>(handler)
             .AddSingleton<IQueryContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 
-        await bus.AskAsync(new Echo("x"), actorId, roles, CancellationToken.None);
+        await bus.AskAsync(new Echo("x"), actorId, roles, WellKnownTenants.Default, CancellationToken.None);
 
         handler.Observed.Should().NotBeNull();
         handler.Observed!.IsAuthenticatedUserQuery.Should().BeTrue();
@@ -100,6 +105,7 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddSingleton<IQueryHandler<Echo, string>>(handler)
             .AddSingleton<IQueryContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 
@@ -117,6 +123,7 @@ public sealed class QueryBusTests
         var services = new ServiceCollection()
             .AddSingleton<IQueryHandler<Echo, string>>(new ContextCapturingHandler(accessor))
             .AddSingleton<IQueryContextAccessor>(accessor)
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 

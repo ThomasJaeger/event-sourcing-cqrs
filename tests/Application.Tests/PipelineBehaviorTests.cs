@@ -54,6 +54,7 @@ public sealed class PipelineBehaviorTests
             .AddSingleton<IQueryPipelineBehavior<Echo, string>>(new RecordingQueryBehavior(log, "first"))
             .AddSingleton<IQueryPipelineBehavior<Echo, string>>(new RecordingQueryBehavior(log, "second"))
             .AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>()
+            .AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>()
             .BuildServiceProvider();
         var bus = new QueryBus(services);
 

@@ -39,11 +39,12 @@ public sealed class QueryBus : IQueryBus
         return DispatchAsync(
             query,
             new QueryContext { ActorId = Guid.Empty },
+            WellKnownTenants.Default,
             ct);
     }
 
     public Task<TResult> AskAsync<TResult>(
-        IQuery<TResult> query, Guid actorId, IReadOnlyCollection<Role> roles, CancellationToken ct)
+        IQuery<TResult> query, Guid actorId, IReadOnlyCollection<Role> roles, TenantId tenant, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(roles);
@@ -55,6 +56,7 @@ public sealed class QueryBus : IQueryBus
                 Roles = roles,
                 IsAuthenticatedUserQuery = true
             },
+            tenant,
             ct);
     }
 
@@ -65,7 +67,7 @@ public sealed class QueryBus : IQueryBus
     // context. Returning the pipeline directly would dispose the scope before the
     // handler ran.
     private async Task<TResult> DispatchAsync<TResult>(
-        IQuery<TResult> query, IQueryContext context, CancellationToken ct)
+        IQuery<TResult> query, IQueryContext context, TenantId tenant, CancellationToken ct)
     {
         using var scope = _services.CreateScope();
         var sp = scope.ServiceProvider;
@@ -73,9 +75,15 @@ public sealed class QueryBus : IQueryBus
         var handler = sp.GetRequiredService(invoker.HandlerType);
         var behaviors = sp.GetServices(invoker.BehaviorType).ToArray();
         var accessor = sp.GetRequiredService<IQueryContextAccessor>();
+        var tenantAccessor = sp.GetRequiredService<ICurrentTenantAccessor>();
 
+        // The tenant is pushed onto its accessor in the same block as the query
+        // context, so a handler that finds a context also finds the tenant. Both
+        // restore in finally so a nested dispatch sees its parent's values.
         var previous = accessor.Current;
+        var previousTenant = tenantAccessor.Current;
         accessor.Current = context;
+        tenantAccessor.Current = tenant;
         try
         {
             var pipeline = QueryPipelineBuilder.Build<TResult>(
@@ -85,6 +93,7 @@ public sealed class QueryBus : IQueryBus
         finally
         {
             accessor.Current = previous;
+            tenantAccessor.Current = previousTenant;
         }
     }
 

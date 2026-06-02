@@ -75,19 +75,21 @@ public static class QueriesEndpoint
         }
         var principal = await principalFactory.CreateAsync(actorId, ct);
 
-        var result = await DispatchAsync(bus, query, queryType, principal.ActorId, principal.Roles, ct);
+        var result = await DispatchAsync(
+            bus, query, queryType, principal.ActorId, principal.Roles, principal.Tenant, ct);
         // Null is the not-found disposition for the nullable single-row and composed
         // views; the list queries never return null, so an empty result is still a
         // 200 with an empty array, never a 404.
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
 
-    // IQueryBus now exposes two AskAsync overloads, so GetMethod(name) is ambiguous. Select the
-    // principal-carrying one by its four parameters (query, actorId, roles, ct); the bare overload has
-    // two. The endpoint always dispatches authenticated, so the principal overload is the one to bind.
+    // IQueryBus exposes two AskAsync overloads, so GetMethod(name) is ambiguous. Select the
+    // principal-carrying one by its five parameters (query, actorId, roles, tenant, ct); the bare
+    // overload has two. The endpoint always dispatches authenticated, so the principal overload is the
+    // one to bind.
     private static readonly MethodInfo AskMethod = typeof(IQueryBus)
         .GetMethods()
-        .Single(m => m.Name == nameof(IQueryBus.AskAsync) && m.GetParameters().Length == 4);
+        .Single(m => m.Name == nameof(IQueryBus.AskAsync) && m.GetParameters().Length == 5);
 
     // IQueryBus.AskAsync is generic over the query's result type, and the
     // type-discriminated envelope resolves only the query type, not the result
@@ -100,12 +102,12 @@ public static class QueriesEndpoint
     // one consumer.
     private static async Task<object?> DispatchAsync(
         IQueryBus bus, object query, Type queryType, Guid actorId, IReadOnlyCollection<Role> roles,
-        CancellationToken ct)
+        TenantId tenant, CancellationToken ct)
     {
         var resultType = queryType.GetInterfaces()
             .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQuery<>))
             .GetGenericArguments()[0];
-        var task = (Task)AskMethod.MakeGenericMethod(resultType).Invoke(bus, [query, actorId, roles, ct])!;
+        var task = (Task)AskMethod.MakeGenericMethod(resultType).Invoke(bus, [query, actorId, roles, tenant, ct])!;
         await task;
         // The task has completed, so reading Task<TResult>.Result does not block.
         return task.GetType().GetProperty("Result")!.GetValue(task);
