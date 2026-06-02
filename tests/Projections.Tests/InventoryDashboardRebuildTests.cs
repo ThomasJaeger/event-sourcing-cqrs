@@ -116,7 +116,7 @@ public class InventoryDashboardRebuildTests : IClassFixture<PostgresFixture>
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var store = new PostgresInventoryDashboardStore(
-            readModelFactory, checkpointStore, TestNotificationPublisher.Create());
+            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor());
         var projection = new InventoryDashboardProjection(
             store, NullLogger<InventoryDashboardProjection>.Instance);
 

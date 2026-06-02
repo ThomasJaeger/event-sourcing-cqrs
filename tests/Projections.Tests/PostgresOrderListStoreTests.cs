@@ -31,7 +31,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -52,7 +52,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var orderId = Guid.NewGuid();
         var first = SampleRow(orderId);
         var second = first with { CustomerId = Guid.NewGuid(), Total = new Money(1m, Currency.USD) };
@@ -70,7 +70,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
         await InsertAndCommitAsync(store, row, position: 1);
 
@@ -93,7 +93,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var absentId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -113,7 +113,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -134,7 +134,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
 
         // Commit an advance to 5 through a first uow.
         await using (var first = await store.BeginAsync(CancellationToken.None))
@@ -157,7 +157,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var older = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-1) };
         var newer = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt };
         await InsertAndCommitAsync(store, older, position: 1);
@@ -176,7 +176,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var first = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt };
         var second = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-1) };
         var third = SampleRow(Guid.NewGuid()) with { PlacedUtc = PlacedAt.AddDays(-2) };
@@ -196,7 +196,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var first = SampleRow(Guid.NewGuid());
         var second = SampleRow(Guid.NewGuid());
         await InsertAndCommitAsync(store, first, position: 1);
@@ -214,7 +214,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var shipmentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
 
@@ -235,7 +235,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
 
         await using var uow = await store.BeginAsync(CancellationToken.None);
         (await uow.GetOrderIdByShipmentIdAsync(Guid.NewGuid(), CancellationToken.None))
@@ -248,7 +248,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
         await InsertAndCommitAsync(store, row, position: 1);
 
@@ -271,7 +271,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var shipmentId = Guid.NewGuid();
         await using (var uow = await store.BeginAsync(CancellationToken.None))
         {
@@ -293,7 +293,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
         await InsertAndCommitAsync(store, row, position: 1);
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -318,7 +318,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
 
         // A dedicated connection parked on a LISTEN, the shape the production hub
@@ -360,7 +360,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
         var row = SampleRow(Guid.NewGuid());
 
         await using var listener = new NpgsqlConnection(connStr);

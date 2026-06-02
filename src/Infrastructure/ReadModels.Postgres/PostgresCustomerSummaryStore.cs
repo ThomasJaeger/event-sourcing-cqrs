@@ -15,18 +15,22 @@ public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
     public PostgresCustomerSummaryStore(
         IReadModelConnectionFactory factory,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(publisher);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         _factory = factory;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<ICustomerSummaryUnitOfWork> BeginAsync(CancellationToken ct)

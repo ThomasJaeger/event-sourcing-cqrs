@@ -15,18 +15,22 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
     public PostgresInventoryDashboardStore(
         IReadModelConnectionFactory factory,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(publisher);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         _factory = factory;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<IInventoryDashboardUnitOfWork> BeginAsync(CancellationToken ct)

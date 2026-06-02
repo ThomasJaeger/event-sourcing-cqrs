@@ -32,6 +32,10 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
             opts.ConnectionString = "Host=localhost;Database=stub");
         services.AddReadModels(opts =>
             opts.ConnectionString = "Host=localhost;Database=stub");
+        // The read-side stores now take ICurrentTenantAccessor; a host wires it
+        // through AddApplication. This graph test composes only the read side, so it
+        // registers the accessor through the local stub the same way a host would.
+        services.AddSingleton<ICurrentTenantAccessor, StubTenantAccessor>();
 
         // await using on the provider: NpgsqlReadModelConnectionFactory is an
         // IAsyncDisposable-only singleton, and ServiceProvider.Dispose throws
