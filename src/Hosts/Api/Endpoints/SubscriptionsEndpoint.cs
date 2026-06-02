@@ -26,6 +26,7 @@ public static class SubscriptionsEndpoint
         IPermissionAuthorizer authorizer,
         IResourceOwnershipResolver ownership,
         IOrderDetailStore orderDetailStore,
+        ICurrentTenantAccessor tenantAccessor,
         CancellationToken ct)
     {
         var actorClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -35,16 +36,28 @@ public static class SubscriptionsEndpoint
         }
         var principal = await principalFactory.CreateAsync(actorId, ct);
 
-        var allowed = request.ResourceType switch
+        // The ownership check reads the order-detail header outside the query bus, so this path
+        // sets the current tenant from the principal and restores it after, the same set-and-restore
+        // the query bus runs. Without it the header read fails closed on an unset tenant.
+        var previousTenant = tenantAccessor.Current;
+        tenantAccessor.Current = principal.Tenant;
+        try
         {
-            SubscriptionResourceType.Order => await IsOrderSubscriptionAllowedAsync(
-                request.ResourceId, actorId, principal.Roles, authorizer, ownership, orderDetailStore, ct),
-            SubscriptionResourceType.Inventory =>
-                authorizer.IsAuthorized(principal.Roles, Permission.ViewInventory),
-            _ => false,
-        };
+            var allowed = request.ResourceType switch
+            {
+                SubscriptionResourceType.Order => await IsOrderSubscriptionAllowedAsync(
+                    request.ResourceId, actorId, principal.Roles, authorizer, ownership, orderDetailStore, ct),
+                SubscriptionResourceType.Inventory =>
+                    authorizer.IsAuthorized(principal.Roles, Permission.ViewInventory),
+                _ => false,
+            };
 
-        return Results.Ok(new SubscriptionAuthorizationResponse(allowed));
+            return Results.Ok(new SubscriptionAuthorizationResponse(allowed));
+        }
+        finally
+        {
+            tenantAccessor.Current = previousTenant;
+        }
     }
 
     // Reproduces GetOrderDetailHandler's gate-and-ownership split: the ViewOrder gate, then the

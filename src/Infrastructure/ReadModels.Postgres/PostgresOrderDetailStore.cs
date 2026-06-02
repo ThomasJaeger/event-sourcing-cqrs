@@ -54,6 +54,7 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
 
     public async Task<OrderDetailRow?> GetHeaderAsync(Guid orderId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
@@ -61,8 +62,9 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
             "completed_utc, returned_utc, total_amount, total_currency, " +
             "shipping_address_street, shipping_address_city, shipping_address_postal_code, " +
             "shipping_address_country, last_updated_utc " +
-            "FROM read_models.order_detail WHERE order_id = @order_id";
+            "FROM read_models.order_detail WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))

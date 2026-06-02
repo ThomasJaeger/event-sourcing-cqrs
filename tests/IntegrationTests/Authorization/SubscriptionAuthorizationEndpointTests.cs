@@ -7,6 +7,8 @@ using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.IntegrationTests.Authentication;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using NpgsqlTypes;
 using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.Authorization;
@@ -22,6 +24,8 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
 
     private static readonly DateTime SeededAt =
         new DateTime(2026, 5, 24, 12, 0, 0, DateTimeKind.Utc);
+
+    private static readonly Guid OtherTenant = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     public SubscriptionAuthorizationEndpointTests(ApiFixture fixture) => _fixture = fixture;
 
@@ -109,6 +113,26 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task An_owner_is_denied_a_subscription_to_its_order_seeded_under_another_tenant()
+    {
+        var customerActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(customerActor, Role.Customer);
+        var orderId = Guid.NewGuid();
+        // The header records this actor as its owner but lives under another tenant. The endpoint
+        // reads the header under the caller's default tenant, so the row is invisible and ownership
+        // cannot be confirmed. Contrast An_owner_may_subscribe_to_its_own_order, the same-tenant case.
+        await SeedOrderHeaderUnderTenantAsync(orderId, ownerCustomerId: customerActor, tenant: OtherTenant);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.Order, orderId.ToString()),
+            customerActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeFalse();
+    }
+
     private async Task<Guid> SeedOrderAsync(Guid ownerCustomerId)
     {
         var orderId = Guid.NewGuid();
@@ -143,5 +167,24 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
         var response = await PostAuthorizeAsAsync(request, actorId);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         return await response.Content.ReadAsStringAsync();
+    }
+
+    // Direct-inserts an order-detail header under an explicit tenant, the way a second tenant's
+    // projection would have written it. The unit-of-work seed path writes the default tenant only,
+    // so a cross-tenant row is seeded by raw insert (ApiFixture exposes the connection string).
+    private async Task SeedOrderHeaderUnderTenantAsync(Guid orderId, Guid ownerCustomerId, Guid tenant)
+    {
+        await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "INSERT INTO read_models.order_detail (order_id, customer_id, status, last_updated_utc, tenant_id) " +
+            "VALUES (@order_id, @customer_id, @status, @last_updated_utc, @tenant_id)";
+        command.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        command.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, ownerCustomerId);
+        command.Parameters.AddWithValue("status", NpgsqlDbType.Text, "Placed");
+        command.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, SeededAt);
+        command.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
+        await command.ExecuteNonQueryAsync();
     }
 }
