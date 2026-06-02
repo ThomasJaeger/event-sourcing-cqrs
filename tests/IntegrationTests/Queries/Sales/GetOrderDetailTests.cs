@@ -6,8 +6,6 @@ using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
-using NpgsqlTypes;
 using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.Queries.Sales;
@@ -18,8 +16,6 @@ public class GetOrderDetailTests : IClassFixture<ApiFixture>
 
     private static readonly DateTime SeededAt =
         new DateTime(2026, 5, 24, 12, 0, 0, DateTimeKind.Utc);
-
-    private static readonly Guid OtherTenant = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     public GetOrderDetailTests(ApiFixture fixture) => _fixture = fixture;
 
@@ -95,36 +91,11 @@ public class GetOrderDetailTests : IClassFixture<ApiFixture>
         view.Header.Status.Should().Be(OrderStatus.Placed);
     }
 
+    // The cross-tenant case lives in CrossTenantQueryCases with the other query types, so the
+    // isolation logic runs both here, named for the query, and from the registry-driven coverage
+    // test. The shared raw-insert seed names the tenant explicitly, the way a second tenant's
+    // projection would have written the header.
     [Fact]
-    public async Task GetOrderDetail_for_a_header_seeded_under_another_tenant_returns_404()
-    {
-        var client = _fixture.Factory.CreateClient();
-        var orderId = Guid.NewGuid();
-        // The header exists under another tenant; the default-tenant query the bus runs cannot see
-        // it, so the composed view is null and the endpoint maps that to not found.
-        await SeedOrderHeaderUnderTenantAsync(orderId, Guid.NewGuid(), OtherTenant);
-
-        var response = await client.PostQueryAsync("GetOrderDetail", new { orderId });
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-    }
-
-    // Direct-inserts an order-detail header under an explicit tenant. The unit-of-work seed path
-    // writes the default tenant only, so a cross-tenant row is seeded by raw insert (ApiFixture
-    // exposes the connection string).
-    private async Task SeedOrderHeaderUnderTenantAsync(Guid orderId, Guid customerId, Guid tenant)
-    {
-        await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            "INSERT INTO read_models.order_detail (order_id, customer_id, status, last_updated_utc, tenant_id) " +
-            "VALUES (@order_id, @customer_id, @status, @last_updated_utc, @tenant_id)";
-        command.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
-        command.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
-        command.Parameters.AddWithValue("status", NpgsqlDbType.Text, "Placed");
-        command.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, SeededAt);
-        command.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
-        await command.ExecuteNonQueryAsync();
-    }
+    public Task GetOrderDetail_for_a_header_seeded_under_another_tenant_returns_404()
+        => CrossTenantQueryCases.For(_fixture)[typeof(GetOrderDetail)]();
 }
