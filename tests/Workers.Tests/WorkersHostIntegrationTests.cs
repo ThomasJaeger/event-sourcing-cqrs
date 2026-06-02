@@ -63,6 +63,9 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
             var eventStore = host.Services.GetRequiredService<IEventStore>();
             await eventStore.AppendAsync(stream, 0, [envelope], cts.Token);
 
+            // The query bus sets the current tenant on the read flow; this test reads
+            // the store directly, so it sets the default tenant the projection wrote under.
+            host.Services.GetRequiredService<ICurrentTenantAccessor>().Current = WellKnownTenants.Default;
             var orderListStore = host.Services.GetRequiredService<IOrderListStore>();
             var row = await PollForRowAsync(orderListStore, orderId, PollBudget, cts.Token);
 
@@ -107,6 +110,9 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
         await host.StartAsync(cts.Token);
         try
         {
+            // The query bus sets the current tenant on the read flow; this test reads
+            // the store directly, so it sets the default tenant the catch-up wrote under.
+            host.Services.GetRequiredService<ICurrentTenantAccessor>().Current = WellKnownTenants.Default;
             var dashboard = host.Services.GetRequiredService<IInventoryDashboardStore>();
             var row = await dashboard.GetBySkuAsync("SKU-1", cts.Token);
 

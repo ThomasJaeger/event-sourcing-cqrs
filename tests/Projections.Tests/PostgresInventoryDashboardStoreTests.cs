@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.TestInfrastructure;
@@ -25,7 +26,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -47,7 +48,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var firstOwner = Guid.NewGuid();
         var secondOwner = Guid.NewGuid();
 
@@ -77,7 +78,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -97,7 +98,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
@@ -135,7 +136,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
@@ -162,7 +163,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
         {
@@ -184,7 +185,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -206,7 +207,7 @@ public class PostgresInventoryDashboardStoreTests : IClassFixture<PostgresFixtur
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresInventoryDashboardStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))

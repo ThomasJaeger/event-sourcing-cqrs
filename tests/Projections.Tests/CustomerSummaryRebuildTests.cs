@@ -110,7 +110,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var store = new PostgresCustomerSummaryStore(
-            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor());
+            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var projection = new CustomerSummaryProjection(
             store, NullLogger<CustomerSummaryProjection>.Instance);
 

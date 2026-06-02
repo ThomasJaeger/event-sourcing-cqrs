@@ -54,13 +54,15 @@ public sealed class PostgresOrderListStore : IOrderListStore
 
     public async Task<OrderListRow?> GetAsync(Guid orderId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT order_id, customer_id, status, total_amount, total_currency, " +
             "placed_utc, last_updated_utc, is_returned, returned_utc " +
-            "FROM read_models.order_list WHERE order_id = @order_id";
+            "FROM read_models.order_list WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
@@ -85,6 +87,10 @@ public sealed class PostgresOrderListStore : IOrderListStore
     public async Task<IReadOnlyList<OrderListRow>> GetPageAsync(
         int offset, int limit, CancellationToken ct)
     {
+        // Resolve the tenant before the clamp and the limit-zero early return, so a
+        // page read with no tenant set fails closed on every path.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
+
         // Defense-in-depth clamp. 200 covers every reasonable page size for
         // a list view; the caller still gets a deterministic answer for a
         // pathological request rather than a slow scan of the whole table.
@@ -101,8 +107,10 @@ public sealed class PostgresOrderListStore : IOrderListStore
             "SELECT order_id, customer_id, status, total_amount, total_currency, " +
             "placed_utc, last_updated_utc, is_returned, returned_utc " +
             "FROM read_models.order_list " +
+            "WHERE tenant_id = @tenant " +
             "ORDER BY placed_utc DESC, order_id DESC " +
             "LIMIT @limit OFFSET @offset";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         cmd.Parameters.AddWithValue("limit", NpgsqlDbType.Integer, clampedLimit);
         cmd.Parameters.AddWithValue("offset", NpgsqlDbType.Integer, safeOffset);
 

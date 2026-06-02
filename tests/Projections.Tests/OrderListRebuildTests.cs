@@ -139,7 +139,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(
-            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor());
+            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var projection = new OrderListProjection(orderListStore, NullLogger<OrderListProjection>.Instance);
 
         var orderA = Guid.NewGuid();

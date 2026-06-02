@@ -52,13 +52,15 @@ public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore
 
     public async Task<CustomerSummaryRow?> GetAsync(Guid customerId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT customer_id, order_count, lifetime_value_amount, lifetime_value_currency, " +
             "last_order_utc, last_updated_utc " +
-            "FROM read_models.customer_summary WHERE customer_id = @customer_id";
+            "FROM read_models.customer_summary WHERE customer_id = @customer_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))

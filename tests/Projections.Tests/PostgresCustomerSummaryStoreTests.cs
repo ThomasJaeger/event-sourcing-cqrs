@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
@@ -28,7 +29,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -51,7 +52,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -77,7 +78,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -104,7 +105,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var orderRow = new CustomerSummaryOrderRow(
@@ -134,7 +135,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -153,7 +154,7 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor());
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var customerId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))

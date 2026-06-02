@@ -52,12 +52,14 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
 
     public async Task<InventoryDashboardRow?> GetBySkuAsync(string sku, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT inventory_id, sku, on_hand_quantity, reserved_quantity, last_updated_utc " +
-            "FROM read_models.inventory_dashboard WHERE sku = @sku";
+            "FROM read_models.inventory_dashboard WHERE sku = @sku AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
@@ -74,12 +76,14 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
 
     public async Task<IReadOnlyList<InventoryDashboardRow>> GetAllAsync(CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         // Ordered by sku so the dashboard list is deterministic for its consumers.
         cmd.CommandText =
             "SELECT inventory_id, sku, on_hand_quantity, reserved_quantity, last_updated_utc " +
-            "FROM read_models.inventory_dashboard ORDER BY sku";
+            "FROM read_models.inventory_dashboard WHERE tenant_id = @tenant ORDER BY sku";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var rows = new List<InventoryDashboardRow>();

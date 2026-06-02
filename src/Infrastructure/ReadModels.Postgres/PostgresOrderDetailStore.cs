@@ -97,14 +97,17 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
 
     public async Task<IReadOnlyList<OrderDetailLineRow>> GetLinesAsync(Guid orderId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         // ORDER BY line_id for deterministic test reads; lines have no intrinsic
         // order from the events.
         cmd.CommandText =
             "SELECT order_id, line_id, sku, quantity, unit_price_amount, unit_price_currency " +
-            "FROM read_models.order_detail_lines WHERE order_id = @order_id ORDER BY line_id";
+            "FROM read_models.order_detail_lines WHERE order_id = @order_id AND tenant_id = @tenant " +
+            "ORDER BY line_id";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var rows = new List<OrderDetailLineRow>();
@@ -123,14 +126,16 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
     public async Task<IReadOnlyList<OrderDetailTimelineRow>> GetTimelineAsync(
         Guid orderId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         // ORDER BY global_position: the order the events were observed.
         cmd.CommandText =
             "SELECT order_id, global_position, event_type, occurred_utc, payload " +
-            "FROM read_models.order_detail_timeline WHERE order_id = @order_id " +
+            "FROM read_models.order_detail_timeline WHERE order_id = @order_id AND tenant_id = @tenant " +
             "ORDER BY global_position";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var rows = new List<OrderDetailTimelineRow>();
