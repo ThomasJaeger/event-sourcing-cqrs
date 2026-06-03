@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
@@ -9,6 +10,11 @@ namespace EventSourcingCqrs.Projections.Tests;
 public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
 {
     private const string ProjectionName = "sku-to-inventory-id";
+
+    private static readonly TenantId TenantA =
+        TenantId.From(Guid.Parse("a0000000-0000-0000-0000-0000000000a1"));
+    private static readonly TenantId TenantB =
+        TenantId.From(Guid.Parse("b0000000-0000-0000-0000-0000000000b2"));
 
     private readonly PostgresFixture _fixture;
 
@@ -23,7 +29,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var inventoryId = Guid.NewGuid();
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
@@ -32,7 +38,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             await uow.CommitAsync(ProjectionName, 5, CancellationToken.None);
         }
 
-        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(inventoryId);
+        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(inventoryId);
         var checkpoint = await new PostgresCheckpointStore(factory)
             .GetPositionAsync(ProjectionName, CancellationToken.None);
         checkpoint.Should().Be(5);
@@ -46,9 +52,10 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var store = new PostgresSkuToInventoryIdStore(
             new NpgsqlReadModelConnectionFactory(dataSource),
             new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource)),
-            TestNotificationPublisher.Create());
+            TestNotificationPublisher.Create(),
+            new StubTenantAccessor { Current = WellKnownTenants.Default });
 
-        (await store.GetInventoryIdAsync("SKU-MISSING", CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-MISSING", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -57,7 +64,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
 
@@ -65,7 +72,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         await RecordAndCommitAsync(store, "SKU-1", second, position: 2);
 
         // ON CONFLICT DO NOTHING: the first mapping stands, the second is discarded.
-        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(first);
+        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(first);
     }
 
     [Fact]
@@ -74,7 +81,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await using (var uow = await store.BeginAsync(CancellationToken.None))
         {
@@ -82,7 +89,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             // The block exits without CommitAsync: DisposeAsync rolls back.
         }
 
-        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
         var checkpoint = await new PostgresCheckpointStore(factory)
             .GetPositionAsync(ProjectionName, CancellationToken.None);
         checkpoint.Should().Be(0);
@@ -94,14 +101,46 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var factory = new NpgsqlReadModelConnectionFactory(dataSource);
-        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create());
+        var store = new PostgresSkuToInventoryIdStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         await RecordAndCommitAsync(store, "SKU-1", Guid.NewGuid(), position: 1);
         await RecordAndCommitAsync(store, "SKU-2", Guid.NewGuid(), position: 2);
 
         await store.TruncateAsync(CancellationToken.None);
 
-        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().BeNull();
-        (await store.GetInventoryIdAsync("SKU-2", CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-2", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+    }
+
+    // Green-with-implementation: the same sku under two tenants resolves to each
+    // tenant's own InventoryId, now that the lookup key is (tenant_id, sku) (0018).
+    [Fact]
+    public async Task GetInventoryIdAsync_resolves_per_tenant_for_the_same_sku()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        const string sku = "SKU-SHARED";
+        var inventoryA = Guid.NewGuid();
+        var inventoryB = Guid.NewGuid();
+
+        var tenant = new StubTenantAccessor { Current = TenantA };
+        var store = new PostgresSkuToInventoryIdStore(
+            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), tenant);
+
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.RecordAsync(sku, inventoryA, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+        tenant.Current = TenantB;
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            await uow.RecordAsync(sku, inventoryB, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        (await store.GetInventoryIdAsync(sku, TenantA, CancellationToken.None)).Should().Be(inventoryA);
+        (await store.GetInventoryIdAsync(sku, TenantB, CancellationToken.None)).Should().Be(inventoryB);
     }
 
     private static async Task RecordAndCommitAsync(

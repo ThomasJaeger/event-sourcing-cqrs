@@ -75,7 +75,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(17);
+        rows.Should().HaveCount(18);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -127,6 +127,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[16].Version.Should().Be(17);
         rows[16].Name.Should().Be("add_read_model_tenant_id");
         rows[16].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[17].Version.Should().Be(18);
+        rows[17].Name.Should().Be("tenant_scoped_sku_uniqueness");
+        rows[17].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -145,7 +148,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0015 add_current_user_roles.");
         log.Should().Contain("Applying 0016 add_events_tenant_id.");
         log.Should().Contain("Applying 0017 add_read_model_tenant_id.");
-        log.Should().Contain("Applied 17 migration(s).");
+        log.Should().Contain("Applying 0018 tenant_scoped_sku_uniqueness.");
+        log.Should().Contain("Applied 18 migration(s).");
     }
 
     [Fact]
@@ -165,7 +169,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(17);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(18);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -221,7 +225,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(17);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(18);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
@@ -277,7 +281,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 17 migration(s) pending.");
+        log.Should().Contain("Dry run: 18 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -295,6 +299,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0015 add_current_user_roles"));
         log.Should().Contain(m => m.EndsWith("0016 add_events_tenant_id"));
         log.Should().Contain(m => m.EndsWith("0017 add_read_model_tenant_id"));
+        log.Should().Contain(m => m.EndsWith("0018 tenant_scoped_sku_uniqueness"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();

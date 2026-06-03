@@ -16,18 +16,25 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
+    // The accessor is held to thread into the unit of work, where RecordAsync tags the
+    // write's tenant; GetInventoryIdAsync takes the tenant as a parameter (the process
+    // manager reads it off the untenanted dispatch loop, so the accessor is not set there).
     public PostgresSkuToInventoryIdStore(
         IReadModelConnectionFactory factory,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(publisher);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         _factory = factory;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<ISkuToInventoryIdUnitOfWork> BeginAsync(CancellationToken ct)
@@ -36,7 +43,8 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresSkuToInventoryIdUnitOfWork(connection, transaction, _checkpointStore, _publisher);
+            return new PostgresSkuToInventoryIdUnitOfWork(
+                connection, transaction, _checkpointStore, _publisher, _tenantAccessor);
         }
         catch
         {
@@ -47,14 +55,17 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore
         }
     }
 
-    public async Task<Guid?> GetInventoryIdAsync(string sku, CancellationToken ct)
+    public async Task<Guid?> GetInventoryIdAsync(string sku, TenantId tenant, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
+        ArgumentNullException.ThrowIfNull(tenant);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "SELECT inventory_id FROM read_models.sku_to_inventory_id WHERE sku = @sku";
+            "SELECT inventory_id FROM read_models.sku_to_inventory_id " +
+            "WHERE sku = @sku AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }

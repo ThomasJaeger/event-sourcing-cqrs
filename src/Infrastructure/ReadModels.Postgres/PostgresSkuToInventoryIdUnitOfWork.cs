@@ -16,18 +16,21 @@ internal sealed class PostgresSkuToInventoryIdUnitOfWork : ISkuToInventoryIdUnit
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresSkuToInventoryIdUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -37,15 +40,19 @@ internal sealed class PostgresSkuToInventoryIdUnitOfWork : ISkuToInventoryIdUnit
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // ON CONFLICT DO NOTHING: a SKU maps to one InventoryId for its lifetime,
-        // so a redelivered InventoryCreated for the same SKU leaves the first
-        // mapping in place rather than erroring.
+        // ON CONFLICT (tenant_id, sku) DO NOTHING: within a tenant a SKU maps to one
+        // InventoryId for its lifetime, so a redelivered InventoryCreated for the same
+        // SKU leaves the first mapping; a different tenant's same SKU is a distinct key
+        // and records its own row. The tenant comes from the current-tenant accessor the
+        // dispatch boundary set, the same path the four public read models tag through.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.sku_to_inventory_id (sku, inventory_id) " +
-            "VALUES (@sku, @inventory_id) " +
-            "ON CONFLICT (sku) DO NOTHING";
+            "INSERT INTO read_models.sku_to_inventory_id (sku, inventory_id, tenant_id) " +
+            "VALUES (@sku, @inventory_id, @tenant_id) " +
+            "ON CONFLICT (tenant_id, sku) DO NOTHING";
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

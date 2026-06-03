@@ -171,6 +171,32 @@ public class ReadModelTenantIsolationTests : IClassFixture<PostgresFixture>
         (await store.GetBySkuAsync("SKU-B", CancellationToken.None)).Should().BeNull();
     }
 
+    // The deferred P10.6 same-sku case: the same sku under two tenants is legal only
+    // once UNIQUE(tenant_id, sku) lands (migration 0018). Under the current global
+    // UNIQUE(sku) the second seed violates the constraint (Postgres 23505) before the
+    // assertions are reached; that throw is this RED's intended failure.
+    [Fact]
+    public async Task InventoryDashboard_GetBySkuAsync_returns_each_tenants_row_for_the_same_sku_once_uniqueness_is_tenant_scoped()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var ds = NpgsqlDataSource.Create(connStr);
+        const string sku = "SKU-SHARED";
+        var inventoryA = Guid.NewGuid();
+        var inventoryB = Guid.NewGuid();
+
+        var storeA = InventoryDashboardStore(ds, TenantA);
+        await using (var uow = await storeA.BeginAsync(CancellationToken.None))
+        {
+            await uow.CreateDashboardAsync(inventoryA, sku, At, CancellationToken.None);
+            await uow.CommitAsync("inventory-dashboard", 1, CancellationToken.None);
+        }
+        await SeedInventoryDashboardAsync(connStr, inventoryB, sku, TenantB);
+
+        var storeB = InventoryDashboardStore(ds, TenantId.From(TenantB));
+        (await storeA.GetBySkuAsync(sku, CancellationToken.None))!.InventoryId.Should().Be(inventoryA);
+        (await storeB.GetBySkuAsync(sku, CancellationToken.None))!.InventoryId.Should().Be(inventoryB);
+    }
+
     [Fact]
     public async Task InventoryDashboard_GetAllAsync_under_the_default_tenant_returns_only_default_tenant_rows()
     {
