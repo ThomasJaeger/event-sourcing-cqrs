@@ -153,12 +153,12 @@ public class InMemoryInventoryDashboardStoreTests
     {
         var store = new InMemoryInventoryDashboardStore();
         await using var uow = await store.BeginAsync(CancellationToken.None);
-        uow.PublishOnCommit(new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryCreated", []));
+        uow.PublishOnCommit(new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryCreated", [], WellKnownTenants.Default));
 
         // A unit of work stages at most one notification: one handler, one event,
         // one logical change per commit.
         var act = () => uow.PublishOnCommit(
-            new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryAdjusted", []));
+            new NotificationEnvelope("InventoryDashboard", "SKU-1", "InventoryAdjusted", [], WellKnownTenants.Default));
 
         act.Should().Throw<InvalidOperationException>();
     }

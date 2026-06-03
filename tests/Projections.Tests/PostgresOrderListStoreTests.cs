@@ -334,7 +334,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         }
 
         var envelope = new NotificationEnvelope(
-            "order-list", row.OrderId.ToString(), "OrderPlaced", ["status"]);
+            "order-list", row.OrderId.ToString(), "OrderPlaced", ["status"], WellKnownTenants.Default);
         await using (var uow = await store.BeginAsync(CancellationToken.None))
         {
             await uow.InsertAsync(row, CancellationToken.None);
@@ -377,7 +377,7 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
         {
             await uow.InsertAsync(row, CancellationToken.None);
             uow.PublishOnCommit(new NotificationEnvelope(
-                "order-list", row.OrderId.ToString(), "OrderPlaced", ["status"]));
+                "order-list", row.OrderId.ToString(), "OrderPlaced", ["status"], WellKnownTenants.Default));
             // The block exits without CommitAsync: the NOTIFY is staged but never
             // issued, and DisposeAsync rolls the transaction back.
         }

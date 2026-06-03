@@ -21,5 +21,6 @@ public static class NotificationContract
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+        Converters = { new TenantIdJsonConverter() },
     };
 }

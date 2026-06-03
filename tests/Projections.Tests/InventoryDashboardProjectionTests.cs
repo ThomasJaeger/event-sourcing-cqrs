@@ -201,6 +201,35 @@ public class InventoryDashboardProjectionTests
     }
 
     [Fact]
+    public async Task InventoryCreated_stages_the_notification_carrying_the_event_metadata_tenant()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+        // A non-default tenant so the assertion proves the staged envelope carries the
+        // event's metadata tenant through, not merely that the default is present. The
+        // shared Metadata helper hardcodes WellKnownTenants.Default, so the metadata is
+        // built inline here with the chosen tenant.
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        var context = new EventContext<InventoryCreated>(
+            new InventoryCreated(Guid.NewGuid(), "SKU-1", At),
+            new EventMetadata(
+                EventId: Guid.NewGuid(),
+                CorrelationId: Guid.NewGuid(),
+                CausationId: Guid.NewGuid(),
+                ActorId: Guid.Empty,
+                Source: "test",
+                SchemaVersion: 1,
+                OccurredUtc: SystemAt,
+                Tenant: tenant),
+            GlobalPosition: 1);
+
+        await projection.HandleAsync(context, CancellationToken.None);
+
+        var staged = store.StagedNotifications.Should().ContainSingle().Subject;
+        staged.Tenant.Should().Be(tenant);
+    }
+
+    [Fact]
     public async Task InventoryAdjusted_stages_keyed_by_the_returned_sku()
     {
         var store = new InMemoryInventoryDashboardStore();

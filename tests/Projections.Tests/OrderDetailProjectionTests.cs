@@ -636,6 +636,35 @@ public class OrderDetailProjectionTests
     }
 
     [Fact]
+    public async Task OrderDrafted_stages_the_notification_carrying_the_event_metadata_tenant()
+    {
+        var store = new InMemoryOrderDetailStore();
+        var projection = Projection(store);
+        // A non-default tenant so the assertion proves the staged envelope carries the
+        // event's metadata tenant through, not merely that the default is present. The
+        // shared Metadata helper hardcodes WellKnownTenants.Default, so the metadata is
+        // built inline here with the chosen tenant.
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        var context = new EventContext<OrderDrafted>(
+            new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), At),
+            new EventMetadata(
+                EventId: Guid.NewGuid(),
+                CorrelationId: Guid.NewGuid(),
+                CausationId: Guid.NewGuid(),
+                ActorId: Guid.Empty,
+                Source: "test",
+                SchemaVersion: 1,
+                OccurredUtc: SystemAt,
+                Tenant: tenant),
+            GlobalPosition: 1);
+
+        await projection.HandleAsync(context, CancellationToken.None);
+
+        var staged = store.StagedNotifications.Should().ContainSingle().Subject;
+        staged.Tenant.Should().Be(tenant);
+    }
+
+    [Fact]
     public async Task A_payment_event_with_no_mapping_stages_no_notification()
     {
         var store = new InMemoryOrderDetailStore();

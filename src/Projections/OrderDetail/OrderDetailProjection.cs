@@ -73,7 +73,7 @@ public sealed class OrderDetailProjection
         var e = context.Event;
         await uow.CreateHeaderAsync(e.OrderId, e.CustomerId, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderDrafted));
+        StageNotification(uow, e.OrderId, nameof(OrderDrafted), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -89,7 +89,7 @@ public sealed class OrderDetailProjection
         await uow.InsertLineAsync(
             new OrderDetailLineRow(e.OrderId, e.LineId, e.Sku, e.Quantity, e.UnitPrice), ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderLineAdded));
+        StageNotification(uow, e.OrderId, nameof(OrderLineAdded), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -104,7 +104,7 @@ public sealed class OrderDetailProjection
         var e = context.Event;
         await uow.DeleteLineAsync(e.OrderId, e.LineId, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderLineRemoved));
+        StageNotification(uow, e.OrderId, nameof(OrderLineRemoved), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -120,7 +120,7 @@ public sealed class OrderDetailProjection
         await uow.SetShippingAddressAsync(
             e.OrderId, e.ShippingAddress, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(ShippingAddressSet));
+        StageNotification(uow, e.OrderId, nameof(ShippingAddressSet), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -137,7 +137,7 @@ public sealed class OrderDetailProjection
         // last_updated. ApplyPlacedAsync also writes the total.
         await uow.ApplyPlacedAsync(e.OrderId, e.Total, e.PlacedUtc, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderPlaced));
+        StageNotification(uow, e.OrderId, nameof(OrderPlaced), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -152,7 +152,7 @@ public sealed class OrderDetailProjection
         var e = context.Event;
         await uow.ApplyShippedAsync(e.OrderId, e.ShippedUtc, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderShipped));
+        StageNotification(uow, e.OrderId, nameof(OrderShipped), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -167,7 +167,7 @@ public sealed class OrderDetailProjection
         var e = context.Event;
         await uow.ApplyCancelledAsync(e.OrderId, e.CancelledUtc, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderCancelled));
+        StageNotification(uow, e.OrderId, nameof(OrderCancelled), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -182,7 +182,7 @@ public sealed class OrderDetailProjection
         var e = context.Event;
         await uow.ApplyCompletedAsync(e.OrderId, e.CompletedUtc, context.Metadata.OccurredUtc, ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(OrderCompleted));
+        StageNotification(uow, e.OrderId, nameof(OrderCompleted), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -201,7 +201,7 @@ public sealed class OrderDetailProjection
         await uow.InsertShipmentMappingAsync(
             new OrderDetailShipmentRow(e.ShipmentId, e.OrderId, e.ScheduledUtc), ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(ShipmentScheduled));
+        StageNotification(uow, e.OrderId, nameof(ShipmentScheduled), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -228,7 +228,7 @@ public sealed class OrderDetailProjection
         else
         {
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(ShipmentDispatched));
+            StageNotification(uow, orderId.Value, nameof(ShipmentDispatched), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -253,7 +253,7 @@ public sealed class OrderDetailProjection
         else
         {
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(ShipmentDelivered));
+            StageNotification(uow, orderId.Value, nameof(ShipmentDelivered), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -283,7 +283,7 @@ public sealed class OrderDetailProjection
             await uow.MarkReturnedAsync(
                 orderId.Value, e.ReturnedUtc, context.Metadata.OccurredUtc, ct);
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(ShipmentReturned));
+            StageNotification(uow, orderId.Value, nameof(ShipmentReturned), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -304,7 +304,7 @@ public sealed class OrderDetailProjection
         await uow.InsertPaymentMappingAsync(
             new OrderDetailPaymentRow(e.PaymentId, e.OrderId, e.AuthorizedUtc), ct);
         await AppendTimelineAsync(uow, e.OrderId, context, ct);
-        StageNotification(uow, e.OrderId, nameof(PaymentAuthorized));
+        StageNotification(uow, e.OrderId, nameof(PaymentAuthorized), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -328,7 +328,7 @@ public sealed class OrderDetailProjection
         else
         {
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(PaymentCaptured));
+            StageNotification(uow, orderId.Value, nameof(PaymentCaptured), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -353,7 +353,7 @@ public sealed class OrderDetailProjection
         else
         {
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(PaymentRefunded));
+            StageNotification(uow, orderId.Value, nameof(PaymentRefunded), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -378,7 +378,7 @@ public sealed class OrderDetailProjection
         else
         {
             await AppendTimelineAsync(uow, orderId.Value, context, ct);
-            StageNotification(uow, orderId.Value, nameof(PaymentVoided));
+            StageNotification(uow, orderId.Value, nameof(PaymentVoided), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -389,8 +389,8 @@ public sealed class OrderDetailProjection
     // (D1), and the precise Chapter 13 widget vocabulary lands with the Cluster 2
     // retrofit pages. Called only on branches that change a row; the unmapped
     // lookup branches stage nothing.
-    private void StageNotification(IOrderDetailUnitOfWork uow, Guid orderId, string eventName)
-        => uow.PublishOnCommit(new NotificationEnvelope(Name, orderId.ToString(), eventName, []));
+    private void StageNotification(IOrderDetailUnitOfWork uow, Guid orderId, string eventName, TenantId tenant)
+        => uow.PublishOnCommit(new NotificationEnvelope(Name, orderId.ToString(), eventName, [], tenant));
 
     // One timeline entry per observed event (D1). event_type is the CLR type name,
     // equal to the event store's registered token by construction (the Postgres

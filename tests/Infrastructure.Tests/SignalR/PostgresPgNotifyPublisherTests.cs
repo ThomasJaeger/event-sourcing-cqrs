@@ -42,7 +42,8 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
             ProjectionName: "OrderDetail",
             ResourceId: "order-abc",
             EventName: "OrderShipped",
-            Widgets: new[] { "status", "timeline" });
+            Widgets: new[] { "status", "timeline" },
+            Tenant: WellKnownTenants.Default);
 
         await using (var publisherConnection = new NpgsqlConnection(connStr))
         {
@@ -83,7 +84,8 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
             ProjectionName: "OrderDetail",
             ResourceId: "order-xyz",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
 
         await using (var publisherConnection = new NpgsqlConnection(connStr))
         {
@@ -127,7 +129,8 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
             ProjectionName: "OrderDetail",
             ResourceId: "order-too-big",
             EventName: "OrderShipped",
-            Widgets: oversizedWidgets);
+            Widgets: oversizedWidgets,
+            Tenant: WellKnownTenants.Default);
 
         await using var publisherConnection = new NpgsqlConnection(connStr);
         await publisherConnection.OpenAsync();
@@ -149,7 +152,8 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
             ProjectionName: "OrderDetail",
             ResourceId: "order-no-tx",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
 
         var act = async () => await publisher.PublishAsync(envelope, CancellationToken.None);
 
@@ -166,7 +170,8 @@ public class PostgresPgNotifyPublisherTests : IClassFixture<PostgresFixture>
             ProjectionName: "OrderDetail",
             ResourceId: "order-cancel",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
 
         await using var publisherConnection = new NpgsqlConnection(connStr);
         await publisherConnection.OpenAsync();

@@ -45,7 +45,7 @@ public sealed class InventoryDashboardProjection
         }
         await uow.CreateDashboardAsync(
             context.Event.InventoryId, context.Event.Sku, context.Metadata.OccurredUtc, ct);
-        StageNotification(uow, context.Event.Sku, nameof(InventoryCreated));
+        StageNotification(uow, context.Event.Sku, nameof(InventoryCreated), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -62,7 +62,7 @@ public sealed class InventoryDashboardProjection
             context.Event.InventoryId, context.Event.QuantityDelta, context.Metadata.OccurredUtc, ct);
         if (sku is not null)
         {
-            StageNotification(uow, sku, nameof(InventoryAdjusted));
+            StageNotification(uow, sku, nameof(InventoryAdjusted), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -83,7 +83,7 @@ public sealed class InventoryDashboardProjection
             new InventoryReservationRow(e.InventoryId, e.OrderId, e.LineId, e.Quantity, e.ReservedUtc), ct);
         if (sku is not null)
         {
-            StageNotification(uow, sku, nameof(InventoryReserved));
+            StageNotification(uow, sku, nameof(InventoryReserved), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -117,7 +117,7 @@ public sealed class InventoryDashboardProjection
             await uow.DeleteReservationAsync(e.InventoryId, e.OrderId, e.LineId, ct);
             if (sku is not null)
             {
-                StageNotification(uow, sku, nameof(InventoryReleased));
+                StageNotification(uow, sku, nameof(InventoryReleased), context.Metadata.Tenant);
             }
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
@@ -129,6 +129,6 @@ public sealed class InventoryDashboardProjection
     // nothing. The widget set is empty for now: the page re-queries authoritative
     // state on any notification (D1), and the precise Chapter 13 widget vocabulary
     // lands with the Cluster 2 retrofit page.
-    private void StageNotification(IInventoryDashboardUnitOfWork uow, string sku, string eventName)
-        => uow.PublishOnCommit(new NotificationEnvelope(Name, sku, eventName, []));
+    private void StageNotification(IInventoryDashboardUnitOfWork uow, string sku, string eventName, TenantId tenant)
+        => uow.PublishOnCommit(new NotificationEnvelope(Name, sku, eventName, [], tenant));
 }

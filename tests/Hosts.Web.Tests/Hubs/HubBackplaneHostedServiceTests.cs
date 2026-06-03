@@ -14,7 +14,7 @@ public class HubBackplaneHostedServiceTests
     {
         var hubContext = new RecordingHubContext();
         var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"]);
+        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
 
         await service.DispatchAsync(envelope, CancellationToken.None);
 
@@ -30,7 +30,7 @@ public class HubBackplaneHostedServiceTests
     {
         var hubContext = new RecordingHubContext();
         var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("inventory-dashboard", "SKU-1", "InventoryAdjusted", ["on_hand"]);
+        var envelope = new NotificationEnvelope("inventory-dashboard", "SKU-1", "InventoryAdjusted", ["on_hand"], WellKnownTenants.Default);
 
         await service.DispatchAsync(envelope, CancellationToken.None);
 
@@ -45,7 +45,7 @@ public class HubBackplaneHostedServiceTests
         var service = Service(hubContext);
 
         await service.DispatchAsync(
-            new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"]),
+            new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default),
             CancellationToken.None);
 
         // Keyed on the resource id; exactly one broadcast, to that group and no other.
@@ -61,7 +61,7 @@ public class HubBackplaneHostedServiceTests
         var service = new HubBackplaneHostedService(new StubBackplane(), hubContext, logger);
 
         await service.DispatchAsync(
-            new NotificationEnvelope("customer-summary", "cust-1", "OrderPlaced", []),
+            new NotificationEnvelope("customer-summary", "cust-1", "OrderPlaced", [], WellKnownTenants.Default),
             CancellationToken.None);
 
         hubContext.Broadcasts.Should().BeEmpty();
@@ -73,7 +73,7 @@ public class HubBackplaneHostedServiceTests
     public async Task ExecuteAsync_dispatches_through_the_loop_and_stops_cleanly_on_host_stop()
     {
         var hubContext = new RecordingHubContext();
-        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"]);
+        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
         var service = new HubBackplaneHostedService(
             new StubBackplane(envelope), hubContext, NullLogger<HubBackplaneHostedService>.Instance);
 

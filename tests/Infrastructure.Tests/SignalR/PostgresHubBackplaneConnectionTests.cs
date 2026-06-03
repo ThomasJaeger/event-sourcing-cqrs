@@ -45,7 +45,8 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             ProjectionName: "OrderDetail",
             ResourceId: "order-yield",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
 
         await PublishNotificationAsync(connStr, sent);
 
@@ -76,7 +77,8 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             ProjectionName: "InventoryDashboard",
             ResourceId: "sku-abc",
             EventName: "InventoryAdjusted",
-            Widgets: new[] { "on_hand", "reserved", "available" });
+            Widgets: new[] { "on_hand", "reserved", "available" },
+            Tenant: WellKnownTenants.Default);
 
         await PublishNotificationAsync(connStr, sent);
 
@@ -148,7 +150,8 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             ProjectionName: "OrderDetail",
             ResourceId: "order-valid",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
         await PublishNotificationAsync(connStr, valid);
 
         await collectTask;
@@ -206,7 +209,8 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             ProjectionName: "OrderDetail",
             ResourceId: "order-reconnect",
             EventName: "OrderShipped",
-            Widgets: new[] { "status" });
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
         await PublishNotificationAsync(connStr, envelope);
 
         await collectTask;
