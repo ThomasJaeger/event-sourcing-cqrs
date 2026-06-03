@@ -9,5 +9,5 @@ namespace EventSourcingCqrs.Hosts.Web.Hubs;
 // cannot use the circuit-scoped identity provider ApiClient signs through.
 public interface ISubscriptionAuthorizationClient
 {
-    Task<bool> AuthorizeAsync(Guid actorId, SubscriptionAuthorizationRequest request, CancellationToken ct);
+    Task<SubscriptionAuthorizationResult> AuthorizeAsync(Guid actorId, SubscriptionAuthorizationRequest request, CancellationToken ct);
 }

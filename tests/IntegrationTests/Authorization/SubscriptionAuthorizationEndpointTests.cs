@@ -102,6 +102,24 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task An_allowed_subscription_response_carries_the_authoritative_tenant()
+    {
+        var supportActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(supportActor, Role.Support);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.Inventory, "SKU-1"), supportActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>();
+        body!.Allowed.Should().BeTrue();
+        // The authoritative tenant on allow is the principal's tenant, today WellKnownTenants.Default
+        // (the factory hardcodes it). The response carries it so the Web hub builds the tenant-qualified
+        // group from the authoritative source rather than any wire claim. Deny carries no tenant.
+        body.Tenant.Should().Be(WellKnownTenants.Default.Value);
+    }
+
+    [Fact]
     public async Task An_unauthenticated_request_is_rejected_with_401()
     {
         var client = _fixture.Factory.CreateClient();

@@ -52,7 +52,9 @@ public static class SubscriptionsEndpoint
                 _ => false,
             };
 
-            return Results.Ok(new SubscriptionAuthorizationResponse(allowed));
+            // The tenant rides the response only on allow (null is omitted from the JSON), so the deny
+            // bytes are unchanged and the Web hub builds its group from the authoritative tenant.
+            return Results.Ok(new SubscriptionAuthorizationResponse(allowed, allowed ? principal.Tenant.Value : null));
         }
         finally
         {

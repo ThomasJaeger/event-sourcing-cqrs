@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace EventSourcingCqrs.Application;
 
 // The Web-to-Api contract for a dashboard subscription-authorization check (P9.6). The Web host's
@@ -20,7 +22,16 @@ public enum SubscriptionResourceType
 // forwarded identity), never from the body, so a caller cannot ask whether someone else may subscribe.
 public sealed record SubscriptionAuthorizationRequest(SubscriptionResourceType ResourceType, string ResourceId);
 
-// Carries only the decision. No reason and no resource detail, so a denied response is byte-identical
-// whether the resource is not owned or does not exist: the existence-hiding invariant the order read
-// enforces (ADR 0028).
-public sealed record SubscriptionAuthorizationResponse(bool Allowed);
+// Carries the decision and, on allow, the authoritative tenant the caller is scoped to, so the Web hub
+// can build a tenant-qualified group from a trusted source rather than a wire claim. The tenant is
+// omitted from the JSON when null (deny), so a denied response stays byte-identical whether the resource
+// is not owned or does not exist: the existence-hiding invariant the order read enforces (ADR 0028).
+public sealed record SubscriptionAuthorizationResponse(
+    bool Allowed,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? Tenant = null);
+
+// The Web hub's outcome of an authorize call: the decision plus, on allow, the authoritative tenant the
+// caller is scoped to. The hub builds a tenant-qualified SignalR group from this tenant, sourced from
+// the Api host's response rather than any wire claim. Tenant is null on deny, and stays null until the
+// response carries it, so the deny path is unchanged.
+public sealed record SubscriptionAuthorizationResult(bool Allowed, Guid? Tenant);

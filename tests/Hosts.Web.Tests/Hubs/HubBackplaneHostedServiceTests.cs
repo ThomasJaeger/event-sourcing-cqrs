@@ -20,7 +20,7 @@ public class HubBackplaneHostedServiceTests
 
         hubContext.Broadcasts.Should().ContainSingle();
         var (group, method, args) = hubContext.Broadcasts[0];
-        group.Should().Be("order:order-7");
+        group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
         method.Should().Be(HubBackplaneHostedService.ClientMethod);
         args.Should().ContainSingle().Which.Should().Be(envelope);
     }
@@ -35,7 +35,25 @@ public class HubBackplaneHostedServiceTests
         await service.DispatchAsync(envelope, CancellationToken.None);
 
         hubContext.Broadcasts.Should().ContainSingle();
-        hubContext.Broadcasts[0].Group.Should().Be("inventory:SKU-1");
+        hubContext.Broadcasts[0].Group.Should().Be("tenant:00000000000000000000000000000001:inventory:SKU-1");
+    }
+
+    [Fact]
+    public async Task DispatchAsync_broadcasts_to_the_tenant_qualified_group()
+    {
+        var hubContext = new RecordingHubContext();
+        var service = Service(hubContext);
+        // Inventory is the load-bearing family: the same SKU is legal under two tenants
+        // (P10.6), so the group must qualify by the envelope's tenant or two tenants'
+        // subscribers collide on inventory:SKU-1. A non-default tenant proves the segment
+        // is the envelope's tenant, rendered in the StreamId {guid:N} form.
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        var envelope = new NotificationEnvelope(
+            "inventory-dashboard", "SKU-1", "InventoryAdjusted", [], tenant);
+
+        await service.DispatchAsync(envelope, CancellationToken.None);
+
+        hubContext.Broadcasts[0].Group.Should().Be("tenant:55555555555555555555555555555555:inventory:SKU-1");
     }
 
     [Fact]
@@ -50,7 +68,7 @@ public class HubBackplaneHostedServiceTests
 
         // Keyed on the resource id; exactly one broadcast, to that group and no other.
         hubContext.Broadcasts.Should().ContainSingle()
-            .Which.Group.Should().Be("order:order-7");
+            .Which.Group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
     }
 
     [Fact]
@@ -86,7 +104,7 @@ public class HubBackplaneHostedServiceTests
 
         finished.Should().BeSameAs(stop);
         await stop;
-        hubContext.Broadcasts.Should().ContainSingle().Which.Group.Should().Be("order:order-7");
+        hubContext.Broadcasts.Should().ContainSingle().Which.Group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
     }
 
     private static HubBackplaneHostedService Service(RecordingHubContext hubContext)

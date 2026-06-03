@@ -27,7 +27,7 @@ internal sealed class SubscriptionAuthorizationClient : ISubscriptionAuthorizati
         _signer = signer;
     }
 
-    public async Task<bool> AuthorizeAsync(
+    public async Task<SubscriptionAuthorizationResult> AuthorizeAsync(
         Guid actorId, SubscriptionAuthorizationRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -46,11 +46,12 @@ internal sealed class SubscriptionAuthorizationClient : ISubscriptionAuthorizati
         // refusal.
         if (!response.IsSuccessStatusCode)
         {
-            return false;
+            return new SubscriptionAuthorizationResult(false, null);
         }
 
         var body = await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>(
             JsonSerializerOptions.Web, ct);
-        return body?.Allowed ?? false;
+        // The wire tenant is present on allow and absent (null) on deny; pass it through to the hub.
+        return new SubscriptionAuthorizationResult(body?.Allowed ?? false, body?.Tenant);
     }
 }

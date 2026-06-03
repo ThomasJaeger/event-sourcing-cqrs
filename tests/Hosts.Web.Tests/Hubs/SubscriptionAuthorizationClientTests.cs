@@ -28,12 +28,12 @@ public class SubscriptionAuthorizationClientTests
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.localhost") };
         var client = new SubscriptionAuthorizationClient(httpClient, signer);
 
-        var allowed = await client.AuthorizeAsync(
+        var result = await client.AuthorizeAsync(
             Actor,
             new SubscriptionAuthorizationRequest(SubscriptionResourceType.Order, Guid.NewGuid().ToString()),
             CancellationToken.None);
 
-        allowed.Should().BeTrue();
+        result.Allowed.Should().BeTrue();
         var expectedValue = ForwardedIdentityValue.Format(Actor, Array.Empty<Role>());
         handler.Request!.Headers.GetValues(ForwardedIdentityHeaders.HeaderName)
             .Should().ContainSingle().Which.Should().Be(expectedValue);
@@ -48,12 +48,12 @@ public class SubscriptionAuthorizationClientTests
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.localhost") };
         var client = new SubscriptionAuthorizationClient(httpClient, NewSigner());
 
-        var allowed = await client.AuthorizeAsync(
+        var result = await client.AuthorizeAsync(
             Actor,
             new SubscriptionAuthorizationRequest(SubscriptionResourceType.Inventory, "SKU-1"),
             CancellationToken.None);
 
-        allowed.Should().BeFalse();
+        result.Allowed.Should().BeFalse();
     }
 
     [Fact]
@@ -63,12 +63,12 @@ public class SubscriptionAuthorizationClientTests
         using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.localhost") };
         var client = new SubscriptionAuthorizationClient(httpClient, NewSigner());
 
-        var allowed = await client.AuthorizeAsync(
+        var result = await client.AuthorizeAsync(
             Actor,
             new SubscriptionAuthorizationRequest(SubscriptionResourceType.Order, Guid.NewGuid().ToString()),
             CancellationToken.None);
 
-        allowed.Should().BeFalse();
+        result.Allowed.Should().BeFalse();
     }
 
     private static ForwardedIdentitySigner NewSigner() =>

@@ -65,7 +65,7 @@ internal sealed class HubBackplaneHostedService : BackgroundService
             return;
         }
 
-        var group = $"{prefix}:{envelope.ResourceId}";
+        var group = HubGroup.ForResource(envelope.Tenant, prefix, envelope.ResourceId);
         await _hubContext.Clients.Group(group).SendAsync(ClientMethod, envelope, ct);
     }
 }
