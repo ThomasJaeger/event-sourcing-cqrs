@@ -152,10 +152,10 @@ public class ReadModelTenantIsolationTests : IClassFixture<PostgresFixture>
     [Fact]
     public async Task InventoryDashboard_GetBySkuAsync_under_the_default_tenant_does_not_see_a_second_tenant_sku()
     {
-        // The inventory_dashboard sku UNIQUE constraint is not tenant-scoped yet
-        // (migration 0017 deferred the composite key), so the two tenants take
-        // distinct skus here. The same-sku-across-tenants case is a P10.6 test,
-        // once the tenant-scoped uniqueness lands.
+        // This test keeps the two tenants on distinct skus. The same-sku-across-tenants
+        // case, which the global sku UNIQUE constraint once forbade, landed when migration
+        // 0018 made the uniqueness composite on the tenant-and-sku pair; it is the adjacent
+        // InventoryDashboard_GetBySkuAsync_returns_each_tenants_row test.
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var ds = NpgsqlDataSource.Create(connStr);
         var store = InventoryDashboardStore(ds, TenantA);
