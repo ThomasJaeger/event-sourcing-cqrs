@@ -28,6 +28,7 @@ public class ProjectionStartupCatchUpServiceTests
             [pA, pB],
             store,
             checkpoints,
+            new StubTenantAccessor(),
             NullLogger<ProjectionStartupCatchUpService>.Instance);
 
         await service.StartingAsync(CancellationToken.None);
@@ -55,6 +56,7 @@ public class ProjectionStartupCatchUpServiceTests
             [pA, pB],
             store,
             checkpoints,
+            new StubTenantAccessor(),
             NullLogger<ProjectionStartupCatchUpService>.Instance);
 
         await service.StartingAsync(CancellationToken.None);
@@ -74,6 +76,7 @@ public class ProjectionStartupCatchUpServiceTests
             [projection],
             store,
             checkpoints,
+            new StubTenantAccessor(),
             NullLogger<ProjectionStartupCatchUpService>.Instance);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();

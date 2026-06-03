@@ -137,11 +137,14 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
     {
         var orderId = Guid.NewGuid();
         var store = _fixture.Factory.Services.GetRequiredService<IOrderDetailStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateHeaderAsync(orderId, ownerCustomerId, SeededAt, default);
-            await uow.CommitAsync($"subscription-authz-seed-{orderId:N}", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateHeaderAsync(orderId, ownerCustomerId, SeededAt, default);
+                await uow.CommitAsync($"subscription-authz-seed-{orderId:N}", 1, default);
+            }
+        });
         return orderId;
     }
 

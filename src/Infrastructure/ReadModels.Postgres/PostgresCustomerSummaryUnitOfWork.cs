@@ -17,18 +17,21 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresCustomerSummaryUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -51,11 +54,12 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
         // currency. The defensive alternative reads the row's currency first and
         // throws on mismatch, which costs a read per placement for a v1-impossible
         // case, so v1 trusts the upstream single-currency invariant instead.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.customer_summary AS cs " +
             "(customer_id, order_count, lifetime_value_amount, lifetime_value_currency, " +
-            "last_order_utc, last_updated_utc) " +
-            "VALUES (@customer_id, 1, @amount, @currency, @placed_utc, @last_updated_utc) " +
+            "last_order_utc, last_updated_utc, tenant_id) " +
+            "VALUES (@customer_id, 1, @amount, @currency, @placed_utc, @last_updated_utc, @tenant_id) " +
             "ON CONFLICT (customer_id) DO UPDATE " +
             "SET order_count = cs.order_count + 1, " +
             "lifetime_value_amount = cs.lifetime_value_amount + EXCLUDED.lifetime_value_amount, " +
@@ -66,6 +70,7 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
         cmd.Parameters.AddWithValue("currency", NpgsqlDbType.Text, total.Currency.Code);
         cmd.Parameters.AddWithValue("placed_utc", NpgsqlDbType.TimestampTz, placedUtc);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -97,16 +102,18 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered OrderPlaced keeps the first
         // lookup row.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.customer_summary_orders " +
-            "(customer_id, order_id, total_amount, total_currency, placed_utc) " +
-            "VALUES (@customer_id, @order_id, @total_amount, @total_currency, @placed_utc) " +
+            "(customer_id, order_id, total_amount, total_currency, placed_utc, tenant_id) " +
+            "VALUES (@customer_id, @order_id, @total_amount, @total_currency, @placed_utc, @tenant_id) " +
             "ON CONFLICT (customer_id, order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, row.CustomerId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("total_amount", NpgsqlDbType.Numeric, row.Total.Amount);
         cmd.Parameters.AddWithValue("total_currency", NpgsqlDbType.Text, row.Total.Currency.Code);
         cmd.Parameters.AddWithValue("placed_utc", NpgsqlDbType.TimestampTz, row.PlacedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -116,10 +123,13 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
         cmd.Transaction = _transaction;
         // Keys on order_id alone (OrderCancelled carries no customer id), planned
         // against ix_customer_summary_orders_order_id.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "SELECT customer_id, order_id, total_amount, total_currency, placed_utc " +
-            "FROM read_models.customer_summary_orders WHERE order_id = @order_id";
+            "FROM read_models.customer_summary_orders " +
+            "WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))

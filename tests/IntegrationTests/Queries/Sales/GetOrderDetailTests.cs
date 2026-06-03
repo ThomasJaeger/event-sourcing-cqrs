@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
@@ -39,11 +40,14 @@ public class GetOrderDetailTests : IClassFixture<ApiFixture>
         var customerId = Guid.NewGuid();
 
         var store = _fixture.Factory.Services.GetRequiredService<IOrderDetailStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateHeaderAsync(orderId, customerId, SeededAt, default);
-            await uow.CommitAsync("get-order-detail-header-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateHeaderAsync(orderId, customerId, SeededAt, default);
+                await uow.CommitAsync("get-order-detail-header-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "GetOrderDetail",
@@ -67,17 +71,20 @@ public class GetOrderDetailTests : IClassFixture<ApiFixture>
         var placedUtc = SeededAt.AddMinutes(1);
 
         var store = _fixture.Factory.Services.GetRequiredService<IOrderDetailStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateHeaderAsync(orderId, customerId, SeededAt, default);
-            await uow.ApplyPlacedAsync(
-                orderId,
-                new Money(99.95m, Currency.USD),
-                placedUtc,
-                placedUtc,
-                default);
-            await uow.CommitAsync("get-order-detail-placed-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateHeaderAsync(orderId, customerId, SeededAt, default);
+                await uow.ApplyPlacedAsync(
+                    orderId,
+                    new Money(99.95m, Currency.USD),
+                    placedUtc,
+                    placedUtc,
+                    default);
+                await uow.CommitAsync("get-order-detail-placed-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "GetOrderDetail",

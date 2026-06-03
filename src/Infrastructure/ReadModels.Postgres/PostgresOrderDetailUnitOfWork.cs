@@ -19,18 +19,21 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresOrderDetailUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -45,14 +48,16 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered OrderDrafted keeps the first row.
         // The nullable columns take their NULL default until later events set them.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.order_detail (order_id, customer_id, status, last_updated_utc) " +
-            "VALUES (@order_id, @customer_id, @status, @last_updated_utc) " +
+            "INSERT INTO read_models.order_detail (order_id, customer_id, status, last_updated_utc, tenant_id) " +
+            "VALUES (@order_id, @customer_id, @status, @last_updated_utc, @tenant_id) " +
             "ON CONFLICT (order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, OrderStatus.Draft.ToString());
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -154,16 +159,18 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         // Plain INSERT, no ON CONFLICT: the Order aggregate forbids adding a
         // currently-live LineId, and OrderLineRemoved frees the key, so a re-add
         // lands cleanly without ever conflicting on the (order_id, line_id) PK.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.order_detail_lines " +
-            "(order_id, line_id, sku, quantity, unit_price_amount, unit_price_currency) " +
-            "VALUES (@order_id, @line_id, @sku, @quantity, @unit_price_amount, @unit_price_currency)";
+            "(order_id, line_id, sku, quantity, unit_price_amount, unit_price_currency, tenant_id) " +
+            "VALUES (@order_id, @line_id, @sku, @quantity, @unit_price_amount, @unit_price_currency, @tenant_id)";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, row.LineId);
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, row.Sku);
         cmd.Parameters.AddWithValue("quantity", NpgsqlDbType.Integer, row.Quantity);
         cmd.Parameters.AddWithValue("unit_price_amount", NpgsqlDbType.Numeric, row.UnitPrice.Amount);
         cmd.Parameters.AddWithValue("unit_price_currency", NpgsqlDbType.Text, row.UnitPrice.Currency.Code);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -186,10 +193,11 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         // ON CONFLICT DO NOTHING: a redelivery at the same (order_id, global_position)
         // keeps the first observation, the canonical record. The projection's
         // skip-guard is the primary defence; this is defence in depth.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.order_detail_timeline " +
-            "(order_id, global_position, event_type, occurred_utc, payload) " +
-            "VALUES (@order_id, @global_position, @event_type, @occurred_utc, @payload) " +
+            "(order_id, global_position, event_type, occurred_utc, payload, tenant_id) " +
+            "VALUES (@order_id, @global_position, @event_type, @occurred_utc, @payload, @tenant_id) " +
             "ON CONFLICT (order_id, global_position) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("global_position", NpgsqlDbType.Bigint, row.GlobalPosition);
@@ -198,6 +206,7 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         // The JSON string binds to the jsonb column; Npgsql converts at the driver,
         // the same convention as PostgresEventStore and PostgresDelayQueue.
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, row.Payload);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -207,13 +216,15 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered ShipmentScheduled keeps the first
         // mapping row. The mapping persists; nothing deletes it.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.order_detail_shipments (shipment_id, order_id, scheduled_utc) " +
-            "VALUES (@shipment_id, @order_id, @scheduled_utc) " +
+            "INSERT INTO read_models.order_detail_shipments (shipment_id, order_id, scheduled_utc, tenant_id) " +
+            "VALUES (@shipment_id, @order_id, @scheduled_utc, @tenant_id) " +
             "ON CONFLICT (shipment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, row.ShipmentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("scheduled_utc", NpgsqlDbType.TimestampTz, row.ScheduledUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -221,9 +232,12 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "SELECT order_id FROM read_models.order_detail_shipments WHERE shipment_id = @shipment_id";
+            "SELECT order_id FROM read_models.order_detail_shipments " +
+            "WHERE shipment_id = @shipment_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         var result = await cmd.ExecuteScalarAsync(ct);
         // No mapping: the shipment was scheduled before this projection observed it.
         // The handler no-ops on null rather than throwing. See ADR 0020.
@@ -236,13 +250,15 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered PaymentAuthorized keeps the first
         // mapping row. The mapping persists; nothing deletes it.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.order_detail_payments (payment_id, order_id, authorized_utc) " +
-            "VALUES (@payment_id, @order_id, @authorized_utc) " +
+            "INSERT INTO read_models.order_detail_payments (payment_id, order_id, authorized_utc, tenant_id) " +
+            "VALUES (@payment_id, @order_id, @authorized_utc, @tenant_id) " +
             "ON CONFLICT (payment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("payment_id", NpgsqlDbType.Uuid, row.PaymentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("authorized_utc", NpgsqlDbType.TimestampTz, row.AuthorizedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -250,9 +266,12 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "SELECT order_id FROM read_models.order_detail_payments WHERE payment_id = @payment_id";
+            "SELECT order_id FROM read_models.order_detail_payments " +
+            "WHERE payment_id = @payment_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("payment_id", NpgsqlDbType.Uuid, paymentId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         var result = await cmd.ExecuteScalarAsync(ct);
         // No mapping: the payment was authorized before this projection observed it.
         // The handler no-ops on null rather than throwing. See ADR 0020.

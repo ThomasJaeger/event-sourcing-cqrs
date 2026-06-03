@@ -39,7 +39,8 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresInventoryDashboardUnitOfWork(connection, transaction, _checkpointStore, _publisher);
+            return new PostgresInventoryDashboardUnitOfWork(
+                connection, transaction, _checkpointStore, _publisher, _tenantAccessor);
         }
         catch
         {

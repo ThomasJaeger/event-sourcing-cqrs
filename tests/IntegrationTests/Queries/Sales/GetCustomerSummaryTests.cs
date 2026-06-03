@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using FluentAssertions;
@@ -36,16 +37,19 @@ public class GetCustomerSummaryTests : IClassFixture<ApiFixture>
         var customerId = Guid.NewGuid();
 
         var store = _fixture.Factory.Services.GetRequiredService<ICustomerSummaryStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.ApplyPlacementAsync(
-                customerId,
-                new Money(75.00m, Currency.USD),
-                SeededAt,
-                SeededAt,
-                default);
-            await uow.CommitAsync("get-customer-summary-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.ApplyPlacementAsync(
+                    customerId,
+                    new Money(75.00m, Currency.USD),
+                    SeededAt,
+                    SeededAt,
+                    default);
+                await uow.CommitAsync("get-customer-summary-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "GetCustomerSummary",
@@ -68,12 +72,15 @@ public class GetCustomerSummaryTests : IClassFixture<ApiFixture>
         var total = new Money(75.00m, Currency.USD);
 
         var store = _fixture.Factory.Services.GetRequiredService<ICustomerSummaryStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.ApplyPlacementAsync(customerId, total, SeededAt, SeededAt, default);
-            await uow.ApplyCancellationAsync(customerId, total, SeededAt.AddMinutes(5), default);
-            await uow.CommitAsync("get-customer-summary-netting-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.ApplyPlacementAsync(customerId, total, SeededAt, SeededAt, default);
+                await uow.ApplyCancellationAsync(customerId, total, SeededAt.AddMinutes(5), default);
+                await uow.CommitAsync("get-customer-summary-netting-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "GetCustomerSummary",

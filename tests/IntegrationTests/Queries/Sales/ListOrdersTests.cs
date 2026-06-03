@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
@@ -27,12 +28,15 @@ public class ListOrdersTests : IClassFixture<ApiFixture>
 
         var store = _fixture.Factory.Services.GetRequiredService<IOrderListStore>();
         await store.TruncateAsync(default);
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.InsertAsync(older, default);
-            await uow.InsertAsync(newer, default);
-            await uow.CommitAsync("list-orders-seed-1", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.InsertAsync(older, default);
+                await uow.InsertAsync(newer, default);
+                await uow.CommitAsync("list-orders-seed-1", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "ListOrders",
@@ -57,14 +61,17 @@ public class ListOrdersTests : IClassFixture<ApiFixture>
 
         var store = _fixture.Factory.Services.GetRequiredService<IOrderListStore>();
         await store.TruncateAsync(default);
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            foreach (var row in rows)
+            await using (var uow = await store.BeginAsync(default))
             {
-                await uow.InsertAsync(row, default);
+                foreach (var row in rows)
+                {
+                    await uow.InsertAsync(row, default);
+                }
+                await uow.CommitAsync("list-orders-seed-2", 1, default);
             }
-            await uow.CommitAsync("list-orders-seed-2", 1, default);
-        }
+        });
 
         var response = await client.PostQueryAsync(
             "ListOrders",

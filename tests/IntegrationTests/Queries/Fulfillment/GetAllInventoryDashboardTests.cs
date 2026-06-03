@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,16 +42,19 @@ public class GetAllInventoryDashboardTests : IClassFixture<ApiFixture>
 
         var store = _fixture.Factory.Services.GetRequiredService<IInventoryDashboardStore>();
         await store.TruncateAsync(default);
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            foreach (var sku in skus)
+            await using (var uow = await store.BeginAsync(default))
             {
-                var inventoryId = Guid.NewGuid();
-                await uow.CreateDashboardAsync(inventoryId, sku, SeededAt, default);
-                await uow.AdjustOnHandAsync(inventoryId, 10, SeededAt, default);
+                foreach (var sku in skus)
+                {
+                    var inventoryId = Guid.NewGuid();
+                    await uow.CreateDashboardAsync(inventoryId, sku, SeededAt, default);
+                    await uow.AdjustOnHandAsync(inventoryId, 10, SeededAt, default);
+                }
+                await uow.CommitAsync("get-all-inventory-dashboard-seed", 1, default);
             }
-            await uow.CommitAsync("get-all-inventory-dashboard-seed", 1, default);
-        }
+        });
 
         var response = await client.PostQueryAsync(
             "GetAllInventoryDashboard",

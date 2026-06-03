@@ -22,6 +22,7 @@ public class InProcessMessageDispatcherTests
         var handler = new RecordingHandler("only", []);
         var services = new ServiceCollection();
         services.AddSingleton<IEventHandler<TestDispatchEvent>>(handler);
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         var payload = new TestDispatchEvent("ship it");
@@ -52,6 +53,7 @@ public class InProcessMessageDispatcherTests
             new RecordingHandler("first", invocationLog));
         services.AddSingleton<IEventHandler<TestDispatchEvent>>(
             new RecordingHandler("second", invocationLog));
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         var metadata = BuildMetadata();
@@ -75,6 +77,7 @@ public class InProcessMessageDispatcherTests
         var handler = new RecordingPmHandler("pm", []);
         var services = new ServiceCollection();
         services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(handler);
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         var payload = new TestDispatchEvent("react");
@@ -93,6 +96,7 @@ public class InProcessMessageDispatcherTests
             new RecordingHandler("projection", invocationLog));
         services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(
             new RecordingPmHandler("process-manager", invocationLog));
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         await dispatcher.DispatchAsync(Message(new TestDispatchEvent("go")), CancellationToken.None);
@@ -109,6 +113,7 @@ public class InProcessMessageDispatcherTests
         var services = new ServiceCollection();
         services.AddScoped<IProcessManagerHandler<TestDispatchEvent>>(
             _ => new InstanceRecordingPmHandler(instances));
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
         // validateScopes: true would throw if the dispatcher resolved the scoped
         // handler from the root provider; it passes because the dispatcher opens a
         // scope per message, and the two dispatches yield two distinct instances.

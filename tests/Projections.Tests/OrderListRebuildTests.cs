@@ -71,7 +71,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         // Truncate the read model and clear the checkpoint, then rebuild from zero.
         await ctx.OrderListStore.TruncateAsync(CancellationToken.None);
         await ClearCheckpointAsync(connStr);
-        await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
+        await new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default })
             .ReplayAsync(0, CancellationToken.None);
 
         (await ctx.OrderListStore.GetAsync(ctx.OrderA, CancellationToken.None)).Should().Be(liveA);
@@ -92,7 +92,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         // events; B, C (with its completion), and A's shipment events still
         // apply. A's ShipmentReturned resolves order A but finds no row to mark,
         // because A's OrderPlaced was skipped.
-        await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
+        await new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default })
             .ReplayAsync(4, CancellationToken.None);
 
         (await ctx.OrderListStore.GetAsync(ctx.OrderA, CancellationToken.None)).Should().BeNull();
@@ -109,7 +109,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var ctx = await ArrangeAsync(dataSource);
-        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection);
+        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await replayer.ReplayAsync(0, CancellationToken.None);
         var firstA = await ctx.OrderListStore.GetAsync(ctx.OrderA, CancellationToken.None);
@@ -259,6 +259,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
         services.AddSingleton<IEventHandler<OrderCompleted>>(projection);
         services.AddSingleton<IEventHandler<ShipmentScheduled>>(projection);
         services.AddSingleton<IEventHandler<ShipmentReturned>>(projection);
+        services.AddSingleton<ICurrentTenantAccessor>(new StubTenantAccessor { Current = WellKnownTenants.Default });
         return new InProcessMessageDispatcher(services.BuildServiceProvider());
     }
 

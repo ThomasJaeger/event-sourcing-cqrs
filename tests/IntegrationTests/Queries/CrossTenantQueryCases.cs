@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
@@ -47,11 +48,14 @@ internal static class CrossTenantQueryCases
         await store.TruncateAsync(default);
         var orderA = Guid.NewGuid();
         var orderB = Guid.NewGuid();
-        await using (var uow = await store.BeginAsync(default))
+        await fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.InsertAsync(OrderListRowFor(orderA), default);
-            await uow.CommitAsync("cross-tenant-list-orders", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.InsertAsync(OrderListRowFor(orderA), default);
+                await uow.CommitAsync("cross-tenant-list-orders", 1, default);
+            }
+        });
         await SeedOrderListRowUnderTenantAsync(fixture, orderB, OtherTenant);
 
         var response = await fixture.Factory.CreateClient()
@@ -90,11 +94,14 @@ internal static class CrossTenantQueryCases
     {
         var store = fixture.Factory.Services.GetRequiredService<IInventoryDashboardStore>();
         await store.TruncateAsync(default);
-        await using (var uow = await store.BeginAsync(default))
+        await fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateDashboardAsync(Guid.NewGuid(), DefaultTenantSku, SeededAt, default);
-            await uow.CommitAsync("cross-tenant-inventory-all", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateDashboardAsync(Guid.NewGuid(), DefaultTenantSku, SeededAt, default);
+                await uow.CommitAsync("cross-tenant-inventory-all", 1, default);
+            }
+        });
         var otherSku = "SKU-OTHER-" + Guid.NewGuid().ToString("N");
         await SeedInventoryDashboardUnderTenantAsync(fixture, Guid.NewGuid(), otherSku, OtherTenant);
 

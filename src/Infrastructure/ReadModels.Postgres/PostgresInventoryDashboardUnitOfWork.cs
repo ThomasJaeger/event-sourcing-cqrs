@@ -16,18 +16,21 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresInventoryDashboardUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -47,13 +50,15 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         // leaves an orphan aggregate with no dashboard row, the read-side stance of
         // ADR 0020. on_hand_quantity and reserved_quantity take their DDL defaults
         // of 0.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.inventory_dashboard (inventory_id, sku, last_updated_utc) " +
-            "VALUES (@inventory_id, @sku, @last_updated_utc) " +
+            "INSERT INTO read_models.inventory_dashboard (inventory_id, sku, last_updated_utc, tenant_id) " +
+            "VALUES (@inventory_id, @sku, @last_updated_utc, @tenant_id) " +
             "ON CONFLICT DO NOTHING";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -100,16 +105,18 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered InventoryReserved keeps the first
         // lookup row.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.inventory_reservations " +
-            "(inventory_id, order_id, line_id, quantity, reserved_utc) " +
-            "VALUES (@inventory_id, @order_id, @line_id, @quantity, @reserved_utc) " +
+            "(inventory_id, order_id, line_id, quantity, reserved_utc, tenant_id) " +
+            "VALUES (@inventory_id, @order_id, @line_id, @quantity, @reserved_utc, @tenant_id) " +
             "ON CONFLICT (inventory_id, order_id, line_id) DO NOTHING";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, row.InventoryId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, row.LineId);
         cmd.Parameters.AddWithValue("quantity", NpgsqlDbType.Integer, row.Quantity);
         cmd.Parameters.AddWithValue("reserved_utc", NpgsqlDbType.TimestampTz, row.ReservedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -120,13 +127,16 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         cmd.Transaction = _transaction;
         // Keys on the full (inventory_id, order_id, line_id) PK, all three carried
         // by InventoryReleased.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "SELECT inventory_id, order_id, line_id, quantity, reserved_utc " +
             "FROM read_models.inventory_reservations " +
-            "WHERE inventory_id = @inventory_id AND order_id = @order_id AND line_id = @line_id";
+            "WHERE inventory_id = @inventory_id AND order_id = @order_id AND line_id = @line_id " +
+            "AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, lineId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))

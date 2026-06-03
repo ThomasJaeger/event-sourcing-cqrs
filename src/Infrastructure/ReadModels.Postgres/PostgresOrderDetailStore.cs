@@ -41,7 +41,8 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresOrderDetailUnitOfWork(connection, transaction, _checkpointStore, _publisher);
+            return new PostgresOrderDetailUnitOfWork(
+                connection, transaction, _checkpointStore, _publisher, _tenantAccessor);
         }
         catch
         {

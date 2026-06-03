@@ -84,7 +84,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
 
         await ctx.Store.TruncateAsync(CancellationToken.None);
         await ClearCheckpointAsync(connStr);
-        await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
+        await new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default })
             .ReplayAsync(0, CancellationToken.None);
 
         var replayed = await SnapshotAsync(ctx);
@@ -106,7 +106,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var ctx = await ArrangeAsync(dataSource);
-        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection);
+        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await replayer.ReplayAsync(0, CancellationToken.None);
         var first = await SnapshotAsync(ctx);
@@ -362,6 +362,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         services.AddSingleton<IEventHandler<PaymentCaptured>>(projection);
         services.AddSingleton<IEventHandler<PaymentRefunded>>(projection);
         services.AddSingleton<IEventHandler<PaymentVoided>>(projection);
+        services.AddSingleton<ICurrentTenantAccessor>(new StubTenantAccessor { Current = WellKnownTenants.Default });
         return new InProcessMessageDispatcher(services.BuildServiceProvider());
     }
 

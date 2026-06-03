@@ -21,21 +21,25 @@ public sealed class ProjectionStartupCatchUpService : IHostedLifecycleService
     private readonly IReadOnlyList<IProjection> _projections;
     private readonly IEventStore _eventStore;
     private readonly ICheckpointStore _checkpointStore;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly ILogger<ProjectionStartupCatchUpService> _logger;
 
     public ProjectionStartupCatchUpService(
         IEnumerable<IProjection> projections,
         IEventStore eventStore,
         ICheckpointStore checkpointStore,
+        ICurrentTenantAccessor tenantAccessor,
         ILogger<ProjectionStartupCatchUpService> logger)
     {
         ArgumentNullException.ThrowIfNull(projections);
         ArgumentNullException.ThrowIfNull(eventStore);
         ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         ArgumentNullException.ThrowIfNull(logger);
         _projections = projections.ToList();
         _eventStore = eventStore;
         _checkpointStore = checkpointStore;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -48,7 +52,8 @@ public sealed class ProjectionStartupCatchUpService : IHostedLifecycleService
             _logger.LogInformation(
                 "Catching up projection {Projection} from global position {Position}",
                 projection.Name, fromPosition);
-            await new ProjectionReplayer(_eventStore, projection).ReplayAsync(fromPosition, ct);
+            await new ProjectionReplayer(_eventStore, projection, _tenantAccessor)
+                .ReplayAsync(fromPosition, ct);
         }
     }
 

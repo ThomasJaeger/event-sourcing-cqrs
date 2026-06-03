@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,12 +25,15 @@ public class GetInventoryDashboardBySkuTests : IClassFixture<ApiFixture>
         const string sku = "SKU-EXISTING";
 
         var store = _fixture.Factory.Services.GetRequiredService<IInventoryDashboardStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateDashboardAsync(inventoryId, sku, SeededAt, default);
-            await uow.AdjustOnHandAsync(inventoryId, 25, SeededAt, default);
-            await uow.CommitAsync("get-inventory-by-sku-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateDashboardAsync(inventoryId, sku, SeededAt, default);
+                await uow.AdjustOnHandAsync(inventoryId, 25, SeededAt, default);
+                await uow.CommitAsync("get-inventory-by-sku-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsync(
             "GetInventoryDashboardBySku",

@@ -68,7 +68,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
 
         await ctx.Store.TruncateAsync(CancellationToken.None);
         await ClearCheckpointAsync(connStr);
-        await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
+        await new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default })
             .ReplayAsync(0, CancellationToken.None);
 
         (await ctx.Store.GetAsync(ctx.Cust1, CancellationToken.None)).Should().Be(liveCust1);
@@ -83,7 +83,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var ctx = await ArrangeAsync(dataSource);
-        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection);
+        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await replayer.ReplayAsync(0, CancellationToken.None);
         var firstCust1 = await ctx.Store.GetAsync(ctx.Cust1, CancellationToken.None);
@@ -210,6 +210,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
         var services = new ServiceCollection();
         services.AddSingleton<IEventHandler<OrderPlaced>>(projection);
         services.AddSingleton<IEventHandler<OrderCancelled>>(projection);
+        services.AddSingleton<ICurrentTenantAccessor>(new StubTenantAccessor { Current = WellKnownTenants.Default });
         return new InProcessMessageDispatcher(services.BuildServiceProvider());
     }
 

@@ -2,6 +2,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.IntegrationTests.Authentication;
 using EventSourcingCqrs.TestInfrastructure;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
@@ -57,6 +58,28 @@ public sealed class ApiFixture : IAsyncLifetime
         command.Parameters.AddWithValue("user_id", userId);
         command.Parameters.AddWithValue("role", role.ToString());
         await command.ExecuteNonQueryAsync();
+    }
+
+    // Sets the current tenant on the host's async-local accessor for the duration of a direct
+    // read-model seed, then restores it. A unit-of-work seed writes through the real projection
+    // write path, which tags the row from the current tenant (ADR 0031); production sets that
+    // tenant on the dispatch or replay set-point, so a direct seed sets it here. Mirrors the
+    // command bus's set-then-restore so the tenant never leaks past the seed.
+    public async Task SeedAsTenantAsync(TenantId tenant, Func<Task> seed)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        ArgumentNullException.ThrowIfNull(seed);
+        var accessor = Factory.Services.GetRequiredService<ICurrentTenantAccessor>();
+        var previous = accessor.Current;
+        accessor.Current = tenant;
+        try
+        {
+            await seed();
+        }
+        finally
+        {
+            accessor.Current = previous;
+        }
     }
 
     public async Task DisposeAsync()

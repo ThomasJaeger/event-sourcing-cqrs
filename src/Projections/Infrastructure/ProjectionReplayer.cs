@@ -19,14 +19,18 @@ public sealed class ProjectionReplayer
 {
     private readonly IEventStore _eventStore;
     private readonly IProjection _projection;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly IReadOnlyDictionary<Type, HandlerInvoker> _dispatchTable;
 
-    public ProjectionReplayer(IEventStore eventStore, IProjection projection)
+    public ProjectionReplayer(
+        IEventStore eventStore, IProjection projection, ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(eventStore);
         ArgumentNullException.ThrowIfNull(projection);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         _eventStore = eventStore;
         _projection = projection;
+        _tenantAccessor = tenantAccessor;
         _dispatchTable = BuildDispatchTable(projection);
     }
 
@@ -38,7 +42,21 @@ public sealed class ProjectionReplayer
             // the same contract InProcessMessageDispatcher follows on the live tail.
             if (_dispatchTable.TryGetValue(envelope.Payload.GetType(), out var invoker))
             {
-                await invoker.InvokeAsync(_projection, envelope, ct);
+                // The projection write path reads the current tenant off this accessor
+                // (ADR 0031). Set it from the event's metadata for the invoke and restore
+                // in finally, mirroring the live dispatcher's set-point. The accessor is a
+                // singleton over AsyncLocal, so the value flows through the async invoke
+                // into the unit of work without a DI scope here.
+                var previousTenant = _tenantAccessor.Current;
+                _tenantAccessor.Current = envelope.Metadata.Tenant;
+                try
+                {
+                    await invoker.InvokeAsync(_projection, envelope, ct);
+                }
+                finally
+                {
+                    _tenantAccessor.Current = previousTenant;
+                }
             }
         }
     }

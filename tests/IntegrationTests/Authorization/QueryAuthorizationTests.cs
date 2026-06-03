@@ -71,12 +71,15 @@ public class QueryAuthorizationTests : IClassFixture<ApiFixture>
 
         var store = _fixture.Factory.Services.GetRequiredService<IOrderListStore>();
         await store.TruncateAsync(default);
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.InsertAsync(SampleOrderRow(Guid.NewGuid()), default);
-            await uow.InsertAsync(SampleOrderRow(Guid.NewGuid()), default);
-            await uow.CommitAsync("query-authz-support-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.InsertAsync(SampleOrderRow(Guid.NewGuid()), default);
+                await uow.InsertAsync(SampleOrderRow(Guid.NewGuid()), default);
+                await uow.CommitAsync("query-authz-support-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsAsync("ListOrders", new { offset = 0, limit = 10 }, supportActor);
 
@@ -97,12 +100,15 @@ public class QueryAuthorizationTests : IClassFixture<ApiFixture>
         // actor-equals-customer: the owned row's CustomerId is the actor id.
         var owned = SampleOrderRow(customerActor);
         var someoneElses = SampleOrderRow(Guid.NewGuid());
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.InsertAsync(owned, default);
-            await uow.InsertAsync(someoneElses, default);
-            await uow.CommitAsync("query-authz-owner-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.InsertAsync(owned, default);
+                await uow.InsertAsync(someoneElses, default);
+                await uow.CommitAsync("query-authz-owner-seed", 1, default);
+            }
+        });
 
         var response = await client.PostQueryAsAsync("ListOrders", new { offset = 0, limit = 10 }, customerActor);
 
@@ -121,12 +127,15 @@ public class QueryAuthorizationTests : IClassFixture<ApiFixture>
         var ownedOrderId = Guid.NewGuid();
         var othersOrderId = Guid.NewGuid();
         var store = _fixture.Factory.Services.GetRequiredService<IOrderDetailStore>();
-        await using (var uow = await store.BeginAsync(default))
+        await _fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
         {
-            await uow.CreateHeaderAsync(ownedOrderId, customerActor, SeededAt, default);
-            await uow.CreateHeaderAsync(othersOrderId, Guid.NewGuid(), SeededAt, default);
-            await uow.CommitAsync("query-authz-detail-seed", 1, default);
-        }
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.CreateHeaderAsync(ownedOrderId, customerActor, SeededAt, default);
+                await uow.CreateHeaderAsync(othersOrderId, Guid.NewGuid(), SeededAt, default);
+                await uow.CommitAsync("query-authz-detail-seed", 1, default);
+            }
+        });
 
         var ownResponse = await client.PostQueryAsAsync(
             "GetOrderDetail", new { orderId = ownedOrderId }, customerActor);

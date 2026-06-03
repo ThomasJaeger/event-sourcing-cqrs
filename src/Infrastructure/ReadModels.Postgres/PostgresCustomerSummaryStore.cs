@@ -39,7 +39,8 @@ public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresCustomerSummaryUnitOfWork(connection, transaction, _checkpointStore, _publisher);
+            return new PostgresCustomerSummaryUnitOfWork(
+                connection, transaction, _checkpointStore, _publisher, _tenantAccessor);
         }
         catch
         {

@@ -17,18 +17,21 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresOrderListUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -43,12 +46,13 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         // ON CONFLICT DO NOTHING, not DO UPDATE: a redelivered OrderPlaced that
         // arrives after the order has shipped or been cancelled must not reset
         // the row to Placed. The first insert is the correct one.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.order_list " +
             "(order_id, customer_id, status, total_amount, total_currency, " +
-            "placed_utc, last_updated_utc) " +
+            "placed_utc, last_updated_utc, tenant_id) " +
             "VALUES (@order_id, @customer_id, @status, @total_amount, @total_currency, " +
-            "@placed_utc, @last_updated_utc) " +
+            "@placed_utc, @last_updated_utc, @tenant_id) " +
             "ON CONFLICT (order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, row.CustomerId);
@@ -57,6 +61,7 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         cmd.Parameters.AddWithValue("total_currency", NpgsqlDbType.Text, row.Total.Currency.Code);
         cmd.Parameters.AddWithValue("placed_utc", NpgsqlDbType.TimestampTz, row.PlacedUtc);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, row.LastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -84,14 +89,16 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         cmd.Transaction = _transaction;
         // ON CONFLICT DO NOTHING: a redelivered ShipmentScheduled keeps the first
         // mapping row, mirroring the order_list insert's idempotency.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.order_list_shipments " +
-            "(shipment_id, order_id, scheduled_utc) " +
-            "VALUES (@shipment_id, @order_id, @scheduled_utc) " +
+            "(shipment_id, order_id, scheduled_utc, tenant_id) " +
+            "VALUES (@shipment_id, @order_id, @scheduled_utc, @tenant_id) " +
             "ON CONFLICT (shipment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("scheduled_utc", NpgsqlDbType.TimestampTz, scheduledUtc);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -99,10 +106,12 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "SELECT order_id FROM read_models.order_list_shipments " +
-            "WHERE shipment_id = @shipment_id";
+            "WHERE shipment_id = @shipment_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         var result = await cmd.ExecuteScalarAsync(ct);
         // No mapping: the shipment was scheduled before this projection observed
         // it. The handler no-ops on null rather than throwing.

@@ -20,7 +20,7 @@ public class ProjectionReplayerTests
             Envelope(new ReplayTestEvent("two"), globalPosition: 2),
             Envelope(new ReplayTestEvent("three"), globalPosition: 3),
         ]);
-        var replayer = new ProjectionReplayer(store, projection);
+        var replayer = new ProjectionReplayer(store, projection, new StubTenantAccessor());
 
         await replayer.ReplayAsync(0, CancellationToken.None);
 
@@ -37,7 +37,7 @@ public class ProjectionReplayerTests
             Envelope(new UnhandledTestEvent("ignored"), globalPosition: 2),
             Envelope(new ReplayTestEvent("also handled"), globalPosition: 3),
         ]);
-        var replayer = new ProjectionReplayer(store, projection);
+        var replayer = new ProjectionReplayer(store, projection, new StubTenantAccessor());
 
         await replayer.ReplayAsync(0, CancellationToken.None);
 
@@ -60,7 +60,7 @@ public class ProjectionReplayerTests
             Metadata: metadata,
             OccurredUtc: At,
             GlobalPosition: 42);
-        var replayer = new ProjectionReplayer(new FakeEventStore([envelope]), projection);
+        var replayer = new ProjectionReplayer(new FakeEventStore([envelope]), projection, new StubTenantAccessor());
 
         await replayer.ReplayAsync(0, CancellationToken.None);
 
@@ -74,7 +74,7 @@ public class ProjectionReplayerTests
     public async Task Replay_passes_from_position_through_to_ReadAllAsync()
     {
         var store = new FakeEventStore([]);
-        var replayer = new ProjectionReplayer(store, new RecordingProjection());
+        var replayer = new ProjectionReplayer(store, new RecordingProjection(), new StubTenantAccessor());
 
         await replayer.ReplayAsync(99, CancellationToken.None);
 

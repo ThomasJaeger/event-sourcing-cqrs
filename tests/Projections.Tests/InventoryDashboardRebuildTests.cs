@@ -67,7 +67,7 @@ public class InventoryDashboardRebuildTests : IClassFixture<PostgresFixture>
 
         await ctx.Store.TruncateAsync(CancellationToken.None);
         await ClearCheckpointAsync(connStr);
-        await new ProjectionReplayer(ctx.EventStore, ctx.Projection)
+        await new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default })
             .ReplayAsync(0, CancellationToken.None);
 
         (await ctx.Store.GetBySkuAsync("SKU-A", CancellationToken.None)).Should().Be(liveA);
@@ -89,7 +89,7 @@ public class InventoryDashboardRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var ctx = await ArrangeAsync(dataSource);
-        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection);
+        var replayer = new ProjectionReplayer(ctx.EventStore, ctx.Projection, new StubTenantAccessor { Current = WellKnownTenants.Default });
 
         await replayer.ReplayAsync(0, CancellationToken.None);
         var firstA = await ctx.Store.GetBySkuAsync("SKU-A", CancellationToken.None);
@@ -210,6 +210,7 @@ public class InventoryDashboardRebuildTests : IClassFixture<PostgresFixture>
         services.AddSingleton<IEventHandler<InventoryAdjusted>>(projection);
         services.AddSingleton<IEventHandler<InventoryReserved>>(projection);
         services.AddSingleton<IEventHandler<InventoryReleased>>(projection);
+        services.AddSingleton<ICurrentTenantAccessor>(new StubTenantAccessor { Current = WellKnownTenants.Default });
         return new InProcessMessageDispatcher(services.BuildServiceProvider());
     }
 
