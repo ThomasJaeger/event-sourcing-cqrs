@@ -40,4 +40,15 @@ public interface IEventStore
     IAsyncEnumerable<EventEnvelope> ReadAllAsync(
         long fromPosition,
         CancellationToken ct = default);
+
+    // Streams only the given tenant's events on non-PM streams in global_position
+    // order, in the window (fromPosition, toPositionInclusive], mirroring ReadAllAsync
+    // with a tenant predicate and an inclusive ceiling. A per-tenant rebuild replays one
+    // tenant's events up to a captured checkpoint and no further, so the rebuild never
+    // reaches events the projection has not globally processed.
+    IAsyncEnumerable<EventEnvelope> ReadAllForTenantAsync(
+        TenantId tenant,
+        long fromPosition,
+        long toPositionInclusive,
+        CancellationToken ct = default);
 }

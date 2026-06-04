@@ -38,26 +38,46 @@ public sealed class ProjectionReplayer
     {
         await foreach (var envelope in _eventStore.ReadAllAsync(fromPosition, ct))
         {
-            // Events the projection has no handler for are skipped, not errors:
-            // the same contract InProcessMessageDispatcher follows on the live tail.
-            if (_dispatchTable.TryGetValue(envelope.Payload.GetType(), out var invoker))
-            {
-                // The projection write path reads the current tenant off this accessor
-                // (ADR 0031). Set it from the event's metadata for the invoke and restore
-                // in finally, mirroring the live dispatcher's set-point. The accessor is a
-                // singleton over AsyncLocal, so the value flows through the async invoke
-                // into the unit of work without a DI scope here.
-                var previousTenant = _tenantAccessor.Current;
-                _tenantAccessor.Current = envelope.Metadata.Tenant;
-                try
-                {
-                    await invoker.InvokeAsync(_projection, envelope, ct);
-                }
-                finally
-                {
-                    _tenantAccessor.Current = previousTenant;
-                }
-            }
+            await ApplyAsync(envelope, ct);
+        }
+    }
+
+    // Per-tenant rebuild (P10.9): replays one tenant's events in the window
+    // (fromPosition, toPositionInclusive], driving the same handlers ReplayAsync does.
+    // The rebuilder bounds the window at the captured global checkpoint, so the replay
+    // never reaches events the projection has not globally processed.
+    public async Task ReplayForTenantAsync(
+        TenantId tenant, long fromPosition, long toPositionInclusive, CancellationToken ct)
+    {
+        await foreach (var envelope in _eventStore.ReadAllForTenantAsync(
+            tenant, fromPosition, toPositionInclusive, ct))
+        {
+            await ApplyAsync(envelope, ct);
+        }
+    }
+
+    // Applies one event to the projection if it has a handler for it. Events the
+    // projection has no handler for are skipped, not errors: the same contract
+    // InProcessMessageDispatcher follows on the live tail. The projection write path
+    // reads the current tenant off this accessor (ADR 0031), so set it from the event's
+    // metadata for the invoke and restore in finally, mirroring the live dispatcher's
+    // set-point. The accessor is a singleton over AsyncLocal, so the value flows through
+    // the async invoke into the unit of work without a DI scope here.
+    private async Task ApplyAsync(EventEnvelope envelope, CancellationToken ct)
+    {
+        if (!_dispatchTable.TryGetValue(envelope.Payload.GetType(), out var invoker))
+        {
+            return;
+        }
+        var previousTenant = _tenantAccessor.Current;
+        _tenantAccessor.Current = envelope.Metadata.Tenant;
+        try
+        {
+            await invoker.InvokeAsync(_projection, envelope, ct);
+        }
+        finally
+        {
+            _tenantAccessor.Current = previousTenant;
         }
     }
 

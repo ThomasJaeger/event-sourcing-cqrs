@@ -369,6 +369,72 @@ public sealed class PostgresEventStore : IEventStore
         }
     }
 
+    // Pattern from Chapter 13 (per-tenant rebuild): the tenant-scoped, ceilinged twin of
+    // ReadAllAsync. Same feed and row mapping; the predicate adds the tenant and an
+    // inclusive upper bound, so a rebuild replays exactly one tenant's events up to the
+    // captured checkpoint. The tenant_id column is the STORED generated column (0016).
+    public async IAsyncEnumerable<EventEnvelope> ReadAllForTenantAsync(
+        TenantId tenant, long fromPosition, long toPositionInclusive,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT global_position, stream_id, stream_version, event_id, event_type, " +
+            "event_version, payload, metadata, occurred_utc " +
+            "FROM event_store.events " +
+            "WHERE global_position > @from_position " +
+            "AND global_position <= @to_position " +
+            "AND tenant_id = @tenant " +
+            "AND stream_id NOT LIKE 'pm-%' " +
+            "ORDER BY global_position";
+        AddBigInt(cmd, "from_position", fromPosition);
+        AddBigInt(cmd, "to_position", toPositionInclusive);
+        AddUuid(cmd, "tenant", tenant.Value);
+
+        await using var reader = await cmd.ExecuteReaderAsync(
+            CommandBehavior.SequentialAccess, ct);
+        while (await reader.ReadAsync(ct))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var globalPosition = reader.GetInt64(0);
+            var streamId = StreamId.Parse(reader.GetString(1));
+            var streamVersion = reader.GetInt32(2);
+            var eventId = reader.GetGuid(3);
+            var eventType = reader.GetString(4);
+            var eventVersion = reader.GetInt16(5);
+            var payloadJson = reader.GetString(6);
+            var metadataJson = reader.GetString(7);
+            var occurredUtc = DateTime.SpecifyKind(reader.GetDateTime(8), DateTimeKind.Utc);
+
+            Type clrType;
+            try
+            {
+                clrType = _registry.TypeFor(eventType);
+            }
+            catch (UnknownEventTypeException ex)
+            {
+                throw new UnknownEventTypeException(eventType, streamId, ex);
+            }
+
+            var payload = (IDomainEvent)JsonSerializer.Deserialize(
+                payloadJson, clrType, _jsonOptions)!;
+            var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
+
+            yield return new EventEnvelope(
+                StreamId: streamId,
+                StreamVersion: streamVersion,
+                EventId: eventId,
+                EventType: eventType,
+                EventVersion: eventVersion,
+                Payload: payload,
+                Metadata: metadata,
+                OccurredUtc: occurredUtc,
+                GlobalPosition: globalPosition);
+        }
+    }
+
     private static void AddUuid(NpgsqlCommand cmd, string name, Guid value)
         => cmd.Parameters.AddWithValue(name, NpgsqlDbType.Uuid, value);
 

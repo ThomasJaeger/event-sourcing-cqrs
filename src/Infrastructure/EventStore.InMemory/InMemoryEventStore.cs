@@ -85,6 +85,29 @@ public sealed class InMemoryEventStore : IEventStore
         }
     }
 
+    public async IAsyncEnumerable<EventEnvelope> ReadAllForTenantAsync(
+        TenantId tenant, long fromPosition, long toPositionInclusive,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await Task.CompletedTask;
+
+        // PM events never enter _global, so a scan of _global is already pm-free; filter
+        // by the event's tenant and the (fromPosition, toPositionInclusive] window to
+        // match the Postgres feed.
+        foreach (var envelope in _global)
+        {
+            if (envelope.GlobalPosition <= fromPosition
+                || envelope.GlobalPosition > toPositionInclusive
+                || envelope.Metadata.Tenant != tenant)
+            {
+                continue;
+            }
+
+            ct.ThrowIfCancellationRequested();
+            yield return envelope;
+        }
+    }
+
     public Task AppendProcessManagerEventsAsync(
         StreamId streamId,
         int expectedVersion,

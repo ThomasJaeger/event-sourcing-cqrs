@@ -10,7 +10,7 @@ namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 // GetBySkuAsync, GetAllAsync, and TruncateAsync open their own connections: the
 // read paths and the rebuild truncate need no transactional coordination with a
 // handler's write.
-public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
+public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore, ITenantResettable
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
@@ -106,6 +106,20 @@ public sealed class PostgresInventoryDashboardStore : IInventoryDashboardStore
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "TRUNCATE TABLE read_models.inventory_dashboard, read_models.inventory_reservations";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Tenant-scoped twin of TruncateAsync for a per-tenant rebuild: deletes only this
+    // tenant's rows, never a TRUNCATE, never the checkpoint (ITenantResettable).
+    public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM read_models.inventory_dashboard WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.inventory_reservations WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

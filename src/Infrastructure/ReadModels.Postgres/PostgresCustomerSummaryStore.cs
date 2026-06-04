@@ -10,7 +10,7 @@ namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 // connection and transaction wrapped in a PostgresCustomerSummaryUnitOfWork.
 // GetAsync and TruncateAsync open their own connections: the read path and the
 // rebuild truncate need no transactional coordination with a handler's write.
-public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore
+public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore, ITenantResettable
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
@@ -82,6 +82,20 @@ public sealed class PostgresCustomerSummaryStore : ICustomerSummaryStore
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "TRUNCATE TABLE read_models.customer_summary, read_models.customer_summary_orders";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Tenant-scoped twin of TruncateAsync for a per-tenant rebuild: deletes only this
+    // tenant's rows, never a TRUNCATE, never the checkpoint (ITenantResettable).
+    public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM read_models.customer_summary WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.customer_summary_orders WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

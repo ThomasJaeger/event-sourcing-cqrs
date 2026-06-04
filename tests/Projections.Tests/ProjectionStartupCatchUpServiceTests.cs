@@ -150,6 +150,22 @@ public class ProjectionStartupCatchUpServiceTests
             }
         }
 
+        public async IAsyncEnumerable<EventEnvelope> ReadAllForTenantAsync(
+            TenantId tenant, long fromPosition, long toPositionInclusive,
+            [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            foreach (var envelope in _events)
+            {
+                if (envelope.GlobalPosition > fromPosition
+                    && envelope.GlobalPosition <= toPositionInclusive
+                    && envelope.Metadata.Tenant == tenant)
+                {
+                    yield return envelope;
+                }
+            }
+        }
+
         public Task AppendAsync(
             StreamId streamId, int expectedVersion,
             IReadOnlyList<EventEnvelope> events, CancellationToken ct)

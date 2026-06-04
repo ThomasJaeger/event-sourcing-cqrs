@@ -12,7 +12,7 @@ namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 // GetLinesAsync, GetTimelineAsync, and TruncateAsync open their own connections:
 // the read paths and the rebuild truncate need no transactional coordination with
 // a handler's write.
-public sealed class PostgresOrderDetailStore : IOrderDetailStore
+public sealed class PostgresOrderDetailStore : IOrderDetailStore, ITenantResettable
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
@@ -164,6 +164,23 @@ public sealed class PostgresOrderDetailStore : IOrderDetailStore
             "TRUNCATE TABLE read_models.order_detail, read_models.order_detail_lines, " +
             "read_models.order_detail_timeline, read_models.order_detail_shipments, " +
             "read_models.order_detail_payments";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Tenant-scoped twin of TruncateAsync for a per-tenant rebuild: deletes only this
+    // tenant's rows, never a TRUNCATE, never the checkpoint (ITenantResettable).
+    public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM read_models.order_detail WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.order_detail_lines WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.order_detail_timeline WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.order_detail_shipments WHERE tenant_id = @tenant; " +
+            "DELETE FROM read_models.order_detail_payments WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
