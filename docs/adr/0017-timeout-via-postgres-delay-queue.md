@@ -303,3 +303,27 @@ links, the caused-bus dispatch onto the Order aggregate through the
 tenant-resolving repository, are pinned by their own tests. P10.9's structural
 cross-tenant extension to the command and delay-queue boundaries is the durable
 home for closing that end-to-end gap.
+
+## Amendment (Phase 10, self-cancel under the row-lock claim)
+
+The "Cancellation: active by default" path and the "Claim mechanism: row lock"
+path interact when the cancelled timeout is the firing timeout. A process manager
+that reaches a timeout-scheduling state schedules the row under its own stream and
+step; when that timeout later fires, its handler runs the compensation, and the
+compensation's first effect cancels the timeout for that same stream and step. The
+firing row is the row the processor holds under FOR UPDATE while it dispatches. The
+original CancelAsync was a plain UPDATE on a separate connection, so it blocked on
+the dispatcher's row lock while the dispatching transaction waited on the cancel: a
+self-lock the database cannot detect, because one side waits on an in-process await
+rather than a database lock.
+
+CancelAsync now selects its target rows with FOR UPDATE SKIP LOCKED and updates only
+those, so a row another transaction holds locked is skipped. A locked row is
+mid-dispatch, and a firing timeout must be delivered, not cancelled, so skipping it
+is the correct behavior: the zero-row result reports nothing to cancel because the
+timeout is already being delivered. A future-dated row sitting idle is unlocked, so
+the normal cancel-on-transition path (the awaited event arrived first) still cancels
+it. The change is to the cancellation query alone; the row-lock claim, the dispatch
+flow, and the state guard are unchanged. The original Decision's cancellation
+narrative holds for the idle future-dated row it described; this amendment records
+the firing-row case the active-cancellation default did not account for.

@@ -84,13 +84,22 @@ public sealed class PostgresDelayQueue : IDelayQueue
 
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
+        // A row another transaction holds under FOR UPDATE is mid-dispatch (firing): its own
+        // compensation is what calls this cancel, so cancelling it would self-lock against the
+        // dispatching transaction. SKIP LOCKED leaves that row alone, and the zero-row result is
+        // the right answer, nothing to cancel because the timeout is being delivered. An unlocked
+        // future-dated row is still locked and cancelled as before.
         cmd.CommandText =
             "UPDATE event_store.delayed_commands " +
             "SET cancelled_at_utc = now(), cancellation_reason = @reason " +
-            "WHERE scheduled_by_stream_id = @stream_id " +
-            "  AND scheduled_by_step = @step " +
-            "  AND dispatched_at_utc IS NULL " +
-            "  AND cancelled_at_utc IS NULL";
+            "WHERE delayed_command_id IN ( " +
+            "    SELECT delayed_command_id " +
+            "    FROM event_store.delayed_commands " +
+            "    WHERE scheduled_by_stream_id = @stream_id " +
+            "      AND scheduled_by_step = @step " +
+            "      AND dispatched_at_utc IS NULL " +
+            "      AND cancelled_at_utc IS NULL " +
+            "    FOR UPDATE SKIP LOCKED)";
         AddText(cmd, "reason", cancellationReason);
         AddText(cmd, "stream_id", scheduledByStream.Value);
         AddText(cmd, "step", scheduledByStep);
