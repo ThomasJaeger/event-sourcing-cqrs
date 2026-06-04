@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
@@ -26,7 +27,7 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         var store = NewStore(dataSource);
 
         (await store.ExistsAsync(
-            "pm-order-fulfillment:abc:authorize-payment", CancellationToken.None))
+            WellKnownTenants.Default, "pm-order-fulfillment:abc:authorize-payment", CancellationToken.None))
             .Should().BeFalse();
     }
 
@@ -37,7 +38,7 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = NewStore(dataSource);
 
-        (await store.TryRecordAsync("key-1", "AuthorizePayment", CancellationToken.None))
+        (await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "AuthorizePayment", CancellationToken.None))
             .Should().BeTrue();
     }
 
@@ -47,9 +48,9 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = NewStore(dataSource);
-        await store.TryRecordAsync("key-1", "AuthorizePayment", CancellationToken.None);
+        await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "AuthorizePayment", CancellationToken.None);
 
-        (await store.ExistsAsync("key-1", CancellationToken.None)).Should().BeTrue();
+        (await store.ExistsAsync(WellKnownTenants.Default, "key-1", CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
@@ -58,11 +59,11 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = NewStore(dataSource);
-        await store.TryRecordAsync("key-1", "AuthorizePayment", CancellationToken.None);
+        await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "AuthorizePayment", CancellationToken.None);
 
         // The lazy-fallback signal: a second write of the same key reports false
         // rather than raising a unique-violation (ADR 0016).
-        (await store.TryRecordAsync("key-1", "AuthorizePayment", CancellationToken.None))
+        (await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "AuthorizePayment", CancellationToken.None))
             .Should().BeFalse();
     }
 
@@ -72,10 +73,10 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = NewStore(dataSource);
-        await store.TryRecordAsync("key-1", "AuthorizePayment", CancellationToken.None);
+        await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "AuthorizePayment", CancellationToken.None);
 
         // The key is the identity; command_type is recorded but not part of it.
-        (await store.TryRecordAsync("key-1", "ReserveInventory", CancellationToken.None))
+        (await store.TryRecordAsync(WellKnownTenants.Default, "key-1", "ReserveInventory", CancellationToken.None))
             .Should().BeFalse();
     }
 
@@ -86,8 +87,24 @@ public class PostgresIdempotencyStore_Tests : IClassFixture<PostgresFixture>
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = NewStore(dataSource);
 
-        var act = async () => await store.ExistsAsync("  ", CancellationToken.None);
+        var act = async () => await store.ExistsAsync(WellKnownTenants.Default, "  ", CancellationToken.None);
 
         await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task Same_idempotency_key_under_two_tenants_does_not_collide()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var store = NewStore(dataSource);
+        var tenantA = WellKnownTenants.Default;
+        var tenantB = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        const string key = "shared-key";
+
+        (await store.TryRecordAsync(tenantA, key, "DoThing", CancellationToken.None)).Should().BeTrue();
+        (await store.TryRecordAsync(tenantB, key, "DoThing", CancellationToken.None)).Should().BeTrue();
+        (await store.ExistsAsync(tenantB, key, CancellationToken.None)).Should().BeTrue();
+        (await store.ExistsAsync(tenantA, key, CancellationToken.None)).Should().BeTrue();
     }
 }

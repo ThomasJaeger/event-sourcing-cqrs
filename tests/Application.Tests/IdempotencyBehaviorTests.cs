@@ -103,14 +103,28 @@ public sealed class IdempotencyBehaviorTests
         store.Recorded.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Keyed_command_with_unset_tenant_throws_missing_tenant_context()
+    {
+        var store = new StubIdempotencyStore();
+        var behavior = BuildBehavior(store, "key-1", new StubTenantAccessor { Current = null });
+
+        Func<Task> act = () => behavior.HandleAsync(
+            new DoThing(), () => Task.CompletedTask, CancellationToken.None);
+
+        await act.Should().ThrowAsync<MissingTenantContextException>();
+        store.ExistsCalls.Should().Be(0);
+    }
+
     private static IdempotencyBehavior<DoThing> BuildBehavior(
-        IIdempotencyStore store, string? idempotencyKey)
+        IIdempotencyStore store, string? idempotencyKey, StubTenantAccessor? tenantAccessor = null)
     {
         var accessor = new StubCommandContextAccessor
         {
             Current = new StubCommandContext { IdempotencyKey = idempotencyKey }
         };
-        return new IdempotencyBehavior<DoThing>(store, accessor);
+        return new IdempotencyBehavior<DoThing>(
+            store, accessor, tenantAccessor ?? new StubTenantAccessor { Current = WellKnownTenants.Default });
     }
 
     private sealed record DoThing : ICommand;
@@ -122,13 +136,14 @@ public sealed class IdempotencyBehaviorTests
         public int ExistsCalls { get; private set; }
         public List<(string Key, string CommandType)> Recorded { get; } = new();
 
-        public Task<bool> ExistsAsync(string idempotencyKey, CancellationToken ct)
+        public Task<bool> ExistsAsync(TenantId tenant, string idempotencyKey, CancellationToken ct)
         {
             ExistsCalls++;
             return Task.FromResult(ExistsResult);
         }
 
-        public Task<bool> TryRecordAsync(string idempotencyKey, string commandType, CancellationToken ct)
+        public Task<bool> TryRecordAsync(
+            TenantId tenant, string idempotencyKey, string commandType, CancellationToken ct)
         {
             Recorded.Add((idempotencyKey, commandType));
             return Task.FromResult(TryRecordResult);

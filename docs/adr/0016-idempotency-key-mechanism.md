@@ -128,3 +128,43 @@ the Trigger section.
 - A use case needs a duplicate dispatch to be visibly distinguishable from a
   first dispatch. The no-op-success semantic would no longer fit, and the
   behavior would need to signal "already processed" to the caller.
+
+## Amendment (Phase 10, multi-tenancy)
+
+The single-column primary key becomes composite. Migration 0019 adds a tenant_id
+discriminator to event_store.command_idempotency and swaps the primary key to
+(tenant_id, idempotency_key), tenant-leading to match the SKU keys of migration
+0018. PostgresIdempotencyStore reads and writes the tenant on both paths: the
+eager check filters `WHERE tenant_id = @tenant AND idempotency_key = @key`, and
+the record inserts (tenant_id, idempotency_key, command_type) with the conflict
+target `ON CONFLICT (tenant_id, idempotency_key)`, so the lazy fallback fires per
+tenant rather than across tenants.
+
+IdempotencyBehavior resolves the tenant from the current-tenant accessor and
+throws MissingTenantContextException when it is unset. The key-null passthrough
+stays above the resolve, so a keyless command never couples to tenant presence;
+once a key is in hand the command is on the command path, where the bus sets the
+tenant alongside the command context. A present command with an unset tenant is a
+dispatch-wiring regression, not a defaulting opportunity, so the behavior fails
+closed rather than stamping the default tenant and deduping one tenant's command
+against another tenant's record.
+
+The composite key is load-bearing for client-supplied keys that two tenants can
+legitimately share (the UI and API UUIDs), and defense in depth for the
+stream-derived process-manager keys, whose stream ids already differ across
+tenants. It is meaningful only with the fail-closed read: a wiring regression that
+left the tenant unset would otherwise collapse every tenant onto the default
+tenant's key space, the cross-tenant collision the composite key exists to
+prevent. The migration's dropped NOT NULL default is the schema-level twin of the
+same rule, so an insert that omits the tenant raises rather than writes the
+default.
+
+IdempotencyKeys.ForProcessManager keeps its format. Tenant scoping is carried by
+the composite key, not the key string, so the helper, its callers, and the pinned
+format test are unchanged.
+
+The primary-key swap takes ACCESS EXCLUSIVE and rebuilds the backing index. That
+is a scale-bounded choice, acceptable for this table's size and the
+migrate-then-run deployment the runner assumes. CREATE UNIQUE INDEX CONCURRENTLY
+followed by a constraint swap is the path if dispatch availability or table size
+later makes the exclusive lock unacceptable.

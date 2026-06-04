@@ -10,9 +10,10 @@ namespace EventSourcingCqrs.Domain.Abstractions;
 public interface IIdempotencyStore
 {
     // Eager check: has a command with this key already been recorded?
-    Task<bool> ExistsAsync(string idempotencyKey, CancellationToken ct);
+    Task<bool> ExistsAsync(TenantId tenant, string idempotencyKey, CancellationToken ct);
 
     // Records the key after a successful dispatch. Returns true on a first
     // write, false if the key was already present (the race-loss case).
-    Task<bool> TryRecordAsync(string idempotencyKey, string commandType, CancellationToken ct);
+    Task<bool> TryRecordAsync(
+        TenantId tenant, string idempotencyKey, string commandType, CancellationToken ct);
 }

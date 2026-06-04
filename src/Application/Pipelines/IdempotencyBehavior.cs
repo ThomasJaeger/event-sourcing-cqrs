@@ -16,11 +16,14 @@ public sealed class IdempotencyBehavior<TCommand> : ICommandPipelineBehavior<TCo
 {
     private readonly IIdempotencyStore _store;
     private readonly ICommandContextAccessor _accessor;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
-    public IdempotencyBehavior(IIdempotencyStore store, ICommandContextAccessor accessor)
+    public IdempotencyBehavior(
+        IIdempotencyStore store, ICommandContextAccessor accessor, ICurrentTenantAccessor tenantAccessor)
     {
         _store = store;
         _accessor = accessor;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task HandleAsync(TCommand command, CommandHandlerDelegate next, CancellationToken ct)
@@ -32,7 +35,9 @@ public sealed class IdempotencyBehavior<TCommand> : ICommandPipelineBehavior<TCo
             return;
         }
 
-        if (await _store.ExistsAsync(key, ct))
+        var tenant = _tenantAccessor.Current ?? throw new MissingTenantContextException();
+
+        if (await _store.ExistsAsync(tenant, key, ct))
         {
             return;
         }
@@ -44,6 +49,6 @@ public sealed class IdempotencyBehavior<TCommand> : ICommandPipelineBehavior<TCo
         // correctness layer: on a false return or a record that never lands,
         // the event store's per-stream version constraint is the backstop
         // against a double-apply on retry (ADR 0016).
-        await _store.TryRecordAsync(key, typeof(TCommand).Name, ct);
+        await _store.TryRecordAsync(tenant, key, typeof(TCommand).Name, ct);
     }
 }

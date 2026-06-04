@@ -201,10 +201,11 @@ public sealed class CommandBusContextTests
     {
         public List<string> Recorded { get; } = new();
 
-        public Task<bool> ExistsAsync(string idempotencyKey, CancellationToken ct)
+        public Task<bool> ExistsAsync(TenantId tenant, string idempotencyKey, CancellationToken ct)
             => Task.FromResult(Recorded.Contains(idempotencyKey));
 
-        public Task<bool> TryRecordAsync(string idempotencyKey, string commandType, CancellationToken ct)
+        public Task<bool> TryRecordAsync(
+            TenantId tenant, string idempotencyKey, string commandType, CancellationToken ct)
         {
             Recorded.Add(idempotencyKey);
             return Task.FromResult(true);

@@ -20,29 +20,32 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
         _factory = factory;
     }
 
-    public async Task<bool> ExistsAsync(string idempotencyKey, CancellationToken ct)
+    public async Task<bool> ExistsAsync(TenantId tenant, string idempotencyKey, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "SELECT 1 FROM event_store.command_idempotency WHERE idempotency_key = @key";
+            "SELECT 1 FROM event_store.command_idempotency " +
+            "WHERE tenant_id = @tenant AND idempotency_key = @key";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         cmd.Parameters.AddWithValue("key", NpgsqlDbType.Text, idempotencyKey);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is not null and not DBNull;
     }
 
     public async Task<bool> TryRecordAsync(
-        string idempotencyKey, string commandType, CancellationToken ct)
+        TenantId tenant, string idempotencyKey, string commandType, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(commandType);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "INSERT INTO event_store.command_idempotency (idempotency_key, command_type) " +
-            "VALUES (@key, @command_type) " +
-            "ON CONFLICT (idempotency_key) DO NOTHING";
+            "INSERT INTO event_store.command_idempotency (tenant_id, idempotency_key, command_type) " +
+            "VALUES (@tenant, @key, @command_type) " +
+            "ON CONFLICT (tenant_id, idempotency_key) DO NOTHING";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
         cmd.Parameters.AddWithValue("key", NpgsqlDbType.Text, idempotencyKey);
         cmd.Parameters.AddWithValue("command_type", NpgsqlDbType.Text, commandType);
         var rows = await cmd.ExecuteNonQueryAsync(ct);
