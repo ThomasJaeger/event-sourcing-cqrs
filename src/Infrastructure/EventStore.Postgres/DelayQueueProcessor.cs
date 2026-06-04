@@ -282,7 +282,7 @@ public sealed class DelayQueueProcessor : BackgroundService
         cmd.CommandText =
             "SELECT delayed_command_id, command_type, command_payload, correlation_id, " +
             "causation_id, actor_id, service_name, idempotency_key, scheduled_by_stream_id, " +
-            "scheduled_by_step, attempt_count " +
+            "scheduled_by_step, attempt_count, tenant_id " +
             "FROM event_store.delayed_commands " +
             "WHERE fire_at_utc <= @now " +
             "  AND dispatched_at_utc IS NULL " +
@@ -309,7 +309,8 @@ public sealed class DelayQueueProcessor : BackgroundService
                 IdempotencyKey: reader.GetString(7),
                 ScheduledByStreamId: reader.GetString(8),
                 ScheduledByStep: reader.GetString(9),
-                AttemptCount: reader.GetInt32(10)));
+                AttemptCount: reader.GetInt32(10),
+                Tenant: TenantId.From(reader.GetGuid(11))));
         }
         return rows;
     }
@@ -319,11 +320,12 @@ public sealed class DelayQueueProcessor : BackgroundService
         var clrType = _registry.TypeFor(row.CommandType);
         var command = (ICommand)JsonSerializer.Deserialize(row.CommandPayload, clrType, _jsonOptions)!;
 
-        // CausedCommandBus reads only EventId (the causation source) and
-        // CorrelationId off this metadata. The EventMetadata record requires the
-        // other fields, so they carry the row's actor and a placeholder
-        // occurred-time to satisfy the constructor; they are not consumed on the
-        // dispatch path (ADR 0017).
+        // The rebuilt metadata supplies CorrelationId, EventId, and Tenant to the
+        // caused bus. Tenant comes from the stored row, so the resurfaced command
+        // runs under the tenant that scheduled it, the same way CorrelationId and
+        // EventId carry the trace and causation forward. The remaining fields
+        // satisfy the EventMetadata constructor with the row's actor and a
+        // placeholder occurred-time; the bus does not consume them (ADR 0017).
         var causingMetadata = new EventMetadata(
             EventId: row.CausationId,
             CorrelationId: row.CorrelationId,
@@ -332,7 +334,7 @@ public sealed class DelayQueueProcessor : BackgroundService
             Source: row.ServiceName,
             SchemaVersion: 1,
             OccurredUtc: nowUtc,
-            Tenant: WellKnownTenants.Default);
+            Tenant: row.Tenant);
         var actor = new SystemActor(row.ActorId, row.ServiceName);
 
         await _causedCommandBus.SendAsync(command, causingMetadata, actor, row.IdempotencyKey, ct);
@@ -397,15 +399,15 @@ public sealed class DelayQueueProcessor : BackgroundService
             "  WHERE delayed_command_id = @id " +
             "  RETURNING delayed_command_id, fire_at_utc, command_type, command_payload, " +
             "            correlation_id, causation_id, actor_id, service_name, idempotency_key, " +
-            "            scheduled_by_stream_id, scheduled_by_step, attempt_count, last_error " +
+            "            scheduled_by_stream_id, scheduled_by_step, attempt_count, last_error, tenant_id " +
             ") " +
             "INSERT INTO event_store.delayed_commands_quarantine " +
             "  (delayed_command_id, fire_at_utc, command_type, command_payload, correlation_id, " +
             "   causation_id, actor_id, service_name, idempotency_key, scheduled_by_stream_id, " +
-            "   scheduled_by_step, attempt_count, final_error, quarantined_at) " +
+            "   scheduled_by_step, attempt_count, final_error, quarantined_at, tenant_id) " +
             "SELECT delayed_command_id, fire_at_utc, command_type, command_payload, correlation_id, " +
             "       causation_id, actor_id, service_name, idempotency_key, scheduled_by_stream_id, " +
-            "       scheduled_by_step, attempt_count, last_error, @now " +
+            "       scheduled_by_step, attempt_count, last_error, @now, tenant_id " +
             "FROM moved";
         AddBigInt(cmd, "id", delayedCommandId);
         AddTimestampTz(cmd, "now", nowUtc);
@@ -443,5 +445,6 @@ public sealed class DelayQueueProcessor : BackgroundService
         string IdempotencyKey,
         string ScheduledByStreamId,
         string ScheduledByStep,
-        int AttemptCount);
+        int AttemptCount,
+        TenantId Tenant);
 }

@@ -258,3 +258,48 @@ primary trigger the way it is for the outbox.
 - The timeout-kind count grows large enough that N typed commands plus N
   handlers becomes a maintenance burden. The generic-command-with-discriminator
   alternative is reconsidered, trading type safety for fewer classes.
+
+## Amendment (Phase 10, multi-tenancy)
+
+Migration 0020 adds a `tenant_id` discriminator to `delayed_commands` and
+`delayed_commands_quarantine` under the shared-schema isolation model. The column
+is flat and keeps its NOT NULL DEFAULT, the read-model add-with-default idiom
+rather than the drop-default posture migration 0019 took for the command
+idempotency table. The posture differs because the schedule write is an
+off-command-path worker write that always names the tenant from the causing
+metadata, so the default is the honest fallback for a pre-existing or
+unnamed-tenant row, not a fail-closed backstop. The command-idempotency table sits
+on the command path, where a missing tenant is a dispatch-wiring regression, so it
+drops its default to raise; the delay queue does not.
+
+`ScheduleAsync` stamps `tenant_id` from `causingEventMetadata.Tenant`. The
+processor selects the column into the due row and rebuilds the dispatch metadata
+with `Tenant: row.Tenant`, so a resurfaced command dispatches under the tenant
+that scheduled it rather than the default. The row is self-describing in its
+tenant the way it already is in its correlation and causation: the column the
+scheduler wrote is the tenant the dispatch reconstructs. The quarantine move
+carries `tenant_id` through its atomic CTE, so an operator diagnosing a
+quarantined row sees which tenant's command exhausted its retries.
+
+A known consequence, recorded rather than hidden: the OrderFulfillment
+process-manager stream stays at the default-tenant form. The timeout handler loads
+the PM through `OrderFulfillmentStreams.For`, which composes the stream id under
+the default tenant, and the in-process process-manager dispatch loop does not set
+the current-tenant accessor, so the PM read and write stay default-formed. The
+tenant the resurfaced timeout carries still reaches the tenant-partitioned Order
+aggregate at `order:{tenant}:{id}`: the caused bus sets the current-tenant
+accessor from the dispatched metadata's tenant, and the aggregate repository
+resolves the aggregate stream from that accessor, so the compensation's
+`CancelOrder` lands on the scheduling tenant's order. Tenant-qualifying the
+process-manager stream itself is the separate process-manager-propagation slice's
+work, and the per-tenant replay coherence of that stream is P10.9's concern.
+
+The test reach is stated honestly. The deterministic harness proves the persisted
+tenant on the scheduled row and the tenant on the rebuilt dispatch metadata. No
+single deterministic test drives a non-default-tenant timeout all the way to a
+cancelled non-default-tenant order: the only harness that wires that full chain is
+the live Workers-host path already recorded as a timing race, and the remaining
+links, the caused-bus dispatch onto the Order aggregate through the
+tenant-resolving repository, are pinned by their own tests. P10.9's structural
+cross-tenant extension to the command and delay-queue boundaries is the durable
+home for closing that end-to-end gap.

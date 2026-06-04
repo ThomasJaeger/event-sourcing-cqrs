@@ -227,6 +227,22 @@ public class DelayQueueProcessorTests : IClassFixture<PostgresFixture>
         record.IdempotencyKey.Should().Be("key-9");
     }
 
+    [Fact]
+    public async Task Resurfaces_a_due_command_in_its_stored_tenant()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var bus = new RecordingCausedCommandBus();
+        var processor = BuildProcessor(dataSource, bus, new FakeTimeProvider(BaseTime));
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        await SeedDueRowAsync(dataSource, fireAt: BaseTime, tenant: tenant);
+
+        await processor.ProcessBatchAsync(CancellationToken.None);
+
+        var record = bus.Received.Should().ContainSingle().Subject;
+        record.Metadata.Tenant.Should().Be(tenant);
+    }
+
     private static readonly SystemActor Pm = SystemActors.OrderFulfillment;
 
     private static DelayQueueProcessor BuildProcessor(
@@ -260,7 +276,8 @@ public class DelayQueueProcessorTests : IClassFixture<PostgresFixture>
         Guid? causationId = null,
         string idempotencyKey = "key-1",
         DateTime? dispatchedAt = null,
-        DateTime? cancelledAt = null)
+        DateTime? cancelledAt = null,
+        TenantId? tenant = null)
     {
         var payloadJson = JsonSerializer.Serialize(
             new TestTimeout(Guid.NewGuid()), typeof(TestTimeout), CreateJsonOptions());
@@ -271,9 +288,9 @@ public class DelayQueueProcessorTests : IClassFixture<PostgresFixture>
             "INSERT INTO event_store.delayed_commands " +
             "(fire_at_utc, command_type, command_payload, correlation_id, causation_id, " +
             "actor_id, service_name, idempotency_key, scheduled_by_stream_id, scheduled_by_step, " +
-            "attempt_count, dispatched_at_utc, cancelled_at_utc) " +
+            "attempt_count, dispatched_at_utc, cancelled_at_utc, tenant_id) " +
             "VALUES (@fire_at, @type, @payload, @correlation, @causation, @actor, @service, " +
-            "@key, @stream, @step, @attempts, @dispatched, @cancelled) " +
+            "@key, @stream, @step, @attempts, @dispatched, @cancelled, @tenant) " +
             "RETURNING delayed_command_id";
         cmd.Parameters.AddWithValue("fire_at", NpgsqlDbType.TimestampTz, fireAt.UtcDateTime);
         cmd.Parameters.AddWithValue("type", NpgsqlDbType.Text, nameof(TestTimeout));
@@ -288,6 +305,7 @@ public class DelayQueueProcessorTests : IClassFixture<PostgresFixture>
         cmd.Parameters.AddWithValue("attempts", NpgsqlDbType.Integer, attemptCount);
         cmd.Parameters.AddWithValue("dispatched", NpgsqlDbType.TimestampTz, (object?)dispatchedAt ?? DBNull.Value);
         cmd.Parameters.AddWithValue("cancelled", NpgsqlDbType.TimestampTz, (object?)cancelledAt ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, (tenant ?? WellKnownTenants.Default).Value);
         return (long)(await cmd.ExecuteScalarAsync())!;
     }
 

@@ -167,6 +167,24 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task Schedule_persists_the_causing_event_tenant_on_the_row()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var queue = NewQueue(dataSource);
+        var stream = NewPmStream();
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+
+        await queue.ScheduleAsync(
+            new TestTimeout(Guid.NewGuid()), FireAt, stream, "await-payment",
+            CausingEvent(Guid.NewGuid(), Guid.NewGuid(), tenant), Pm, "key-1", CancellationToken.None);
+
+        var rows = await ReadRowsAsync(connStr, stream.Value, "await-payment");
+        rows.Should().ContainSingle();
+        rows[0].Tenant.Should().Be(tenant);
+    }
+
     private static PostgresDelayQueue NewQueue(NpgsqlDataSource dataSource)
         => new(
             new NpgsqlConnectionFactory(dataSource),
@@ -176,7 +194,7 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
     private static StreamId NewPmStream()
         => StreamId.Parse($"pm-order-fulfillment:{Guid.NewGuid():N}");
 
-    private static EventMetadata CausingEvent(Guid correlationId, Guid eventId)
+    private static EventMetadata CausingEvent(Guid correlationId, Guid eventId, TenantId? tenant = null)
         => new(
             EventId: eventId,
             CorrelationId: correlationId,
@@ -185,7 +203,7 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
             Source: "Sales",
             SchemaVersion: 1,
             OccurredUtc: new DateTime(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc),
-            Tenant: WellKnownTenants.Default);
+            Tenant: tenant ?? WellKnownTenants.Default);
 
     private static Task ScheduleAsync(
         PostgresDelayQueue queue, StreamId stream, string step, string idempotencyKey)
@@ -201,7 +219,8 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT command_type, command_payload, correlation_id, causation_id, actor_id, " +
-            "service_name, idempotency_key, dispatched_at_utc, cancelled_at_utc, cancellation_reason " +
+            "service_name, idempotency_key, dispatched_at_utc, cancelled_at_utc, cancellation_reason, " +
+            "tenant_id " +
             "FROM event_store.delayed_commands " +
             "WHERE scheduled_by_stream_id = @stream_id AND scheduled_by_step = @step " +
             "ORDER BY delayed_command_id";
@@ -222,7 +241,8 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
                 IdempotencyKey: reader.GetString(6),
                 DispatchedAtUtc: reader.IsDBNull(7) ? null : reader.GetDateTime(7),
                 CancelledAtUtc: reader.IsDBNull(8) ? null : reader.GetDateTime(8),
-                CancellationReason: reader.IsDBNull(9) ? null : reader.GetString(9)));
+                CancellationReason: reader.IsDBNull(9) ? null : reader.GetString(9),
+                Tenant: TenantId.From(reader.GetGuid(10))));
         }
         return rows;
     }
@@ -252,5 +272,6 @@ public class PostgresDelayQueue_Tests : IClassFixture<PostgresFixture>
         string IdempotencyKey,
         DateTime? DispatchedAtUtc,
         DateTime? CancelledAtUtc,
-        string? CancellationReason);
+        string? CancellationReason,
+        TenantId Tenant);
 }

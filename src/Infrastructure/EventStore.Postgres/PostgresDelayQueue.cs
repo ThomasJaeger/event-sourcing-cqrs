@@ -54,9 +54,11 @@ public sealed class PostgresDelayQueue : IDelayQueue
         cmd.CommandText =
             "INSERT INTO event_store.delayed_commands " +
             "(fire_at_utc, command_type, command_payload, correlation_id, causation_id, " +
-            "actor_id, service_name, idempotency_key, scheduled_by_stream_id, scheduled_by_step) " +
+            "actor_id, service_name, idempotency_key, scheduled_by_stream_id, scheduled_by_step, " +
+            "tenant_id) " +
             "VALUES (@fire_at_utc, @command_type, @command_payload, @correlation_id, @causation_id, " +
-            "@actor_id, @service_name, @idempotency_key, @scheduled_by_stream_id, @scheduled_by_step)";
+            "@actor_id, @service_name, @idempotency_key, @scheduled_by_stream_id, @scheduled_by_step, " +
+            "@tenant_id)";
         AddTimestampTz(cmd, "fire_at_utc", fireAtUtc.UtcDateTime);
         AddText(cmd, "command_type", commandType);
         AddJsonb(cmd, "command_payload", payloadJson);
@@ -67,6 +69,7 @@ public sealed class PostgresDelayQueue : IDelayQueue
         AddText(cmd, "idempotency_key", idempotencyKey);
         AddText(cmd, "scheduled_by_stream_id", scheduledByStream.Value);
         AddText(cmd, "scheduled_by_step", scheduledByStep);
+        AddUuid(cmd, "tenant_id", causingEventMetadata.Tenant.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
