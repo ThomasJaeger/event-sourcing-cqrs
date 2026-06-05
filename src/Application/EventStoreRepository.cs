@@ -60,16 +60,15 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
         await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
     }
 
-    // The tenant tracks command-context presence. On the command path the bus set
-    // the tenant alongside the context, so a present context with an unset tenant
-    // is a wiring regression. Off the command path (worker writes, the
-    // direct-construction tests) the default tenant is the honest value. One
-    // resolved tenant feeds both the stream id and the metadata so they cannot
-    // disagree.
+    // The tenant is sourced from the accessor, the single source the command bus
+    // and the process-manager dispatch loop both set. When it is unset, the
+    // no-command-context path falls back to the default tenant (worker writes, the
+    // direct-construction tests), while a present command context with no tenant is
+    // a dispatch-wiring regression and throws. One resolved tenant feeds both the
+    // stream id and the metadata so they cannot disagree.
     private TenantId ResolveTenant()
-        => _accessor.Current is null
-            ? WellKnownTenants.Default
-            : _tenantAccessor.Current ?? throw new MissingTenantContextException();
+        => _tenantAccessor.Current
+            ?? (_accessor.Current is null ? WellKnownTenants.Default : throw new MissingTenantContextException());
 
     // Stamps metadata from the current command context, chaining causation
     // across multiple events in the same SaveAsync batch (the first event is

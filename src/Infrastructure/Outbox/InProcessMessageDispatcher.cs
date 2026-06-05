@@ -46,10 +46,11 @@ public sealed class InProcessMessageDispatcher : IMessageDispatcher
         using var scope = _services.CreateScope();
         var sp = scope.ServiceProvider;
 
-        // The projection write path reads the current tenant off this accessor (ADR
-        // 0031). Set it from the event's metadata for the IEventHandler (projection)
-        // loop and restore in finally before the process-manager loop, which stays
-        // untenanted this commit. Same capture/set/restore-in-finally shape as CommandBus.
+        // The projection write path and the process-manager loop both read the current
+        // tenant off this accessor (ADR 0031). Set it from the event's metadata around
+        // both loops and restore in finally, so a PM read and write run under the tenant
+        // of the event that produced them. Same capture/set/restore-in-finally shape as
+        // CommandBus.
         var tenantAccessor = sp.GetRequiredService<ICurrentTenantAccessor>();
         var previousTenant = tenantAccessor.Current;
         tenantAccessor.Current = message.Metadata.Tenant;
@@ -59,14 +60,14 @@ public sealed class InProcessMessageDispatcher : IMessageDispatcher
             {
                 await (Task)invoker.HandleMethod.Invoke(handler, new object[] { context, ct })!;
             }
+            foreach (var handler in sp.GetServices(invoker.ProcessManagerHandlerType))
+            {
+                await (Task)invoker.ProcessManagerHandleMethod.Invoke(handler, new object[] { context, ct })!;
+            }
         }
         finally
         {
             tenantAccessor.Current = previousTenant;
-        }
-        foreach (var handler in sp.GetServices(invoker.ProcessManagerHandlerType))
-        {
-            await (Task)invoker.ProcessManagerHandleMethod.Invoke(handler, new object[] { context, ct })!;
         }
     }
 

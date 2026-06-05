@@ -104,7 +104,7 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
         return envelopes;
     }
 
-    private static EventMetadata BuildFallbackMetadata()
+    private EventMetadata BuildFallbackMetadata()
         => new(
             EventId: Guid.NewGuid(),
             CorrelationId: Guid.Empty,
@@ -113,5 +113,5 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
             Source: "Workers",
             SchemaVersion: 1,
             OccurredUtc: DateTime.UtcNow,
-            Tenant: WellKnownTenants.Default);
+            Tenant: _tenantAccessor.Current ?? WellKnownTenants.Default);
 }
