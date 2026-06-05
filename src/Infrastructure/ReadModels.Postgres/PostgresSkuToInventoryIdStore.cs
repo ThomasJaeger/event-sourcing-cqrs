@@ -18,9 +18,9 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore, ITen
     private readonly PostgresPgNotifyPublisher _publisher;
     private readonly ICurrentTenantAccessor _tenantAccessor;
 
-    // The accessor is held to thread into the unit of work, where RecordAsync tags the
-    // write's tenant; GetInventoryIdAsync takes the tenant as a parameter (the process
-    // manager reads it off the untenanted dispatch loop, so the accessor is not set there).
+    // The accessor feeds both paths: the unit of work tags the write's tenant from it,
+    // and GetInventoryIdAsync resolves the read's tenant from it the same way, now that
+    // the process-manager dispatch loop is tenanted and the accessor is set there.
     public PostgresSkuToInventoryIdStore(
         IReadModelConnectionFactory factory,
         ICheckpointStore checkpointStore,
@@ -55,17 +55,17 @@ public sealed class PostgresSkuToInventoryIdStore : ISkuToInventoryIdStore, ITen
         }
     }
 
-    public async Task<Guid?> GetInventoryIdAsync(string sku, TenantId tenant, CancellationToken ct)
+    public async Task<Guid?> GetInventoryIdAsync(string sku, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
-        ArgumentNullException.ThrowIfNull(tenant);
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
             "SELECT inventory_id FROM read_models.sku_to_inventory_id " +
             "WHERE sku = @sku AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("sku", NpgsqlDbType.Text, sku);
-        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }

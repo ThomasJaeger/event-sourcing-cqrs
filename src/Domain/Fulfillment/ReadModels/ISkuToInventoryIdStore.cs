@@ -16,10 +16,11 @@ public interface ISkuToInventoryIdStore
     Task<ISkuToInventoryIdUnitOfWork> BeginAsync(CancellationToken ct);
 
     // Read path: the process manager looks up one SKU at a time, outside any unit
-    // of work, scoped to the tenant it passes from the causing event's metadata.
-    // Returns null when no inventory has been created for the SKU under that tenant,
-    // which the PM treats as a workflow failure routing to compensation.
-    Task<Guid?> GetInventoryIdAsync(string sku, TenantId tenant, CancellationToken ct);
+    // of work, scoped to the current tenant the read resolves from the accessor the
+    // same way the write does. Returns null when no inventory has been created for the
+    // SKU under that tenant, which the PM treats as a workflow failure routing to
+    // compensation.
+    Task<Guid?> GetInventoryIdAsync(string sku, CancellationToken ct);
 
     // Rebuild support: drop every row so a replay starts from empty.
     Task TruncateAsync(CancellationToken ct);

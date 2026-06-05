@@ -38,7 +38,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             await uow.CommitAsync(ProjectionName, 5, CancellationToken.None);
         }
 
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(inventoryId);
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(inventoryId);
         var checkpoint = await new PostgresCheckpointStore(factory)
             .GetPositionAsync(ProjectionName, CancellationToken.None);
         checkpoint.Should().Be(5);
@@ -55,7 +55,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             TestNotificationPublisher.Create(),
             new StubTenantAccessor { Current = WellKnownTenants.Default });
 
-        (await store.GetInventoryIdAsync("SKU-MISSING", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-MISSING", CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
         await RecordAndCommitAsync(store, "SKU-1", second, position: 2);
 
         // ON CONFLICT DO NOTHING: the first mapping stands, the second is discarded.
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(first);
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(first);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             // The block exits without CommitAsync: DisposeAsync rolls back.
         }
 
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().BeNull();
         var checkpoint = await new PostgresCheckpointStore(factory)
             .GetPositionAsync(ProjectionName, CancellationToken.None);
         checkpoint.Should().Be(0);
@@ -107,8 +107,8 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
 
         await store.TruncateAsync(CancellationToken.None);
 
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
-        (await store.GetInventoryIdAsync("SKU-2", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-2", CancellationToken.None)).Should().BeNull();
     }
 
     // Green-with-implementation: the same sku under two tenants resolves to each
@@ -139,8 +139,12 @@ public class PostgresSkuToInventoryIdStoreTests : IClassFixture<PostgresFixture>
             await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
         }
 
-        (await store.GetInventoryIdAsync(sku, TenantA, CancellationToken.None)).Should().Be(inventoryA);
-        (await store.GetInventoryIdAsync(sku, TenantB, CancellationToken.None)).Should().Be(inventoryB);
+        // Each tenant's accessor resolves its own mapping for the shared SKU; the distinct ids
+        // mean neither tenant sees the other's.
+        tenant.Current = TenantA;
+        (await store.GetInventoryIdAsync(sku, CancellationToken.None)).Should().Be(inventoryA);
+        tenant.Current = TenantB;
+        (await store.GetInventoryIdAsync(sku, CancellationToken.None)).Should().Be(inventoryB);
     }
 
     private static async Task RecordAndCommitAsync(

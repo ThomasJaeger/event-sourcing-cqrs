@@ -25,9 +25,9 @@ internal sealed class InMemorySkuToInventoryIdStore : ISkuToInventoryIdStore
         => Task.FromResult<ISkuToInventoryIdUnitOfWork>(new UnitOfWork(this));
 
     // The in-memory double does not model tenant scoping (its unit of work has no
-    // accessor to tag a write); the tenant parameter satisfies the port contract and
-    // the single-tenant projection unit tests look up by sku alone.
-    public Task<Guid?> GetInventoryIdAsync(string sku, TenantId tenant, CancellationToken ct)
+    // accessor to tag a write); the single-tenant projection unit tests look up by sku
+    // alone.
+    public Task<Guid?> GetInventoryIdAsync(string sku, CancellationToken ct)
         => Task.FromResult(_mappings.TryGetValue(sku, out var id) ? id : (Guid?)null);
 
     public Task TruncateAsync(CancellationToken ct)

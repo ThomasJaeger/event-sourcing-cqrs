@@ -114,7 +114,7 @@ public sealed class ReturnProcessManagerHandler : IProcessManagerHandler<Shipmen
     {
         var results = await Task.WhenAll(shipment.Lines.Select(async line =>
         {
-            var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, causing.Tenant, ct);
+            var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, ct);
             if (inventoryId is null)
             {
                 return (line, inventoryId, outcome: (CommandOutcome?)null);

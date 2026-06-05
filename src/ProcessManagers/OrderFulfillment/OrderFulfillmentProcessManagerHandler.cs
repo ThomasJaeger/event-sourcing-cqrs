@@ -224,7 +224,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         // slowest single reservation rather than the line count (Decision 10).
         var results = await Task.WhenAll(order.Lines.Select(async line =>
         {
-            var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, causing.Tenant, ct);
+            var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, ct);
             if (inventoryId is null)
             {
                 return (line, inventoryId, outcome: (CommandOutcome?)null);

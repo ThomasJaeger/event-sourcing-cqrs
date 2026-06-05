@@ -21,7 +21,7 @@ public class SkuToInventoryIdProjectionTests
             Context(new InventoryCreated(inventoryId, "SKU-1", CreatedAt), position: 1),
             CancellationToken.None);
 
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(inventoryId);
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(inventoryId);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class SkuToInventoryIdProjectionTests
             CancellationToken.None);
 
         store.RecordCount.Should().Be(recordsAfterFirst);
-        (await store.GetInventoryIdAsync("SKU-2", WellKnownTenants.Default, CancellationToken.None)).Should().BeNull();
+        (await store.GetInventoryIdAsync("SKU-2", CancellationToken.None)).Should().BeNull();
         store.Checkpoints[projection.Name].Should().Be(10);
     }
 
@@ -78,7 +78,7 @@ public class SkuToInventoryIdProjectionTests
             Context(new InventoryCreated(second, "SKU-1", CreatedAt), position: 2),
             CancellationToken.None);
 
-        (await store.GetInventoryIdAsync("SKU-1", WellKnownTenants.Default, CancellationToken.None)).Should().Be(first);
+        (await store.GetInventoryIdAsync("SKU-1", CancellationToken.None)).Should().Be(first);
     }
 
     private static EventContext<TEvent> Context<TEvent>(TEvent @event, long position)

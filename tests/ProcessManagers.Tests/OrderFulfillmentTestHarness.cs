@@ -95,7 +95,7 @@ internal sealed class StubSkuToInventoryIdStore : ISkuToInventoryIdStore
 
     public void Map(string sku, Guid inventoryId) => _map[sku] = inventoryId;
 
-    public Task<Guid?> GetInventoryIdAsync(string sku, TenantId tenant, CancellationToken ct)
+    public Task<Guid?> GetInventoryIdAsync(string sku, CancellationToken ct)
         => Task.FromResult(_map.TryGetValue(sku, out var id) ? id : (Guid?)null);
 
     public Task<ISkuToInventoryIdUnitOfWork> BeginAsync(CancellationToken ct)
