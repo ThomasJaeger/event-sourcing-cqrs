@@ -48,12 +48,14 @@ namespace EventSourcingCqrs.Projections.Tests;
 // predicate from the write-tagging. The query runs under a distinct tenant (TenantB).
 public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture>
 {
-    private static readonly TenantId TenantA =
+    // Internal so CrossTenantProjectionCases can invoke the same harness the cross-tenant coverage cases
+    // extend; the standalone groups below and the registry-driven meta-test then share one harness.
+    internal static readonly TenantId TenantA =
         TenantId.From(Guid.Parse("a0000000-0000-0000-0000-0000000000a1"));
-    private static readonly TenantId TenantB =
+    internal static readonly TenantId TenantB =
         TenantId.From(Guid.Parse("b0000000-0000-0000-0000-0000000000b2"));
     private static readonly TenantId Default = WellKnownTenants.Default;
-    private static readonly DateTime At = new(2026, 5, 24, 12, 0, 0, DateTimeKind.Utc);
+    internal static readonly DateTime At = new(2026, 5, 24, 12, 0, 0, DateTimeKind.Utc);
 
     private readonly PostgresFixture _fixture;
 
@@ -62,74 +64,20 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
     // ---- Group A: a projection write tags the row with the current tenant ----
 
     [Fact]
-    public async Task OrderList_write_tags_the_row_with_the_current_tenant()
-    {
-        await using var ds = NpgsqlDataSource.Create(await _fixture.CreateMigratedDatabaseAsync());
-        var (store, projection, stub) = NewOrderList(ds, TenantA);
-        var orderId = Guid.NewGuid();
-
-        await projection.HandleAsync(
-            Ctx(new OrderPlaced(orderId, Guid.NewGuid(), new Money(10m, Currency.USD), At), 1),
-            CancellationToken.None);
-
-        stub.Current = TenantA;
-        (await store.GetAsync(orderId, CancellationToken.None))
-            .Should().NotBeNull("the write must tag the row with the writing tenant, so it is visible under it");
-        stub.Current = TenantB;
-        (await store.GetAsync(orderId, CancellationToken.None)).Should().BeNull();
-    }
+    public Task OrderList_write_tags_the_row_with_the_current_tenant()
+        => CrossTenantProjectionCases.For(_fixture)[typeof(OrderListProjection)]();
 
     [Fact]
-    public async Task OrderDetail_write_tags_the_line_with_the_current_tenant()
-    {
-        await using var ds = NpgsqlDataSource.Create(await _fixture.CreateMigratedDatabaseAsync());
-        var (store, projection, stub) = NewOrderDetail(ds, TenantA);
-        var orderId = Guid.NewGuid();
-
-        await projection.HandleAsync(
-            Ctx(new OrderLineAdded(orderId, Guid.NewGuid(), "SKU-1", 1, new Money(5m, Currency.USD), At), 1),
-            CancellationToken.None);
-
-        stub.Current = TenantA;
-        (await store.GetLinesAsync(orderId, CancellationToken.None))
-            .Should().ContainSingle("the line must be tagged with the writing tenant");
-        stub.Current = TenantB;
-        (await store.GetLinesAsync(orderId, CancellationToken.None)).Should().BeEmpty();
-    }
+    public Task OrderDetail_write_tags_the_line_with_the_current_tenant()
+        => CrossTenantProjectionCases.For(_fixture)[typeof(OrderDetailProjection)]();
 
     [Fact]
-    public async Task CustomerSummary_write_tags_the_row_with_the_current_tenant()
-    {
-        await using var ds = NpgsqlDataSource.Create(await _fixture.CreateMigratedDatabaseAsync());
-        var (store, projection, stub) = NewCustomerSummary(ds, TenantA);
-        var customerId = Guid.NewGuid();
-
-        await projection.HandleAsync(
-            Ctx(new OrderPlaced(Guid.NewGuid(), customerId, new Money(50m, Currency.USD), At), 1),
-            CancellationToken.None);
-
-        stub.Current = TenantA;
-        (await store.GetAsync(customerId, CancellationToken.None))
-            .Should().NotBeNull("the summary must be tagged with the writing tenant");
-        stub.Current = TenantB;
-        (await store.GetAsync(customerId, CancellationToken.None)).Should().BeNull();
-    }
+    public Task CustomerSummary_write_tags_the_row_with_the_current_tenant()
+        => CrossTenantProjectionCases.For(_fixture)[typeof(CustomerSummaryProjection)]();
 
     [Fact]
-    public async Task InventoryDashboard_write_tags_the_row_with_the_current_tenant()
-    {
-        await using var ds = NpgsqlDataSource.Create(await _fixture.CreateMigratedDatabaseAsync());
-        var (store, projection, stub) = NewInventoryDashboard(ds, TenantA);
-
-        await projection.HandleAsync(
-            Ctx(new InventoryCreated(Guid.NewGuid(), "SKU-INV", At), 1), CancellationToken.None);
-
-        stub.Current = TenantA;
-        (await store.GetBySkuAsync("SKU-INV", CancellationToken.None))
-            .Should().NotBeNull("the dashboard row must be tagged with the writing tenant");
-        stub.Current = TenantB;
-        (await store.GetBySkuAsync("SKU-INV", CancellationToken.None)).Should().BeNull();
-    }
+    public Task InventoryDashboard_write_tags_the_row_with_the_current_tenant()
+        => CrossTenantProjectionCases.For(_fixture)[typeof(InventoryDashboardProjection)]();
 
     // ---- Group B: a projection-private lookup does not resolve across tenants ----
     // Populate under the default tenant; query under TenantB; observe under the default tenant.
@@ -365,7 +313,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
 
     // ---- builders and helpers ----
 
-    private static (PostgresOrderListStore Store, OrderListProjection Projection, StubTenantAccessor Stub)
+    internal static (PostgresOrderListStore Store, OrderListProjection Projection, StubTenantAccessor Stub)
         NewOrderList(NpgsqlDataSource ds, TenantId? tenant)
     {
         var factory = new NpgsqlReadModelConnectionFactory(ds);
@@ -375,7 +323,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
         return (store, new OrderListProjection(store, NullLogger<OrderListProjection>.Instance), stub);
     }
 
-    private static (PostgresOrderDetailStore Store, OrderDetailProjection Projection, StubTenantAccessor Stub)
+    internal static (PostgresOrderDetailStore Store, OrderDetailProjection Projection, StubTenantAccessor Stub)
         NewOrderDetail(NpgsqlDataSource ds, TenantId? tenant)
     {
         var factory = new NpgsqlReadModelConnectionFactory(ds);
@@ -388,7 +336,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             stub);
     }
 
-    private static (PostgresCustomerSummaryStore Store, CustomerSummaryProjection Projection, StubTenantAccessor Stub)
+    internal static (PostgresCustomerSummaryStore Store, CustomerSummaryProjection Projection, StubTenantAccessor Stub)
         NewCustomerSummary(NpgsqlDataSource ds, TenantId? tenant)
     {
         var factory = new NpgsqlReadModelConnectionFactory(ds);
@@ -398,7 +346,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
         return (store, new CustomerSummaryProjection(store, NullLogger<CustomerSummaryProjection>.Instance), stub);
     }
 
-    private static (PostgresInventoryDashboardStore Store, InventoryDashboardProjection Projection, StubTenantAccessor Stub)
+    internal static (PostgresInventoryDashboardStore Store, InventoryDashboardProjection Projection, StubTenantAccessor Stub)
         NewInventoryDashboard(NpgsqlDataSource ds, TenantId? tenant)
     {
         var factory = new NpgsqlReadModelConnectionFactory(ds);
@@ -411,7 +359,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             stub);
     }
 
-    private static EventContext<TEvent> Ctx<TEvent>(TEvent @event, long position)
+    internal static EventContext<TEvent> Ctx<TEvent>(TEvent @event, long position, TenantId? tenant = null)
         where TEvent : IDomainEvent
         => new(
             @event,
@@ -423,7 +371,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
                 Source: "test",
                 SchemaVersion: 1,
                 OccurredUtc: At,
-                Tenant: Default),
+                Tenant: tenant ?? Default),
             position);
 
     private static Address SampleAddress() => new("1 Main St", "Smalltown", "12345", "US");
