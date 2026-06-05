@@ -1,5 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.IntegrationTests.Queries;
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;

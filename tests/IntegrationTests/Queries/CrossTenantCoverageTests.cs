@@ -1,3 +1,4 @@
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Xunit;
 

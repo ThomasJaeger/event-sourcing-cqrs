@@ -1,6 +1,7 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
