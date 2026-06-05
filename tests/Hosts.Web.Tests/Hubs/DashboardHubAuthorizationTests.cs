@@ -18,26 +18,8 @@ public class DashboardHubAuthorizationTests
     private static readonly Guid Tenant = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     [Fact]
-    public async Task An_authorized_order_subscribe_joins_the_group()
-    {
-        var orderId = Guid.NewGuid();
-        var client = StubSubscriptionAuthorizationClient.Allow(Tenant);
-        var groups = new RecordingGroupManager();
-        using var hub = new DashboardHub(client)
-        {
-            Context = new FakeHubCallerContext("conn-1", PrincipalFor(Actor)),
-            Groups = groups,
-        };
-
-        await hub.SubscribeToResource($"order:{orderId}");
-
-        groups.Calls.Should().ContainSingle()
-            .Which.Should().Be(("add", "conn-1", $"tenant:55555555555555555555555555555555:order:{orderId}"));
-        client.Calls.Should().ContainSingle();
-        client.Calls[0].ActorId.Should().Be(Actor);
-        client.Calls[0].Request.ResourceType.Should().Be(SubscriptionResourceType.Order);
-        client.Calls[0].Request.ResourceId.Should().Be(orderId.ToString());
-    }
+    public Task An_authorized_order_subscribe_joins_the_group()
+        => SubscriptionResourceCoverageTests.OrderSubscribeCaseAsync();
 
     [Fact]
     public async Task A_refused_order_subscribe_throws_and_does_not_join()
@@ -59,24 +41,8 @@ public class DashboardHubAuthorizationTests
     }
 
     [Fact]
-    public async Task An_authorized_inventory_subscribe_joins_and_sends_the_sku_unparsed()
-    {
-        var client = StubSubscriptionAuthorizationClient.Allow(Tenant);
-        var groups = new RecordingGroupManager();
-        using var hub = new DashboardHub(client)
-        {
-            Context = new FakeHubCallerContext("conn-1", PrincipalFor(Actor)),
-            Groups = groups,
-        };
-
-        await hub.SubscribeToResource("inventory:SKU-1");
-
-        groups.Calls.Should().ContainSingle()
-            .Which.Should().Be(("add", "conn-1", "tenant:55555555555555555555555555555555:inventory:SKU-1"));
-        client.Calls.Should().ContainSingle();
-        client.Calls[0].Request.ResourceType.Should().Be(SubscriptionResourceType.Inventory);
-        client.Calls[0].Request.ResourceId.Should().Be("SKU-1");
-    }
+    public Task An_authorized_inventory_subscribe_joins_and_sends_the_sku_unparsed()
+        => SubscriptionResourceCoverageTests.InventorySubscribeCaseAsync();
 
     [Fact]
     public async Task Subscribe_joins_the_tenant_qualified_group_from_the_authorized_tenant()
@@ -259,34 +225,4 @@ public class DashboardHubAuthorizationTests
     private static ClaimsPrincipal PrincipalFor(Guid actorId) =>
         new(new ClaimsIdentity(
             new[] { new Claim(ClaimTypes.NameIdentifier, actorId.ToString()) }, "Test"));
-
-    // Returns a configured SubscriptionAuthorizationResult and records every authorize call, so a test can
-    // assert both that the hub consulted the client and what it asked. A valid allow requires the
-    // authorized tenant, mirroring the production contract: Allow takes a tenant, Deny takes none, so an
-    // allow with no tenant is unconstructable through the normal factories. The one intentional malformed
-    // allow (the fail-closed guard test) goes through WithResult.
-    private sealed class StubSubscriptionAuthorizationClient : ISubscriptionAuthorizationClient
-    {
-        private readonly SubscriptionAuthorizationResult _result;
-
-        private StubSubscriptionAuthorizationClient(SubscriptionAuthorizationResult result) => _result = result;
-
-        public static StubSubscriptionAuthorizationClient Allow(Guid tenant) =>
-            new(new SubscriptionAuthorizationResult(true, tenant));
-
-        public static StubSubscriptionAuthorizationClient Deny() =>
-            new(new SubscriptionAuthorizationResult(false, null));
-
-        public static StubSubscriptionAuthorizationClient WithResult(SubscriptionAuthorizationResult result) =>
-            new(result);
-
-        public List<(Guid ActorId, SubscriptionAuthorizationRequest Request)> Calls { get; } = [];
-
-        public Task<SubscriptionAuthorizationResult> AuthorizeAsync(
-            Guid actorId, SubscriptionAuthorizationRequest request, CancellationToken ct)
-        {
-            Calls.Add((actorId, request));
-            return Task.FromResult(_result);
-        }
-    }
 }

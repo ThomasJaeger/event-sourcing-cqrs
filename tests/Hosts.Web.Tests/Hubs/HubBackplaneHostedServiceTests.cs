@@ -10,33 +10,12 @@ namespace EventSourcingCqrs.Hosts.Web.Tests.Hubs;
 public class HubBackplaneHostedServiceTests
 {
     [Fact]
-    public async Task Dispatch_order_detail_envelope_broadcasts_to_the_order_resource_group()
-    {
-        var hubContext = new RecordingHubContext();
-        var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
-
-        await service.DispatchAsync(envelope, CancellationToken.None);
-
-        hubContext.Broadcasts.Should().ContainSingle();
-        var (group, method, args) = hubContext.Broadcasts[0];
-        group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
-        method.Should().Be(HubBackplaneHostedService.ClientMethod);
-        args.Should().ContainSingle().Which.Should().Be(envelope);
-    }
+    public Task Dispatch_order_detail_envelope_broadcasts_to_the_order_resource_group()
+        => SubscriptionResourceCoverageTests.OrderDetailBroadcastCaseAsync();
 
     [Fact]
-    public async Task Dispatch_inventory_dashboard_envelope_broadcasts_to_the_inventory_resource_group()
-    {
-        var hubContext = new RecordingHubContext();
-        var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("inventory-dashboard", "SKU-1", "InventoryAdjusted", ["on_hand"], WellKnownTenants.Default);
-
-        await service.DispatchAsync(envelope, CancellationToken.None);
-
-        hubContext.Broadcasts.Should().ContainSingle();
-        hubContext.Broadcasts[0].Group.Should().Be("tenant:00000000000000000000000000000001:inventory:SKU-1");
-    }
+    public Task Dispatch_inventory_dashboard_envelope_broadcasts_to_the_inventory_resource_group()
+        => SubscriptionResourceCoverageTests.InventoryDashboardBroadcastCaseAsync();
 
     [Fact]
     public async Task DispatchAsync_broadcasts_to_the_tenant_qualified_group()

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
+using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.SignalR;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Hosts.Web.Hubs;
@@ -112,4 +113,35 @@ internal sealed class RecordingLogger<T> : ILogger<T>
         Exception? exception,
         Func<TState, Exception?, string> formatter)
         => Entries.Add((logLevel, formatter(state, exception), exception));
+}
+
+// Returns a configured SubscriptionAuthorizationResult and records every authorize call, so a test can
+// assert both that the hub consulted the client and what it asked. A valid allow requires the authorized
+// tenant, mirroring the production contract: Allow takes a tenant, Deny takes none, so an allow with no
+// tenant is unconstructable through the normal factories. The one intentional malformed allow (the
+// fail-closed guard test) goes through WithResult. Shared by the per-member subscribe cases and the hub
+// authorization tests.
+internal sealed class StubSubscriptionAuthorizationClient : ISubscriptionAuthorizationClient
+{
+    private readonly SubscriptionAuthorizationResult _result;
+
+    private StubSubscriptionAuthorizationClient(SubscriptionAuthorizationResult result) => _result = result;
+
+    public static StubSubscriptionAuthorizationClient Allow(Guid tenant) =>
+        new(new SubscriptionAuthorizationResult(true, tenant));
+
+    public static StubSubscriptionAuthorizationClient Deny() =>
+        new(new SubscriptionAuthorizationResult(false, null));
+
+    public static StubSubscriptionAuthorizationClient WithResult(SubscriptionAuthorizationResult result) =>
+        new(result);
+
+    public List<(Guid ActorId, SubscriptionAuthorizationRequest Request)> Calls { get; } = [];
+
+    public Task<SubscriptionAuthorizationResult> AuthorizeAsync(
+        Guid actorId, SubscriptionAuthorizationRequest request, CancellationToken ct)
+    {
+        Calls.Add((actorId, request));
+        return Task.FromResult(_result);
+    }
 }
