@@ -327,3 +327,34 @@ it. The change is to the cancellation query alone; the row-lock claim, the dispa
 flow, and the state guard are unchanged. The original Decision's cancellation
 narrative holds for the idle future-dated row it described; this amendment records
 the firing-row case the active-cancellation default did not account for.
+
+## Amendment (Phase 10, process-manager propagation closes the residual)
+
+The default-formed-process-manager-stream consequence the multi-tenancy
+amendment above recorded is closed by the process-manager propagation slice.
+The in-process dispatch loop is now tenanted at the accessor, so
+`OrderFulfillmentStreams.For` composes the stream id under the loop's tenant
+and the OrderFulfillment PM read and write are tenant-formed rather than
+default-formed. The timeout handler reverses the Option 1 choice the residual
+recorded: it loads the PM under the resurfaced command's tenant, sourcing it
+from the accessor the caused bus set from the due row, so the timeout's PM load
+and the normal-flow PM write land on one stream per tenant and per-tenant
+replay of that stream is coherent. The original consequence stays above as the
+now-closed residual.
+
+The test reach the residual stated honestly is now extended. A deterministic
+test drives a non-default-tenant timeout to a cancelled non-default-tenant
+order: the flipped Workers cross-tenant coverage case seeds the PM under the
+non-default tenant, resurfaces the due timeout under that tenant, and asserts
+the non-default order ends cancelled while the same-id default order stays
+untouched. The end-to-end gap the test-reach note named is closed by that case.
+
+The SKU lookup the OrderFulfillment reservation fan-out and the Return restock
+reach resolves the current tenant from the async-local accessor, and it runs
+its per-line reads inside a parallel Task.WhenAll. The async-local flowing into
+the task continuations is a platform guarantee of the execution context, not
+this code's behavior, so it carries no dedicated test and is recorded here as a
+deliberately untested platform guarantee rather than a coverage gap. The timeout
+path itself does not reach the SKU lookup; its compensation releases from the
+inventory ids the PM already recorded, so this note covers the normal-flow
+reservation paths, not the timeout.
