@@ -336,23 +336,26 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
     }
 
     [Fact]
-    public async Task AwaitingPayment_timeout_under_a_context_loads_the_pm_at_default_and_stamps_the_context_tenant()
+    public async Task AwaitingPayment_timeout_loads_the_pm_under_the_resurfaced_tenant_and_cancels_it()
     {
-        // Option 1 independence: the stream-id load stays Default while the metadata tenant tracks the
-        // command context. With a non-default tenant on the context, the PM is still found and cancelled
-        // at its Default stream, and the compensation command carries the context tenant on its metadata.
+        // The reversal of Option 1: the timeout loads the PM under the resurfaced command's tenant from
+        // the accessor, finds it at the tenant-form stream, and cancels it. The normal-flow OrderPlaced
+        // lands the PM at the tenant-form stream, the accessor carries the same tenant, and the
+        // compensation command's metadata carries it too.
         var harness = new OrderFulfillmentTestHarness();
         var orderId = Guid.NewGuid();
         var otherTenant = TenantId.From(Guid.NewGuid());
         await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
-        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now));
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now), MetadataForTenant(otherTenant));
 
         harness.EnterCommandContext(otherTenant);
         await harness.DispatchTimeoutAwaitingPayment(orderId);
 
         var cancel = harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle().Which;
+        var pm = await harness.LoadPmForTenant(otherTenant, orderId);
+        pm.Should().NotBeNull();
+        pm!.State.Should().Be(OrderFulfillmentState.Cancelled);
         cancel.Metadata.Tenant.Should().Be(otherTenant);
-        (await harness.LoadPm(orderId))!.State.Should().Be(OrderFulfillmentState.Cancelled);
     }
 
     [Fact]
@@ -430,6 +433,25 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         harness.DelayQueue.Scheduled.Where(s => s.Step == "await-payment-timeout").Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task OrderPlaced_under_a_non_default_tenant_saves_the_pm_to_the_tenant_form_stream()
+    {
+        var harness = new OrderFulfillmentTestHarness();
+        var orderId = Guid.NewGuid();
+        var tenant = TenantId.From(Guid.NewGuid());
+
+        await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now), MetadataForTenant(tenant));
+
+        // Design A: the handler threads the inbound event's tenant into OrderFulfillmentStreams.For, so the
+        // started PM lands at the tenant-form stream and not the default-form one. RED today: For ignores
+        // the tenant and composes Default, so the tenant-form read finds nothing and the PM sits at the
+        // default stream.
+        var tenantFormPm = await harness.LoadPmForTenant(tenant, orderId);
+        tenantFormPm.Should().NotBeNull();
+        tenantFormPm!.State.Should().Be(OrderFulfillmentState.AwaitingPayment);
+        (await harness.LoadPm(orderId)).Should().BeNull();
+    }
+
     private static Order BuildOrder(Guid orderId, params (Guid LineId, string Sku, int Qty)[] lines)
     {
         var order = Order.Draft(orderId, Guid.NewGuid(), Now);
@@ -446,4 +468,14 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
 
     private static Money Usd(decimal amount) => new(amount, Currency.USD);
+
+    private static EventMetadata MetadataForTenant(TenantId tenant) => new(
+        EventId: Guid.NewGuid(),
+        CorrelationId: Guid.NewGuid(),
+        CausationId: Guid.NewGuid(),
+        ActorId: Guid.NewGuid(),
+        Source: "test",
+        SchemaVersion: 1,
+        OccurredUtc: Now,
+        Tenant: tenant);
 }

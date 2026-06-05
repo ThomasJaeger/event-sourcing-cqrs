@@ -30,8 +30,17 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
 
     public async Task HandleAsync(TimeoutAwaitingDispatchForOrder command, CancellationToken ct)
     {
+        // Reversal of Option 1: the timeout loads the PM under the resurfaced command's tenant. The caused
+        // bus set the accessor from the due row's tenant, so the stream-id load and the causing metadata
+        // resolve from one tenant. A real context with an unset tenant is a wiring regression; no context
+        // means the System fallback and the default tenant.
+        var context = _accessor.Current;
+        var tenant = context is null
+            ? WellKnownTenants.Default
+            : _tenantAccessor.Current ?? throw new MissingTenantContextException();
+
         var pm = await _pms.LoadAsync(
-            OrderFulfillmentStreams.For(command.OrderId), OrderFulfillmentStreams.New, ct);
+            OrderFulfillmentStreams.For(tenant, command.OrderId), OrderFulfillmentStreams.New, ct);
 
         // State guard: a late timeout, after ShipmentDispatched already advanced
         // the PM, loads a PM past AwaitingDispatch and no-ops.
@@ -40,15 +49,9 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
             return;
         }
 
-        // The metadata tenant tracks the command context: a real context means the bus set the tenant
-        // too (an unset tenant there is a wiring regression); no context means the System fallback and
-        // the default tenant. The OrderFulfillmentStreams.For load above stays Default by design,
-        // independent of this metadata tenant (Option 1).
-        var context = _accessor.Current;
         var causing = context is null
             ? EventMetadata.ForCommand(CommandContext.System, WellKnownTenants.Default)
-            : EventMetadata.ForCommand(
-                context, _tenantAccessor.Current ?? throw new MissingTenantContextException());
+            : EventMetadata.ForCommand(context, tenant);
         await _compensation.CompensateWithReleasesAsync(
             pm, $"Shipment dispatch timed out for order {command.OrderId}.", causing, ct);
     }

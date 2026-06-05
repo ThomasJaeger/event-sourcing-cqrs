@@ -145,11 +145,12 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
         await SavePmAsync(host, pm);
     }
 
-    // The PM stream is default-tenant by design (Option 1): the timeout handler loads it through
-    // OrderFulfillmentStreams.For, which composes under the default tenant regardless of the resurfaced
-    // command's tenant.
+    // The PM stream is tenant-formed: the timeout handler loads it through OrderFulfillmentStreams.For
+    // under the resurfaced command's tenant, the accessor the caused bus sets from the due row, not the
+    // default. The seeded PM and the due row's scheduled_by_stream_id both compose under OtherTenant, so
+    // the resurfaced timeout finds and cancels the non-default-tenant PM at its own stream.
     private static StreamId PmStream(Guid orderId) =>
-        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
+        StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, OtherTenant, orderId);
 
     private static async Task SavePmAsync(IHost host, OrderFulfillmentProcessManager pm)
     {

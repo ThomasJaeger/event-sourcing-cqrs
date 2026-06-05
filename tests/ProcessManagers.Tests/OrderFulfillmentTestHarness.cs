@@ -142,8 +142,8 @@ internal sealed class OrderFulfillmentTestHarness
     }
 
     // Sets a command context and a tenant on the ambient accessors, simulating a caused-command
-    // dispatch arriving at a timeout handler. Pins Option 1's independence: the metadata tenant tracks
-    // the context while the PM stream-id load stays Default.
+    // dispatch arriving at a timeout handler, so the handler resolves both the metadata tenant and the
+    // PM stream-id load from this tenant.
     public void EnterCommandContext(TenantId tenant)
     {
         _accessor.Current = new CommandContext
@@ -185,6 +185,14 @@ internal sealed class OrderFulfillmentTestHarness
     public Task<OrderFulfillmentProcessManager?> LoadPm(Guid orderId)
         => _pms.LoadAsync(
             StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId),
+            sid => new OrderFulfillmentProcessManager(sid),
+            CancellationToken.None);
+
+    // The tenant-form twin of LoadPm: reads the PM from the stream composed under the supplied tenant,
+    // so a cross-tenant case can assert which tenant's stream the handler saved the PM to.
+    public Task<OrderFulfillmentProcessManager?> LoadPmForTenant(TenantId tenant, Guid orderId)
+        => _pms.LoadAsync(
+            StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, tenant, orderId),
             sid => new OrderFulfillmentProcessManager(sid),
             CancellationToken.None);
 

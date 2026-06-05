@@ -75,7 +75,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     public async Task HandleAsync(EventContext<OrderPlaced> context, CancellationToken ct)
     {
         var e = context.Event;
-        var stream = OrderFulfillmentStreams.For(e.OrderId);
+        var stream = OrderFulfillmentStreams.For(context.Metadata.Tenant, e.OrderId);
         var pm = await _pms.LoadOrNewAsync(stream, OrderFulfillmentStreams.New, ct);
 
         if (pm.State == OrderFulfillmentState.NotStarted)
@@ -108,7 +108,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     public async Task HandleAsync(EventContext<PaymentAuthorized> context, CancellationToken ct)
     {
         var e = context.Event;
-        var stream = OrderFulfillmentStreams.For(e.OrderId);
+        var stream = OrderFulfillmentStreams.For(context.Metadata.Tenant, e.OrderId);
         var pm = await _pms.LoadAsync(stream, OrderFulfillmentStreams.New, ct)
             ?? throw new InvalidOperationException(
                 $"OrderFulfillment PM {stream} not found handling PaymentAuthorized for order {e.OrderId}.");
@@ -175,7 +175,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
 
     public async Task HandleAsync(EventContext<ShipmentDispatched> context, CancellationToken ct)
     {
-        var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, ct);
+        var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
         await _delayQueue.CancelAsync(
             pm.StreamId, OrderFulfillmentSteps.AwaitDispatchTimeout, "Shipment dispatched.", ct);
         if (pm.State == OrderFulfillmentState.AwaitingDispatch)
@@ -187,7 +187,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
 
     public async Task HandleAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
     {
-        var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, ct);
+        var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
         if (pm.State == OrderFulfillmentState.AwaitingDelivery)
         {
             // Pattern A with an internal dispatch: record delivery, dispatch
@@ -276,12 +276,12 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     // the PM's tracked ShipmentId guards against an event for a shipment this PM
     // does not own. A clear error on that anomaly beats a silent no-op.
     private async Task<(OrderFulfillmentProcessManager Pm, Shipment Shipment)> CorrelateByShipmentAsync(
-        Guid shipmentId, CancellationToken ct)
+        Guid shipmentId, TenantId tenant, CancellationToken ct)
     {
         var shipment = await _shipments.LoadAsync(shipmentId, ct)
             ?? throw new InvalidOperationException(
                 $"Shipment {shipmentId} not found correlating a shipment event.");
-        var stream = OrderFulfillmentStreams.For(shipment.OrderId);
+        var stream = OrderFulfillmentStreams.For(tenant, shipment.OrderId);
         var pm = await _pms.LoadAsync(stream, OrderFulfillmentStreams.New, ct)
             ?? throw new InvalidOperationException(
                 $"OrderFulfillment PM {stream} not found for shipment {shipmentId}.");

@@ -47,7 +47,7 @@ public sealed class ReturnProcessManagerHandler : IProcessManagerHandler<Shipmen
         var shipment = await _shipments.LoadAsync(e.ShipmentId, ct)
             ?? throw new InvalidOperationException(
                 $"Shipment {e.ShipmentId} not found handling ShipmentReturned.");
-        var stream = ReturnStreams.For(shipment.OrderId);
+        var stream = ReturnStreams.For(context.Metadata.Tenant, shipment.OrderId);
         var pm = await _pms.LoadOrNewAsync(stream, ReturnStreams.New, ct);
 
         if (pm.State is ReturnState.Completed or ReturnState.Stuck)
