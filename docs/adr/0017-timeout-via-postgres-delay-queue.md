@@ -120,7 +120,7 @@ It takes `ICommand` rather than a generic `TCommand`, matching `ICausedCommandBu
 From `causingEventMetadata` it stores `correlation_id` (the event's CorrelationId)
 and `causation_id` (the event's EventId), so the timeout command's causation
 points back through the event that prompted the process manager to set the
-timeout, keeping the Phase 9 Correlation-ID Tracer chain intact. `CancelAsync`
+timeout, keeping the Phase 12 Correlation-ID Tracer chain intact. `CancelAsync`
 matches on the scheduling stream and step, and returns whether any pending row
 was cancelled so a caller can log "no active timeout to cancel" without the
 information being load-bearing.
@@ -245,7 +245,7 @@ primary trigger the way it is for the outbox.
 
 ## Trigger for revisiting
 
-- The KurrentDB adapter (Phase 10) and the DynamoDB adapter (Phase 11) will want
+- The KurrentDB adapter (Phase 13) and the DynamoDB adapter (Phase 14) will want
   different delay mechanisms: KurrentDB has native scheduled messages, and
   DynamoDB pairs TTL expiry with Streams. Both are expected adapter-shape
   changes behind `IDelayQueue`, not events that supersede this ADR, the same way

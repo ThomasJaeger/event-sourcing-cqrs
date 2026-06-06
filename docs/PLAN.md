@@ -2,7 +2,7 @@
 
 This document defines the scope, sequence, and weekly targets for building the reference implementation that accompanies *Event Sourcing & CQRS* by Thomas Jaeger.
 
-This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
+This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
 
 Realistic timeline: roughly 30-36 weeks at 14 hours per week, solo, with Claude Code on the Max plan. The original estimate was 24-28 weeks; the authentication-and-authorization and multi-tenancy foundation adds roughly six to eight weeks (two foundation phases at two to three weeks each, plus the live-dashboards-completion phase at about two weeks, net of the Phase 8 work already counted). This is a real impact on the submission timeline, stated rather than absorbed silently.
 
@@ -38,11 +38,13 @@ Configuration switches between them with no domain-code changes.
 - OrderFulfillmentProcessManager (the four-branch saga from Chapter 10, with all compensation paths)
 - ReturnProcessManager (the smaller second example, different style for variety)
 
-**Projections.** Four named projections with both relational and document-shaped read models:
+**Projections.** Four user-facing projections with both relational and document-shaped read models:
 - OrderListProjection
 - OrderDetailProjection
 - CustomerSummaryProjection
 - InventoryDashboardProjection
+
+Three further projections register alongside these: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (the projection-private cross-aggregate lookups of ADR 0020) and CurrentRolesProjection (the RBAC current-roles read model), for seven registered projections in all.
 
 Read models live in PostgreSQL with a mix of relational tables and JSONB columns for document-shaped views.
 
@@ -195,7 +197,7 @@ The folder names map to chapters. Domain shows Chapter 9. Application shows Chap
 
 ## Build sequence
 
-Twenty-eight weeks total, organized into 14 phases of roughly two weeks each. The phases run sequentially; nothing in a later phase should appear in earlier phase output.
+Twenty-eight weeks total, organized into 17 phases of roughly two weeks each. The phases run sequentially; nothing in a later phase should appear in earlier phase output.
 
 Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeline if any phase runs over. Do not push the deadline by skipping the done-when criteria.
 
@@ -214,8 +216,8 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 **Out of scope.**
 - Aggregate code. Phase 3.
 - UI. Phase 7.
-- KurrentDB and DynamoDB adapter implementation. Phases 10 and 11.
-- `ISnapshotStore` port. Phase 12, with the snapshot pattern.
+- KurrentDB and DynamoDB adapter implementation. Phases 13 and 14.
+- `ISnapshotStore` port. Phase 15, with the snapshot pattern.
 - `IProjectionCheckpoint` port. Phase 6, with the projection infrastructure.
 
 **Done when.**
@@ -237,9 +239,9 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Integration tests with Testcontainers cover, for each adapter independently: append, read, concurrent appends, outbox drain, outbox idempotency under simulated failures.
 
 **Out of scope.**
-- Snapshots. Phase 12.
-- Schema versioning of events. Phase 12.
-- KurrentDB and DynamoDB adapters. Phases 10 and 11.
+- Snapshots. Phase 15.
+- Schema versioning of events. Phase 15.
+- KurrentDB and DynamoDB adapters. Phases 13 and 14.
 - Engine-native projection trigger mechanisms for SQL Server (Service Broker, Change Tracking). The SQL Server projection trigger is polling in v1; engine-native alternatives are deferred to a later session if they are added at all.
 
 **Done when.**
@@ -334,8 +336,8 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Out of scope.**
 - LISTEN/NOTIFY trigger. Same phase, see below.
-- KurrentDB native subscriptions. Phase 10.
-- DynamoDB Streams. Phase 11.
+- KurrentDB native subscriptions. Phase 13.
+- DynamoDB Streams. Phase 14.
 
 **Stretch goal for the same phase.**
 - Add LISTEN/NOTIFY-based projection trigger as an alternative to polling. Both work; both have tests. The polling implementation stays as the default to keep the architecture demonstrable on any database.
@@ -386,7 +388,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Status note.** Phase 8 delivered the SignalR hub and the LISTEN/NOTIFY backplane (Cluster 1, CI-green at bfb4727). The retrofit sites, the two new dashboards, the LiveBadge component, hub-side rate limiting, and the cross-tab verification moved to the live-dashboards-completion phase, because they depend on the authentication-and-authorization and multi-tenancy foundation. The two done-when criteria above move with them; the hub-broadcasts-on-projection-commit capability they imply is proven by Cluster 1.
 
-### Authentication and Authorization (RBAC)
+### Phase 9: Authentication and Authorization (RBAC)
 
 **Goals.** A permission model with a startup-validated role-to-permission mapping, checked as permissions. User-to-role assignments in a small event-sourced Access context with a bootstrap administrator; the role-to-permission mapping in config. Command authorization as an Application pipeline behavior, folded after logging and before idempotency so an unauthorized command consumes no idempotency storage and reaches neither validation nor the handler. Every command declares its required permission, with startup validation failing loudly on a gap. Query and read-model authorization as role-and-ownership row filtering. SignalR subscription authorization at the hub (hub authentication plus the resource-ownership check that closes the direct-object-reference exposure). Real authentication at both hosts, establishing identity where the actor is hardwired empty, with the principal abstracted for a future external identity provider. Identity propagation through the async chains, with caused commands and resurfaced delayed commands authorizing under a system actor while preserving the originating correlation. A system role holding the permissions process managers exercise. Tests at every enforcement point, complete per the cross-tenant coverage mandate's authz boundaries.
 
@@ -394,7 +396,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Done when.** A principal performs only the commands its roles permit. A principal sees only the read-model rows its roles and ownership allow. A subscription to a resource group is rejected unless the principal owns the resource. The actor is established from a real principal at both hosts and flows into event metadata, no longer hardwired empty. Caused commands authorize under the system actor. Every enforcement point has tests.
 
-### Multi-tenancy
+### Phase 10: Multi-tenancy
 
 **Goals.** The shared-schema discriminator implemented end to end, with read-isolation enforced by infrastructure (a per-store tenant predicate that reads the current tenant, the mechanism recorded in ADR 0031, with row-level security available as a future defense-in-depth layer) rather than per-query discipline. A typed TenantId, with raw Guid retained elsewhere. Tenant context in event metadata (the EventMetadata change carried by both event envelopes) and in stream identifiers (the StreamId namespacing change, tenant-after-prefix so prefix-family routing is preserved). A tenant_id discriminator on every read-model table, and on the events table for operational tenant filtering and per-tenant replay. Tenant-scoped read models and tenant-qualified dashboard groups. The existing event corpus migrated to a default tenant by an additive backfill that leaves historical stream identifiers untouched and tolerates the legacy two-segment form. Tenant context propagated through commands, projections, process managers, the outbox, and the delay queue, set from the principal at the HTTP edge and from metadata at the worker edge. Complete, structurally-enforced cross-tenant isolation tests at every boundary: every query, command, subscription, and projection, the enforcement mechanism, the idempotency and delay-queue paths, and per-tenant rebuild.
 
@@ -402,7 +404,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Done when.** A tenant's data is isolated from every other tenant's at the discriminator-plus-enforcement level. A query or subscription scoped to one tenant cannot observe another tenant's state. The corpus migration completes and historical events carry the default tenant. The tenant propagates through commands, projections, process managers, the outbox, and the delay queue. Cross-tenant isolation coverage is complete and structurally enforced at every boundary.
 
-### Live Dashboards Completion
+### Phase 11: Live Dashboards Completion
 
 **Goals.** The deferred Phase 8 work, built authz-and-tenant-aware from the start. The three retrofit sites (OrderDetail, OrderCreate, InventoryDashboard) receive SignalR notifications instead of polling. The two new dashboards (customer-facing order tracking, SaaS admin metrics). The shared LiveBadge connection-status component. Hub-side rate limiting. The cross-tab verification.
 
@@ -410,7 +412,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Done when.** The original Phase 8 done-when criteria (an order placed in one tab updates the customer dashboard in another within seconds; the admin dashboard's metrics match the AdminConsole tools), now with each surface tenant-scoped and authorized.
 
-### Phase 9, Weeks 17-18: AdminConsole
+### Phase 12, Weeks 17-18: AdminConsole
 
 **Goals.**
 - `Event Store Browser`: small Blazor page that lets you inspect any stream by ID, see all events, expand each event payload.
@@ -428,7 +430,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - The Replay Tool successfully rebuilds each projection.
 - The Projection Status Dashboard accurately reflects projection state.
 
-### Phase 10, Weeks 19-20: KurrentDB adapter
+### Phase 13, Weeks 19-20: KurrentDB adapter
 
 **Goals.**
 - `EventStore.Kurrent` adapter implementing `IEventStore` against KurrentDB via the gRPC client.
@@ -446,7 +448,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Native subscriptions feed projections without polling.
 - The Event Store Browser works against KurrentDB.
 
-### Phase 11, Weeks 21-22: DynamoDB adapter
+### Phase 14, Weeks 21-22: DynamoDB adapter
 
 **Goals.**
 - `EventStore.DynamoDb` adapter implementing `IEventStore` against DynamoDB.
@@ -468,7 +470,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - The Event Store Browser works against DynamoDB.
 - The book's claim that switching event stores is a configuration change is now true.
 
-### Phase 12, Weeks 23-24: Versioning and snapshots
+### Phase 15, Weeks 23-24: Versioning and snapshots
 
 **Goals.**
 - One worked event versioning example: a real change to an Order event between v1 and v2.
@@ -489,7 +491,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Snapshot tests demonstrate equivalence and speedup.
 - The book's worked example in Chapter 11 corresponds to runnable code.
 
-### Phase 13, Weeks 25-26: Migration tooling
+### Phase 16, Weeks 25-26: Migration tooling
 
 **Goals.**
 - Standalone example separate from the main domain.
@@ -508,7 +510,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - A reader can run it and watch CRUD changes turn into events through each pattern.
 - Each pattern has at least one test demonstrating correctness.
 
-### Phase 14, Weeks 27-28: Documentation, reconciliation, polish
+### Phase 17, Weeks 27-28: Documentation, reconciliation, polish
 
 **Goals.**
 - Top-level README excellent. What the project demonstrates, how to run it, how it maps to chapters, how to extend.
@@ -521,7 +523,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Tag v1.0.0 release on GitHub.
 - Update proposal package's supplementary materials description with the GitHub URL and a brief summary of what is in the repo.
 
-**Note on prior reconciliation work.** The .NET 10 / C# 14 manuscript update was completed in Track A in April 2026, ahead of Phase 14. ADR 0001 in this repo records the decision and its closure. Phase 14 reconciliation focuses on whatever divergences accumulate during Phases 2-13.
+**Note on prior reconciliation work.** The .NET 10 / C# 14 manuscript update was completed in Track A in April 2026, ahead of Phase 17. ADR 0001 in this repo records the decision and its closure. Phase 17 reconciliation focuses on whatever divergences accumulate during Phases 2-16.
 
 **Out of scope.**
 - Marketing copy in the README. Keep it factual and useful.
@@ -539,7 +541,7 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 **Start each session with the right context.** Load CLAUDE.md and this plan into the conversation. Identify the current phase and what is in scope for it. Tell Claude Code explicitly: "We are working on Phase N. Scope is Y. Do not pull patterns from later phases." This prevents drift.
 
-**Bring the relevant chapter into context.** Each phase corresponds to one or two chapters. When starting Phase 5 (process managers), have Chapter 10 available. When starting Phase 12 (versioning and snapshots), have Chapters 11 and 12 available. The book's specific patterns belong in Claude Code's working memory while you build.
+**Bring the relevant chapter into context.** Each phase corresponds to one or two chapters. When starting Phase 5 (process managers), have Chapter 10 available. When starting Phase 15 (versioning and snapshots), have Chapters 11 and 12 available. The book's specific patterns belong in Claude Code's working memory while you build.
 
 **Do not let scope expand within a phase.** Each phase has a done-when criterion. When the criterion is met, stop. Do not let "while we're here" additions creep in. The next phase is two weeks away; the work will fit there.
 
@@ -568,17 +570,17 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 ## Risks and watchpoints
 
-**Phase 2's SQL Server adapter is the first abstraction stress test.** Adding a second relational adapter alongside the PostgreSQL adapter forces `IEventStore` to handle two engines before the more-different KurrentDB and DynamoDB adapters arrive in Phases 10 and 11. If the abstraction has leaked PostgreSQL-specific concepts, this is where it shows up first. Treat any awkwardness in the SQL Server adapter as a signal about the abstraction, not the adapter.
+**Phase 2's SQL Server adapter is the first abstraction stress test.** Adding a second relational adapter alongside the PostgreSQL adapter forces `IEventStore` to handle two engines before the more-different KurrentDB and DynamoDB adapters arrive in Phases 13 and 14. If the abstraction has leaked PostgreSQL-specific concepts, this is where it shows up first. Treat any awkwardness in the SQL Server adapter as a signal about the abstraction, not the adapter.
 
 **The RBAC and multi-tenancy foundation is the highest-risk work in the plan.** The EventMetadata and StreamId changes ripple through every layer. The two unbuilt event-store adapters (KurrentDB and DynamoDB) must be built tenant-aware from the start, or they incur the re-key cost the sequencing exists to avoid. Cross-tenant leakage is a security boundary, so a tenancy bug is an incident rather than an ordinary defect: under the discriminator a single missing tenant predicate is a one-line breach, which is why read-isolation is enforced by infrastructure and the cross-tenant coverage is complete and structural rather than discipline-dependent. The corpus migration is a one-time operation that must be correct; the additive, append-only-respecting backfill (historical stream identifiers untouched, the legacy form tolerated) is the lower-risk path chosen for it. The tenant threads through more accepted infrastructure than first anticipated: the async-propagation work touches the caused-command dispatch fragment (ADR 0014, anticipated by its own revisit-trigger), the delay-queue table (ADR 0017), and the command-idempotency key (ADR 0016, the key becoming tenant-scoped), each a touchback to an accepted ADR and each a place a tenancy bug would be a cross-tenant defect.
 
-**Phases 10 and 11 are the highest-risk.** Adding KurrentDB and DynamoDB adapters after the relational adapters are mature is the moment when the abstraction in Domain.Abstractions is tested against fundamentally different storage models. If the abstraction was wrong, this is when it surfaces, and fixing it requires touching everything that depends on it. Pace these phases carefully and resist the temptation to skip them or simplify the test suite for them.
+**Phases 13 and 14 are the highest-risk.** Adding KurrentDB and DynamoDB adapters after the relational adapters are mature is the moment when the abstraction in Domain.Abstractions is tested against fundamentally different storage models. If the abstraction was wrong, this is when it surfaces, and fixing it requires touching everything that depends on it. Pace these phases carefully and resist the temptation to skip them or simplify the test suite for them.
 
 **Process managers are the second-highest risk.** Chapter 10 covers a lot of ground. Compensation branches, idempotency, timeouts, distributed coordination, observability. Phase 5's two weeks may run long. If it does, take the third week. Better to ship a correct OrderFulfillmentProcessManager than a buggy one that the book has to apologize for.
 
-**Snapshot tests are deceptively hard.** "Snapshot plus tail equals full replay" sounds simple. Property-based tests on this property tend to surface subtle bugs in event-application order, in serialization, in timestamp handling. Plan time for surprises in Phase 12.
+**Snapshot tests are deceptively hard.** "Snapshot plus tail equals full replay" sounds simple. Property-based tests on this property tend to surface subtle bugs in event-application order, in serialization, in timestamp handling. Plan time for surprises in Phase 15.
 
-**Manuscript reconciliation in Phase 14 will take longer than expected.** Six months of building will produce dozens of small divergences from the manuscript. Each is a small edit; the aggregate is real work. Do not skimp.
+**Manuscript reconciliation in Phase 17 will take longer than expected.** Six months of building will produce dozens of small divergences from the manuscript. Each is a small edit; the aggregate is real work. Do not skimp.
 
 **The temptation to keep building beyond v1.** Once the implementation runs, ideas for additional features will arrive faster than time allows. Resist them. The book is the product. v1 is what the book commits to. Anything beyond v1 is post-launch material, not pre-submission material. The RBAC and multi-tenancy foundation is the exception that proves the rule: a deliberate, sanctioned scope expansion driven by a direct production need and recorded in this plan's amendment, not the unsanctioned creep this entry warns against. The warning continues to apply to genuine scope creep.
 

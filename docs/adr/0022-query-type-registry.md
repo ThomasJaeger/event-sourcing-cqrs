@@ -33,7 +33,7 @@ round-trip a persisted storage-side type name back to a CLR type:
 Postgres event store, the PM read path, the delay queue) live there, and because
 they are a persistence concern. The `EventTypeRegistry`'s own comment records that
 this home is provisional: "Slated to move to Infrastructure/Versioning when that
-project is created in Phase 12 ... lives here for now because the PostgreSQL
+project is created in Phase 15 ... lives here for now because the PostgreSQL
 adapter is the only consumer."
 
 The query registry round-trips an HTTP-transport-side type discriminator back to
@@ -144,7 +144,7 @@ by its concern.
   query registry's Application home is correct from day one. The three existing
   registries' `EventStore.Postgres` home is historical: per the `EventTypeRegistry`
   on-disk comment, they are slated to move to `Infrastructure/Versioning` when that
-  project is created in Phase 12. After that migration the four registries sit in
+  project is created in Phase 15. After that migration the four registries sit in
   two places by concern (persistence registries in Versioning, the transport
   registry in Application), not in one place by habit.
 - Forward consumers: Cluster 2 Commit 10's `POST /queries` endpoint resolves the
@@ -167,7 +167,7 @@ by its concern.
   queries do not persist. If one arises (a cached query result keyed by query
   identity, say), the transport-only framing widens and the persistence concern the
   three precedents carry would apply to queries too.
-- The Phase 12 `Infrastructure/Versioning` migration consolidates the type
+- The Phase 15 `Infrastructure/Versioning` migration consolidates the type
   registries. If that project's framing claims type registries as a Versioning
   concern broadly, the query registry's Application placement is re-examined against
   it. The transport-not-persistence distinction is the argument for keeping the query

@@ -36,4 +36,4 @@ Concretely for the existing read-side surface: `IOrderListStore`, `IOrderListUni
 
 If a future read-side port emerges that traffics only in primitives or in types `Domain.Abstractions` can already see (cross-cutting types like `EventEnvelope`, `ICheckpointStore`'s positions), that port could legitimately live in `Domain.Abstractions`. The "context-agnostic vs context-specific" rule decides per-port; the location is not a project-wide convention to follow without checking the signature.
 
-If a context-specific port grows a need to be consumed by a project that cannot or should not reference `Domain` directly (none is currently anticipated through Phase 14), the seam gets revisited at that point.
+If a context-specific port grows a need to be consumed by a project that cannot or should not reference `Domain` directly (none is currently anticipated through Phase 17), the seam gets revisited at that point.

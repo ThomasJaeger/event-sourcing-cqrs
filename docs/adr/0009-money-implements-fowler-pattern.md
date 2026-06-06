@@ -10,11 +10,11 @@ ADR 0006 records that `Money` is a shared kernel between Sales and Billing. The 
 
 The pre-Phase-4 `Money` shipped at `src/Domain/SharedKernel/Money.cs` as a `sealed record (decimal Amount, string Currency)` with `+` and `-` operators that threw `InvalidOperationException` on currency mismatch. A `Money.Zero` static carried an empty-string currency as an additive-identity hack so aggregation against an empty accumulator did not need an explicit starting currency. No multiplication, no comparison operators, no `IsNegative`, no `IsZero`, no allocation methods, no concept of currency precision.
 
-Phase 4 ships Payment, which carries monetary amounts through authorization, capture, refund, and void events. Future-phase work (partial captures and partial refunds in Phase 12; the Phase 5 process manager's payment-and-inventory compensation branches) needs `Money` operations the pre-Phase-4 shape did not support: dividing an amount across parts with correct minor-unit rounding, comparing amounts, and reasoning about negative versus zero balances. The empty-string-Currency hack also leaked into the type's invariants in a way that could not survive a typed-currency model.
+Phase 4 ships Payment, which carries monetary amounts through authorization, capture, refund, and void events. Future-phase work (partial captures and partial refunds in Phase 15; the Phase 5 process manager's payment-and-inventory compensation branches) needs `Money` operations the pre-Phase-4 shape did not support: dividing an amount across parts with correct minor-unit rounding, comparing amounts, and reasoning about negative versus zero balances. The empty-string-Currency hack also leaked into the type's invariants in a way that could not survive a typed-currency model.
 
 Martin Fowler's `Money` pattern from *Patterns of Enterprise Application Architecture* covers this surface: a typed `Currency`, currency-aware operations that throw on mismatch, allocation that distributes minor-unit remainders deterministically, comparison operators alongside arithmetic, and `IsNegative` / `IsZero` predicates that read like domain vocabulary.
 
-The reference implementation is leading the manuscript on this decision. Chapters 7 and 9 currently depict a `Money` shape closer to the pre-Phase-4 record. The divergence is recorded as Track A flags for a Phase 14 manuscript reconciliation pass.
+The reference implementation is leading the manuscript on this decision. Chapters 7 and 9 currently depict a `Money` shape closer to the pre-Phase-4 record. The divergence is recorded as Track A flags for a Phase 17 manuscript reconciliation pass.
 
 ## Decision
 
@@ -34,7 +34,7 @@ The reference implementation is leading the manuscript on this decision. Chapter
 
 ## Consequences
 
-- Multi-part allocations distribute remainders deterministically. The Phase 5 process manager's partial-compensation branches and the Phase 12 partial-capture and partial-refund work inherit a `Money` type that handles their math correctly without per-caller minor-unit-rounding ceremony.
+- Multi-part allocations distribute remainders deterministically. The Phase 5 process manager's partial-compensation branches and the Phase 15 partial-capture and partial-refund work inherit a `Money` type that handles their math correctly without per-caller minor-unit-rounding ceremony.
 - Currency mismatch becomes a typed catch surface. The shift from `string Currency` to `Currency Currency` moves a class of "USD vs usd" bugs out of runtime validators and into the compiler's reach.
 - Scalar multiplication rounds at every operation site. `OrderLine.Subtotal` switches from raw decimal multiplication to `UnitPrice * Quantity` and rounds at the line level. For prices already at currency precision (the typical case) the result is unchanged. For prices with sub-currency-unit precision, the rounding happens earlier than the previous code path.
 - The empty-string-Currency identity hack disappears. `Order.Total` for an empty order returns `Money.Zero(Currency.USD)`. The empty-order invariant lives at `Order.Place` time; transient empty-Total state is bounded to the draft window.

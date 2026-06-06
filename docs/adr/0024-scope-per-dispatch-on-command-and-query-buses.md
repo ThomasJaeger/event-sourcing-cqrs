@@ -85,7 +85,7 @@ an implementation concern of the concrete bus.
   additions plus this ADR.
 - F-0011 candidate against Chapter 15's query-dispatch depiction:
   the chapter does not show scope-per-dispatch on the query bus.
-  The fix and this ADR establish the production shape; Phase 14
+  The fix and this ADR establish the production shape; Phase 17
   reconciliation surfaces the depiction.
 
 ## Trigger for revisiting

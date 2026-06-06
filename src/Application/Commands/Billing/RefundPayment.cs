@@ -7,7 +7,7 @@ namespace EventSourcingCqrs.Application.Commands.Billing;
 
 // RefundPayment carries a reason but no amount. The aggregate raises
 // PaymentRefunded with the captured amount drawn from state; full-refund-only
-// for v1. Partial refunds land as a separate command shape in Phase 12.
+// for v1. Partial refunds land as a separate command shape in Phase 15.
 public sealed record RefundPayment(Guid PaymentId, string Reason) : IAuthorizedCommand
 {
     public static Permission RequiredPermission => Permission.RefundPayment;

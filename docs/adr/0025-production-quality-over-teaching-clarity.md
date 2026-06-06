@@ -149,7 +149,7 @@ this one.
   to this ADR; it lands in the cluster following this ADR's commit.
 
 - The chapter prose carries the prior teaching-friendly framing in
-  places. Phase 14 manuscript reconciliation absorbs the divergences as
+  places. Phase 17 manuscript reconciliation absorbs the divergences as
   F-NNNN candidates. The F-0011 candidates accumulated through Cluster 2
   already document the same shape (Chapter 10's `ICommandBus` shape,
   Chapter 15's idempotency-key-on-command depiction, Chapter 15's
@@ -158,7 +158,7 @@ this one.
   traced to this ADR join that list.
 
 - The SQL Server adapter (Phase 2 scope), the KurrentDB adapter (Phase
-  10), and the DynamoDB adapter (Phase 11) all land under this discipline
+  13), and the DynamoDB adapter (Phase 14) all land under this discipline
   from inception. The orchestrator's commercial-service adoption path (SQL
   Server adapter feeding at least one such service) is the first
   production consumer of the rule.

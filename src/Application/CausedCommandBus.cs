@@ -6,7 +6,7 @@ namespace EventSourcingCqrs.Application;
 // causing event's metadata into the context the new command carries: the
 // correlation id flows so the trace stays one workflow, the causing event's
 // EventId becomes the command's causation source, and the SystemActor names the
-// process manager in audit logs and the Phase 9 Correlation-ID Tracer. The work
+// process manager in audit logs and the Phase 12 Correlation-ID Tracer. The work
 // runs through CommandBus's internal SendWithContextAsync seam, so the command
 // goes through the same scope, pipeline, and accessor machinery the user path
 // uses (ADR 0014 forbids a parallel dispatcher that would diverge on behavior).

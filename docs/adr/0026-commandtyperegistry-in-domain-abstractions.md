@@ -18,7 +18,7 @@ defensible: every consumer reached the type through an existing
 `EventStore.Postgres` reference.
 
 ADR 0023 also noted that all three registries were slated to move to a
-shared `Infrastructure/Versioning` assembly in Phase 12, alongside the
+shared `Infrastructure/Versioning` assembly in Phase 15, alongside the
 upcasting pipeline and schema-registry stub. That migration was framed
 as a collective move covering all three registries together.
 
@@ -101,11 +101,11 @@ their asymmetric consumer sets:
   `Application` in the dependency graph; `Domain.Abstractions` is the
   layer that satisfies both consumer sets without inversion.
 
-The Phase-12 collective-move expectation in ADR 0023 is amended. Only
+The Phase-15 collective-move expectation in ADR 0023 is amended. Only
 `CommandTypeRegistry` moves now, and to `Domain.Abstractions` rather
 than `Infrastructure/Versioning`. `EventTypeRegistry` and
 `ProcessManagerEventTypeRegistry` stay in `EventStore.Postgres` and
-their Phase-12 disposition stays open; each is consumed only by hosts
+their Phase-15 disposition stays open; each is consumed only by hosts
 that already compose the Postgres event store, so neither has the
 Defect-1 reach problem `CommandTypeRegistry` had. The collective-move
 framing in ADR 0023 was defensible at the time of writing and is
@@ -133,8 +133,8 @@ superseded for `CommandTypeRegistry` only by this ADR.
   uses no infrastructure and runs in microseconds, matching the
   Domain.Tests project's stated contract.
 
-- ADR 0023's Phase-12 framing is amended for `CommandTypeRegistry`
-  only. A future Phase-12 ADR that addresses `EventTypeRegistry` and
+- ADR 0023's Phase-15 framing is amended for `CommandTypeRegistry`
+  only. A future Phase-15 ADR that addresses `EventTypeRegistry` and
   `ProcessManagerEventTypeRegistry` (whether through a shared
   `Infrastructure/Versioning` move or through their own
   `Domain.Abstractions` placement under the same reasoning as this
@@ -147,7 +147,7 @@ superseded for `CommandTypeRegistry` only by this ADR.
   consumer (no such consumer is anticipated) would trigger the same
   reasoning and the same relocation.
 
-- The Phase 14 manuscript reconciliation absorbs any chapter-prose
+- The Phase 17 manuscript reconciliation absorbs any chapter-prose
   divergence created by the relocation. The chapter does not currently
   depict the registry placement at the assembly granularity this ADR
   governs.
@@ -161,12 +161,12 @@ superseded for `CommandTypeRegistry` only by this ADR.
   one-off placement choices stand alone.
 
 - A future event-store adapter (SQL Server in Phase 2, KurrentDB in
-  Phase 10, DynamoDB in Phase 11) needs a registry of its own with
+  Phase 13, DynamoDB in Phase 14) needs a registry of its own with
   different semantics from `CommandTypeRegistry`. If the per-adapter
   registry must live with the adapter, the unified-registry framing
   this ADR preserves needs to be reopened.
 
-- The Phase 12 versioning work reveals that the upcasting pipeline
+- The Phase 15 versioning work reveals that the upcasting pipeline
   needs the command-type registry directly. If
   `Infrastructure/Versioning` becomes a consumer, the placement
   rationale stays correct (Versioning would reference

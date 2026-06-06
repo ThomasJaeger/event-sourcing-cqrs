@@ -50,7 +50,7 @@ because none existed; commands have one, and duplicating it for transport would
 add a parallel registry and provider interface for marginal purity, against the
 no-abstractions-ahead-of-need rule. The registry's EventStore.Postgres location
 is acknowledged-historical (ADR 0022 records that all three registries are slated
-to move to Infrastructure/Versioning in Phase 12); that migration revisits
+to move to Infrastructure/Versioning in Phase 15); that migration revisits
 registry homes collectively, so a transport twin now would be premature
 divergence.
 
@@ -84,7 +84,7 @@ future commit that dispatches CapturePayment over HTTP registers it then.
 - A user command and a timeout command (or any two registered commands) collide on
   the default type-name token. The registry throws on the duplicate; the
   resolution is an explicit name through Register(Type, name).
-- The Phase 12 Infrastructure/Versioning migration consolidates the registries'
+- The Phase 15 Infrastructure/Versioning migration consolidates the registries'
   homes. The dual-concern reuse is re-examined then: whether the transport
   dispatch and the persistence round-trip want separate registries after all.
 - A transport dispatch needs command metadata the persistence round-trip does not

@@ -37,6 +37,6 @@ Update the manuscript Track A to reflect .NET 10 / C# 14:
 
 ## Reconciliation
 
-The Track A manuscript update was completed in April 2026, ahead of Phase 14. Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters were updated in a single Track A pass. The manuscript and the implementation now agree on .NET 10 / C# 14.
+The Track A manuscript update was completed in April 2026, ahead of Phase 17. Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters were updated in a single Track A pass. The manuscript and the implementation now agree on .NET 10 / C# 14.
 
-The Phase 14 reconciliation step in PLAN.md no longer carries this item. Other reconciliation work that accumulates during Phases 2-13 is still owed in Phase 14.
+The Phase 17 reconciliation step in PLAN.md no longer carries this item. Other reconciliation work that accumulates during Phases 2-16 is still owed in Phase 17.

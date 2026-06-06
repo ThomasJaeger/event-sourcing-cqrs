@@ -8,7 +8,7 @@ Accepted (May 2026)
 
 The Phase 8 dashboards live-update through SignalR. Phase 7 shipped four polling-based dashboards (OrderDetail, OrderCreate wizard, InventoryDashboard's shared loop for Create and Adjust); Phase 8 retrofits them to push transport plus adds a customer-facing tracking dashboard at `/track/{orderId}` and a SaaS admin dashboard at `/admin/dashboard`.
 
-The architecture has three independent design dimensions: how the SignalR hub publishes (the transport contract between projections and the hub), how the hub subscribes (the group scope clients subscribe to), and how the hub broadcasts (rate-limiting and reconnection semantics). Each dimension has a manuscript-aligned production-grade choice and a teaching-friendly shortcut; per ADR 0025, the production-grade choice ships and the chapter's prose reconciles at Phase 14.
+The architecture has three independent design dimensions: how the SignalR hub publishes (the transport contract between projections and the hub), how the hub subscribes (the group scope clients subscribe to), and how the hub broadcasts (rate-limiting and reconnection semantics). Each dimension has a manuscript-aligned production-grade choice and a teaching-friendly shortcut; per ADR 0025, the production-grade choice ships and the chapter's prose reconciles at Phase 17.
 
 The codebase carries two existing LISTEN/NOTIFY consumers as precedent. `OutboxProcessor` in `src/Infrastructure/EventStore.Postgres/OutboxProcessor.cs` LISTENs on `outbox_pending` (migration 0005) and dispatches outbox rows on wake. `DelayQueueProcessor` in the same project LISTENs on `delayed_commands_pending` (migration 0008) and dispatches due rows on wake. Both use the same shape: dedicated long-lived `NpgsqlConnection`, `WaitAsync` loop, `OnNotification` handler with a `TaskCompletionSource` wake, reconnect-on-drop with a one-second delay, fallback timer for liveness if the listener drops. The two share the empty-payload convention: the notification is a wake signal, the reader queries the table for row data.
 
@@ -39,7 +39,7 @@ SignalR groups are named per the resource shape:
 - `order:{orderId}` for OrderDetail subscriptions and customer-tracking dashboard subscriptions.
 - `inventory:{sku}` for InventoryDashboard per-SKU subscriptions.
 - `admin:metrics` for the admin dashboard broadcast.
-- `customer:{customerId}` reserved but unused in v1. The customer-tracking dashboard subscribes per-order rather than per-customer; multi-subscription patterns ("track all my orders") are Phase 14 polish per born-at-consumer discipline.
+- `customer:{customerId}` reserved but unused in v1. The customer-tracking dashboard subscribes per-order rather than per-customer; multi-subscription patterns ("track all my orders") are Phase 17 polish per born-at-consumer discipline.
 
 Per Chapter 13 §19h SaaS dashboard topic shape (`tenant:{id}:mrr`) and §19i customer dashboard topic shape (`order:{id}:updated`). Per-resource groups scale better than broadcast-and-client-filter at high subscriber counts and align with the manuscript's named pattern. The phase-8-readiness doc named broadcast-and-filter as simpler at v1's expected scale; per ADR 0025, the manuscript-aligned pattern is the production-grade choice and ships.
 
@@ -105,7 +105,7 @@ Three alternatives to the LISTEN/NOTIFY carrier were considered and rejected on 
 
 - Structured logging at the publisher's emission site and the hub's receipt site provides the operational audit trail for notification delivery. The notification-only-push design (Chapter 13 §19b tier 3b) means notifications carry data directly with no backing table; a separate audit table would double the write per projection commit for content that structured logging discharges equivalently. Operator-facing observability follows the codebase's existing structured-logging pattern (correlation IDs flowing through where the underlying event carries them).
 
-- Track A flag against Chapter 13's `ch13_dashboards_saas_query_code` and `ch13_dashboards_enduser_server_code`, which use raw `WebSocket` rather than SignalR. The reference implementation ships SignalR per PLAN.md; manuscript reconciliation at Phase 14 (F-0012-A).
+- Track A flag against Chapter 13's `ch13_dashboards_saas_query_code` and `ch13_dashboards_enduser_server_code`, which use raw `WebSocket` rather than SignalR. The reference implementation ships SignalR per PLAN.md; manuscript reconciliation at Phase 17 (F-0012-A).
 
 - The `projection_committed` channel is a convention, not a schema artifact. No migration ships for Cluster 1.
 
@@ -119,9 +119,9 @@ Three alternatives to the LISTEN/NOTIFY carrier were considered and rejected on 
 
 - A future port appears in `Application/SignalR/` or `Domain.Abstractions/` whose placement reasoning differs from this ADR's. This ADR records the per-port placement reasoning; a future port follows the same hexagonal-inversion logic from ADR 0026 rather than this ADR's specific resolution.
 
-- A future event-store adapter (SQL Server, KurrentDB, DynamoDB per the Phase 2, Phase 10, and Phase 11 roadmap) needs a different notification carrier than `pg_notify`. The carrier choice is Postgres-specific; the publisher abstraction is adapter-agnostic, so an adapter-specific publisher implementation behind the same `INotificationPublisher` port satisfies the per-adapter need without reopening this ADR's hub-topology decisions.
+- A future event-store adapter (SQL Server, KurrentDB, DynamoDB per the Phase 2, Phase 13, and Phase 14 roadmap) needs a different notification carrier than `pg_notify`. The carrier choice is Postgres-specific; the publisher abstraction is adapter-agnostic, so an adapter-specific publisher implementation behind the same `INotificationPublisher` port satisfies the per-adapter need without reopening this ADR's hub-topology decisions.
 
-- Customer-reported notification-delivery failures become a recurring operational concern that structured logging cannot adequately diagnose. The trigger is repeated cases where operators cannot answer "was the notification emitted?" from log data, not a theoretical observability preference. The remediation would be a backing audit table at the publisher's site or a hub-side delivery-confirmation surface; both are Phase 9 AdminConsole-scoped questions if they arise.
+- Customer-reported notification-delivery failures become a recurring operational concern that structured logging cannot adequately diagnose. The trigger is repeated cases where operators cannot answer "was the notification emitted?" from log data, not a theoretical observability preference. The remediation would be a backing audit table at the publisher's site or a hub-side delivery-confirmation surface; both are Phase 12 AdminConsole-scoped questions if they arise.
 
 ## Amendment: hub authentication and the subscription ownership check (P9.6)
 

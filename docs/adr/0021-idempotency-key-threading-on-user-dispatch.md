@@ -122,7 +122,7 @@ Alternatives rejected:
   transcribes. F-0011 candidate against Chapter 15's command-shape pedagogy,
   which threads the key on the command record where the implementation threads it
   as a dispatch-context parameter. Session 0011 close transcribes to the F-0011
-  block; Phase 14 reconciles.
+  block; Phase 17 reconciles.
 - `CommandBus` is the only implementer of `ICommandBus`, and no test double
   implements it, so the interface change compiles with one implementation edit
   (Commit 2). The two end-to-end tests that resolve `ICommandBus` call the bare

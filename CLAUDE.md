@@ -115,7 +115,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Projections are idempotent. Re-reading the same event must produce the same result.
 * Projections do not call back into the write side.
 * Each projection has its own checkpoint. Projections never share state.
-* Four projections in v1: OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection. Mix of relational and JSONB read models.
+* Seven projections register in v1. Four are user-facing read models (OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection), a mix of relational and JSONB. Three support the system: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (projection-private cross-aggregate lookups, ADR 0020) and CurrentRolesProjection (the RBAC current-roles read model).
 * Trigger mechanism is per event store: polling and LISTEN/NOTIFY for PostgreSQL, polling for SQL Server, native subscriptions for KurrentDB, DynamoDB Streams for DynamoDB.
 
 ### Process managers
@@ -229,7 +229,7 @@ Do not implement Redis, Elasticsearch, or S3 read models. Chapter 13 discusses t
 
 Do not introduce distributed messaging (RabbitMQ, Kafka). The reference implementation uses an in-process event bus driven by the outbox.
 
-Do not optimize prematurely. The book has a snapshots chapter for performance. Until that chapter's patterns are introduced (Phase 12), write straight code.
+Do not optimize prematurely. The book has a snapshots chapter for performance. Until that chapter's patterns are introduced (Phase 15), write straight code.
 
 Do not write defensive code that hides bugs. Bad input should produce clear errors, not silent fallbacks.
 
@@ -257,7 +257,7 @@ Use C# 14 features where they make the code clearer (extension members, partial 
 
 When in doubt, generate the simplest version that demonstrates the pattern, and ask whether to elaborate.
 
-Verify the abstraction holds. When working on Phase 2's SQL Server adapter and Phases 10-11's KurrentDB and DynamoDB adapters, if `IEventStore` does not fit cleanly, surface it. The SQL Server adapter is the first real stress test of the abstraction because it forces a second engine before the more-different KurrentDB and DynamoDB adapters arrive. Better to fix the abstraction than to leak adapter-specific concepts upward.
+Verify the abstraction holds. When working on Phase 2's SQL Server adapter and Phases 13-14's KurrentDB and DynamoDB adapters, if `IEventStore` does not fit cleanly, surface it. The SQL Server adapter is the first real stress test of the abstraction because it forces a second engine before the more-different KurrentDB and DynamoDB adapters arrive. Better to fix the abstraction than to leak adapter-specific concepts upward.
 
 ## Reading order for new context
 

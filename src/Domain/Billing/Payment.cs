@@ -49,7 +49,7 @@ public sealed class Payment : AggregateRoot
             throw new DomainException($"Cannot capture payment {Id}: payment is {_status}.");
         }
         // Full-capture-only for v1: the aggregate raises the event with the
-        // amount from state. Partial captures deferred to Phase 12. The
+        // amount from state. Partial captures deferred to Phase 15. The
         // status-check above guarantees _authorizedAmount is non-null.
         Raise(new PaymentCaptured(Id, _authorizedAmount!, utcNow));
     }
@@ -65,7 +65,7 @@ public sealed class Payment : AggregateRoot
             throw new DomainException($"Cannot refund payment {Id}: reason must be non-empty.");
         }
         // Full-refund-only for v1. The status-check guarantees _capturedAmount
-        // is non-null. Partial refunds deferred to Phase 12.
+        // is non-null. Partial refunds deferred to Phase 15.
         Raise(new PaymentRefunded(Id, _capturedAmount!, reason, utcNow));
     }
 

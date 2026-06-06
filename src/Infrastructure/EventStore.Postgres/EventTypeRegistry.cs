@@ -10,7 +10,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 // null so callers do not pass a null Type to a JSON deserializer.
 //
 // Pattern from Chapter 11. Slated to move to Infrastructure/Versioning
-// when that project is created in Phase 12 alongside the upcaster
+// when that project is created in Phase 15 alongside the upcaster
 // pipeline; lives here for now because the PostgreSQL adapter is the
 // only consumer.
 public sealed class EventTypeRegistry

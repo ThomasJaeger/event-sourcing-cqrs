@@ -44,7 +44,7 @@ Within-aggregate identifiers (such as `LineId` inside `OrderLine`) also use raw 
 The decision to keep raw `Guid` is reversible. Conditions that would justify reopening it:
 
 - A domain bug whose root cause is identifier confusion (a `CustomerId`-shaped `Guid` passed where an `OrderId` was expected, surviving validators and tests). The bug's existence would shift the cost-benefit toward typed wrappers.
-- A Phase 12 type-safety pass that takes wrappers as part of a broader refactor (for example, alongside the snapshot-versioning work). Bundling a wrapper migration into a larger type-safety session amortizes the cross-codebase churn.
+- A Phase 15 type-safety pass that takes wrappers as part of a broader refactor (for example, alongside the snapshot-versioning work). Bundling a wrapper migration into a larger type-safety session amortizes the cross-codebase churn.
 - A strong manuscript-reconciliation argument that typed wrappers should ship for pedagogical reasons (Ch 7 reworked to depict the pattern in worked code rather than as abstract advocacy). This would be a Track A decision that flows back to a code session.
 
 A wrapper refactor, if undertaken, is its own session. The work touches `AggregateRoot` (decide between generic `AggregateRoot<TId>` or per-aggregate typed accessors over a `Guid` base), all event payloads, all command records, all handlers, all tests, `EventMetadata`/`EventEnvelope` decisions, repository signatures, and infrastructure adapter boundaries. It does not fit as a sub-commit of an unrelated phase.
