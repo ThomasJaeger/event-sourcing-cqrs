@@ -1,7 +1,6 @@
-using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Hosts.Api.Authentication;
+namespace EventSourcingCqrs.Application.Authentication;
 
 // Parses the dev forwarded-identity header value "{actorId:N};{role},{role}" into a
 // ForwardedIdentity. Returns null when the value is absent, the actor id does not parse, or a role

@@ -1,15 +1,13 @@
 using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Hosts.Api.Authentication;
 using FluentAssertions;
 using Xunit;
 
-namespace EventSourcingCqrs.IntegrationTests.Authentication;
+namespace EventSourcingCqrs.Application.Tests.Authentication;
 
 // The producer side (ForwardedIdentityValue.Format) and the reader side (HeaderForwardedIdentityReader)
 // are single-sourced on the same wire form, so a value formatted here parses back to the same actor
-// and roles. The reader lives in the Api host, so this crosses the assembly boundary and lives in
-// IntegrationTests, though it needs no container.
+// and roles. Both types now live in Application, so this is a pure unit test that needs no container.
 public class ForwardedIdentityValueRoundTripTests
 {
     private readonly HeaderForwardedIdentityReader _reader = new();

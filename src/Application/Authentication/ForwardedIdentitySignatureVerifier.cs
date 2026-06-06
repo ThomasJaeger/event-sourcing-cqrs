@@ -1,8 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
-using EventSourcingCqrs.Application.Authentication;
 
-namespace EventSourcingCqrs.Hosts.Api.Authentication;
+namespace EventSourcingCqrs.Application.Authentication;
 
 // Verifies the shared-secret signature a trusted upstream attaches to the forwarded-identity header
 // (P9.3b). The Web host signs the verbatim X-Forwarded-Identity value with HMAC-SHA256 under a secret
