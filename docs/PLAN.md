@@ -4,9 +4,9 @@ This document defines the scope, sequence, and weekly targets for building the r
 
 This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
 
-Realistic timeline: roughly 30-36 weeks at 14 hours per week, solo, with Claude Code on the Max plan. The original estimate was 24-28 weeks; the authentication-and-authorization and multi-tenancy foundation adds roughly six to eight weeks (two foundation phases at two to three weeks each, plus the live-dashboards-completion phase at about two weeks, net of the Phase 8 work already counted). This is a real impact on the submission timeline, stated rather than absorbed silently.
+This is a solo build with Claude Code on the Max plan, run as an ordered sequence of phases. The authentication-and-authorization and multi-tenancy foundation phases, and the live-dashboards-completion phase (net of the Phase 8 work already delivered), were inserted ahead of the original downstream phases (AdminConsole through documentation). That insertion expands the original plan and is a real impact on the submission timeline, stated rather than absorbed silently.
 
-This document is a living plan. Update it weekly with what was actually built, what changed, and what surprised you. By week 28 it doubles as the build log, which is itself launch-period content.
+This document is a living plan. Update it weekly with what was actually built, what changed, and what surprised you. By the end of the build it doubles as the build log, which is itself launch-period content.
 
 ---
 
@@ -197,11 +197,11 @@ The folder names map to chapters. Domain shows Chapter 9. Application shows Chap
 
 ## Build sequence
 
-Twenty-eight weeks total, organized into 17 phases of roughly two weeks each. The phases run sequentially; nothing in a later phase should appear in earlier phase output.
+Organized into 17 phases. The phases run sequentially; nothing in a later phase should appear in earlier phase output.
 
 Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeline if any phase runs over. Do not push the deadline by skipping the done-when criteria.
 
-### Phase 1, Weeks 1-2: Foundations
+### Phase 1: Foundations
 
 **Goals.**
 - Solution structure created matching the layout above.
@@ -227,7 +227,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - CI is green on a pull request.
 - The Domain.Abstractions interfaces are stable enough that the upcoming PostgreSQL adapter will fit them without redesign.
 
-### Phase 2, Weeks 3-5: PostgreSQL and SQL Server event stores and outboxes
+### Phase 2: PostgreSQL and SQL Server event stores and outboxes
 
 **Goals.**
 - `EventStore.Postgres` adapter implementing `IEventStore` with `AppendAsync(streamId, expectedVersion, events)` and `ReadStreamAsync(streamId, fromVersion)` and `ReadAllFromCheckpointAsync(checkpoint)`.
@@ -252,7 +252,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - A simple harness can write events and observe them flow through the outbox in both adapters.
 - Switching the configured event store from PostgreSQL to SQL Server in a test run requires no domain-code changes.
 
-### Phase 3, Weeks 5-6: Sales context (Order aggregate)
+### Phase 3: Sales context (Order aggregate)
 
 **Goals.**
 - `Order` aggregate with full lifecycle: drafted, lines added and removed, shipping address set, placed, then shipped or cancelled.
@@ -275,7 +275,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Test class reads as documentation. A reader can follow the test names and understand the Order's behavior without reading the production code.
 - The aggregate persists and rehydrates correctly through the OrderRepository against PostgreSQL.
 
-### Phase 4, Weeks 7-8: Other contexts (Inventory, Shipment, Payment)
+### Phase 4: Other contexts (Inventory, Shipment, Payment)
 
 **Goals.**
 - `Inventory` aggregate (Fulfillment context). Events: InventoryReserved, InventoryReleased, InventoryAdjusted.
@@ -294,7 +294,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Each aggregate persists and rehydrates correctly.
 - The bounded context boundaries are visible in the code structure.
 
-### Phase 5, Weeks 9-10: Process managers
+### Phase 5: Process managers
 
 **Goals.**
 - `OrderFulfillmentProcessManager` event-sourced, with its own state stream.
@@ -321,7 +321,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - ReturnProcessManager runs through its happy path with tests.
 - Replaying the same command twice produces the same result (idempotency verified).
 
-### Phase 6, Weeks 11-12: Projections
+### Phase 6: Projections
 
 **Goals.**
 - `OrderListProjection`: simple list view of orders with status, customer name, total. Relational table.
@@ -347,7 +347,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Each projection can be rebuilt from scratch and arrives at the same state.
 - The query handlers return correct data for each read model.
 
-### Phase 7, Weeks 13-14: Web and API
+### Phase 7: Web and API
 
 **Goals.**
 - `Web` host (Blazor Server) with task-based UI for the Order workflow.
@@ -369,7 +369,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - The JSON API exposes equivalent operations.
 - Submitting the same command twice with the same idempotency key produces the same effect once.
 
-### Phase 8, Weeks 15-16: Live dashboards and SignalR
+### Phase 8: Live dashboards and SignalR
 
 **Goals.**
 - SignalR hub broadcasting projection updates as they happen.
@@ -412,7 +412,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Done when.** The original Phase 8 done-when criteria (an order placed in one tab updates the customer dashboard in another within seconds; the admin dashboard's metrics match the AdminConsole tools), now with each surface tenant-scoped and authorized.
 
-### Phase 12, Weeks 17-18: AdminConsole
+### Phase 12: AdminConsole
 
 **Goals.**
 - `Event Store Browser`: small Blazor page that lets you inspect any stream by ID, see all events, expand each event payload.
@@ -430,7 +430,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - The Replay Tool successfully rebuilds each projection.
 - The Projection Status Dashboard accurately reflects projection state.
 
-### Phase 13, Weeks 19-20: KurrentDB adapter
+### Phase 13: KurrentDB adapter
 
 **Goals.**
 - `EventStore.Kurrent` adapter implementing `IEventStore` against KurrentDB via the gRPC client.
@@ -448,7 +448,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Native subscriptions feed projections without polling.
 - The Event Store Browser works against KurrentDB.
 
-### Phase 14, Weeks 21-22: DynamoDB adapter
+### Phase 14: DynamoDB adapter
 
 **Goals.**
 - `EventStore.DynamoDb` adapter implementing `IEventStore` against DynamoDB.
@@ -470,7 +470,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - The Event Store Browser works against DynamoDB.
 - The book's claim that switching event stores is a configuration change is now true.
 
-### Phase 15, Weeks 23-24: Versioning and snapshots
+### Phase 15: Versioning and snapshots
 
 **Goals.**
 - One worked event versioning example: a real change to an Order event between v1 and v2.
@@ -491,7 +491,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - Snapshot tests demonstrate equivalence and speedup.
 - The book's worked example in Chapter 11 corresponds to runnable code.
 
-### Phase 16, Weeks 25-26: Migration tooling
+### Phase 16: Migration tooling
 
 **Goals.**
 - Standalone example separate from the main domain.
@@ -510,7 +510,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - A reader can run it and watch CRUD changes turn into events through each pattern.
 - Each pattern has at least one test demonstrating correctness.
 
-### Phase 17, Weeks 27-28: Documentation, reconciliation, polish
+### Phase 17: Documentation, reconciliation, polish
 
 **Goals.**
 - Top-level README excellent. What the project demonstrates, how to run it, how it maps to chapters, how to extend.
@@ -547,7 +547,7 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 **End sessions deliberately.** Token usage on the Max plan is generous but not unlimited. Long idle conversations consume context without producing work. End a session when work pauses; start a fresh one when you return.
 
-**Update the build log weekly.** End each week (or each phase) by appending a short note to the build log: what got built, what changed, what surprised you. Ten minutes of writing per week becomes hours of valuable launch content by week 28.
+**Update the build log weekly.** End each week (or each phase) by appending a short note to the build log: what got built, what changed, what surprised you. Ten minutes of writing per week becomes hours of valuable launch content by the end of the build.
 
 **Commit small.** Commit per logical unit of work, not per phase. Small commits make Claude Code sessions easier to recover from and make the eventual book-to-code references precise.
 
