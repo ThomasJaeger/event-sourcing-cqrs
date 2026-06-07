@@ -145,3 +145,22 @@ internal sealed class StubSubscriptionAuthorizationClient : ISubscriptionAuthori
         return Task.FromResult(_result);
     }
 }
+
+// Records every envelope fed to the in-process dispatcher and hands out a no-op subscription. Used no-op
+// at the broadcast sites (which never publish to it) and asserted in the dual-sink feed test.
+internal sealed class RecordingResourceNotificationDispatcher : IResourceNotificationDispatcher
+{
+    public List<NotificationEnvelope> Published { get; } = [];
+
+    public IDisposable Subscribe(ResourceKey key, Func<NotificationEnvelope, Task> onNotified)
+        => new NoOpRegistration();
+
+    public void Publish(NotificationEnvelope envelope) => Published.Add(envelope);
+
+    private sealed class NoOpRegistration : IDisposable
+    {
+        public void Dispose()
+        {
+        }
+    }
+}

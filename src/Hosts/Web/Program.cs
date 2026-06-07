@@ -163,6 +163,12 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<IOptions<HubBackplaneOptions>>(
     Options.Create(new HubBackplaneOptions { ConnectionString = readModelConnectionString }));
 builder.Services.AddSingleton<IHubBackplaneConnection, PostgresHubBackplaneConnection>();
+// The in-process notification fan-out (ADR 0032, superseding the SignalR hub broadcast). One dispatcher
+// for the whole host (singleton) so a projection change reaches every circuit/tab; one subscription per
+// page (transient), since the page owns and disposes it in its own DisposeAsync, so a second same-circuit
+// navigation gets a fresh one rather than the instance the prior page already disposed.
+builder.Services.AddSingleton<IResourceNotificationDispatcher, ResourceNotificationDispatcher>();
+builder.Services.AddTransient<ICircuitResourceSubscription, CircuitResourceSubscription>();
 builder.Services.AddHostedService<HubBackplaneHostedService>();
 
 var app = builder.Build();

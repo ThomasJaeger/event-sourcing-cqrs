@@ -250,6 +250,27 @@ public class CircuitResourceSubscriptionTests
         applied.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task DisposeAsync_is_idempotent_under_a_double_dispose()
+    {
+        await using var dispatcher = NewDispatcher();
+        var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+        await subscription.StartAsync(
+            SubscriptionResourceType.Order, "order-1",
+            _ => Task.FromResult(0),
+            _ => Task.CompletedTask,
+            async render => await render(),
+            CancellationToken.None);
+
+        // The page disposes the subscription from its DisposeAsync and DI disposes it again at scope end, so
+        // the second pass must be a no-op (the idempotency guard), not a re-cancel of a disposed CTS.
+        await subscription.DisposeAsync();
+        var secondDispose = async () => await subscription.DisposeAsync();
+
+        await secondDispose.Should().NotThrowAsync();
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;

@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Hosts.Web.Tests" />
+    <!-- IntegrationTests resolves the internal in-process notification services through a
+         WebApplicationFactory to verify the host's DI composition (dispatcher singleton, subscription
+         scoped). ADR 0032. -->
+    <InternalsVisibleTo Include="IntegrationTests" />
   </ItemGroup>
 
 </Project>

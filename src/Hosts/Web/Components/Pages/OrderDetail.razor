@@ -1,9 +1,12 @@
 @page "/orders/{OrderId:guid}"
+@using EventSourcingCqrs.Application
 @using EventSourcingCqrs.Application.Queries.Sales
 @using EventSourcingCqrs.Domain.Sales
 @using EventSourcingCqrs.Hosts.Web.Components
+@using EventSourcingCqrs.Hosts.Web.Hubs
 @inject IApiClient ApiClient
 @inject TimeProvider TimeProvider
+@inject ICircuitResourceSubscription Subscription
 @implements IAsyncDisposable
 
 <PageTitle>Order @OrderId</PageTitle>
@@ -42,7 +45,7 @@ else
     @if (detail.Header.Status == OrderStatus.Placed)
     {
         <div class="mb-6">
-            <CancelOrderButton @ref="cancelButton" OrderId="@detail.Header.OrderId" OnDispatched="StartPolling" />
+            <CancelOrderButton @ref="cancelButton" OrderId="@detail.Header.OrderId" OnDispatched="OnCancelDispatched" />
         </div>
     }
 
@@ -92,7 +95,7 @@ else
     private OrderDetailView? detail;
     private bool loading = true;
     private CancelOrderButton? cancelButton;
-    private CancellationTokenSource? pollingCts;
+    private CancellationTokenSource? degradedCts;
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,64 +103,66 @@ else
         loading = false;
     }
 
+    // Subscribe on the first interactive render, not OnInitializedAsync, so a prerender pass does not
+    // double-subscribe (ADR 0032). The subscription authorizes through the Api gate, registers under the
+    // order's resource id (the "D" form OrderDetailProjection's envelope uses), snapshots, and re-queries
+    // authoritative state on every notification, marshalled onto the render thread.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Subscription.StartAsync(
+                SubscriptionResourceType.Order,
+                OrderId.ToString(),
+                ct => ApiClient.QueryAsync(new GetOrderDetail(OrderId), ct),
+                ApplyAsync,
+                render => InvokeAsync(render),
+                CancellationToken.None);
+        }
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         detail = await ApiClient.QueryAsync(new GetOrderDetail(OrderId), ct);
     }
 
-    private async Task StartPolling()
+    // The snapshot and every notification land here, marshalled. A Cancelled read model settles the cancel:
+    // it hides the button and disarms the degraded fallback.
+    private Task ApplyAsync(OrderDetailView? view)
     {
-        // Cancel any prior polling session for this page.
-        pollingCts?.Cancel();
-        pollingCts = new CancellationTokenSource();
-        var token = pollingCts.Token;
-
-        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
-        var transientFailures = 0;
-
-        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
+        detail = view;
+        if (detail?.Header.Status == OrderStatus.Cancelled)
         {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
-                await LoadAsync(token);
-                StateHasChanged();
-                transientFailures = 0;
-
-                if (detail?.Header.Status == OrderStatus.Cancelled)
-                {
-                    cancelButton?.MarkSettled();
-                    return;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (ApiInfrastructureException)
-            {
-                // Transient: keep polling up to a small retry limit before
-                // giving up. The 30s deadline is the outer guard.
-                transientFailures++;
-                if (transientFailures >= 5)
-                {
-                    cancelButton?.MarkPollingTimeout();
-                    return;
-                }
-            }
+            degradedCts?.Cancel();
+            cancelButton?.MarkSettled();
         }
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 
-        // Deadline elapsed without settlement.
-        if (!token.IsCancellationRequested)
+    // The cancel was dispatched. Arm the degraded fallback: if the Cancelled notification does not arrive
+    // within the window, surface the "taking longer" state. The subscription drives the happy-path settle
+    // through ApplyAsync, which cancels this timer.
+    private async Task OnCancelDispatched()
+    {
+        degradedCts?.Cancel();
+        degradedCts = new CancellationTokenSource();
+        var token = degradedCts.Token;
+        try
         {
-            cancelButton?.MarkPollingTimeout();
+            await Task.Delay(TimeSpan.FromSeconds(30), TimeProvider, token);
         }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await InvokeAsync(() => cancelButton?.MarkPollingTimeout());
     }
 
     public async ValueTask DisposeAsync()
     {
-        pollingCts?.Cancel();
-        pollingCts?.Dispose();
-        await Task.CompletedTask;
+        degradedCts?.Cancel();
+        degradedCts?.Dispose();
+        await Subscription.DisposeAsync();
     }
 }

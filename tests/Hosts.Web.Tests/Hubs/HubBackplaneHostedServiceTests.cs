@@ -18,6 +18,25 @@ public class HubBackplaneHostedServiceTests
         => SubscriptionResourceCoverageTests.InventoryDashboardBroadcastCaseAsync();
 
     [Fact]
+    public async Task DispatchAsync_feeds_the_dispatcher_and_still_broadcasts_to_the_hub_group()
+    {
+        var hubContext = new RecordingHubContext();
+        var dispatcher = new RecordingResourceNotificationDispatcher();
+        var service = new HubBackplaneHostedService(
+            new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance, dispatcher);
+        var envelope = new NotificationEnvelope(
+            "order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
+
+        await service.DispatchAsync(envelope, CancellationToken.None);
+
+        // Dual sink: the reader feeds the in-process dispatcher with the exact envelope AND still broadcasts
+        // to the hub group (the broadcast stays live until the hub is retired in Commit 3).
+        dispatcher.Published.Should().ContainSingle().Which.Should().Be(envelope);
+        hubContext.Broadcasts.Should().ContainSingle()
+            .Which.Group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
+    }
+
+    [Fact]
     public async Task DispatchAsync_broadcasts_to_the_tenant_qualified_group()
     {
         var hubContext = new RecordingHubContext();
@@ -55,7 +74,8 @@ public class HubBackplaneHostedServiceTests
     {
         var hubContext = new RecordingHubContext();
         var logger = new RecordingLogger<HubBackplaneHostedService>();
-        var service = new HubBackplaneHostedService(new StubBackplane(), hubContext, logger);
+        var service = new HubBackplaneHostedService(
+            new StubBackplane(), hubContext, logger, new RecordingResourceNotificationDispatcher());
 
         await service.DispatchAsync(
             new NotificationEnvelope("customer-summary", "cust-1", "OrderPlaced", [], WellKnownTenants.Default),
@@ -72,7 +92,8 @@ public class HubBackplaneHostedServiceTests
         var hubContext = new RecordingHubContext();
         var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
         var service = new HubBackplaneHostedService(
-            new StubBackplane(envelope), hubContext, NullLogger<HubBackplaneHostedService>.Instance);
+            new StubBackplane(envelope), hubContext, NullLogger<HubBackplaneHostedService>.Instance,
+            new RecordingResourceNotificationDispatcher());
 
         await service.StartAsync(CancellationToken.None);
         // The seeded envelope flows through the loop before the backplane parks.
@@ -87,7 +108,8 @@ public class HubBackplaneHostedServiceTests
     }
 
     private static HubBackplaneHostedService Service(RecordingHubContext hubContext)
-        => new(new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance);
+        => new(new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance,
+            new RecordingResourceNotificationDispatcher());
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {

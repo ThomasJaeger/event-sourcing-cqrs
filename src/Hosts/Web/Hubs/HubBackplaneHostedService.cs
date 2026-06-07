@@ -27,18 +27,22 @@ internal sealed class HubBackplaneHostedService : BackgroundService
     private readonly IHubBackplaneConnection _backplane;
     private readonly IHubContext<DashboardHub> _hubContext;
     private readonly ILogger<HubBackplaneHostedService> _logger;
+    private readonly IResourceNotificationDispatcher _dispatcher;
 
     public HubBackplaneHostedService(
         IHubBackplaneConnection backplane,
         IHubContext<DashboardHub> hubContext,
-        ILogger<HubBackplaneHostedService> logger)
+        ILogger<HubBackplaneHostedService> logger,
+        IResourceNotificationDispatcher dispatcher)
     {
         ArgumentNullException.ThrowIfNull(backplane);
         ArgumentNullException.ThrowIfNull(hubContext);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(dispatcher);
         _backplane = backplane;
         _hubContext = hubContext;
         _logger = logger;
+        _dispatcher = dispatcher;
     }
 
     // The backplane is a registered singleton; its IAsyncDisposable lifecycle is
@@ -56,6 +60,9 @@ internal sealed class HubBackplaneHostedService : BackgroundService
     // host's tests drive it directly without standing up the subscription loop.
     internal async Task DispatchAsync(NotificationEnvelope envelope, CancellationToken ct)
     {
+        // Dual sink (ADR 0032): feed the in-process dispatcher, which does its own per-resource routing,
+        // and still broadcast to the SignalR group below until the hub is retired in Commit 3.
+        _dispatcher.Publish(envelope);
         if (!GroupPrefixes.TryGetValue(envelope.ProjectionName, out var prefix))
         {
             _logger.LogWarning(

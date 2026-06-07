@@ -169,7 +169,8 @@ public class SubscriptionResourceCoverageTests
     }
 
     private static HubBackplaneHostedService Service(RecordingHubContext hubContext)
-        => new(new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance);
+        => new(new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance,
+            new RecordingResourceNotificationDispatcher());
 
     private static ClaimsPrincipal PrincipalFor(Guid actorId) =>
         new(new ClaimsIdentity(

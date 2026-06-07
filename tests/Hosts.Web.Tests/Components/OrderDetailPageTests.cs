@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Hosts.Web;
 using EventSourcingCqrs.Hosts.Web.Components.Pages;
+using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,9 +20,11 @@ public class OrderDetailPageTests : BunitContext
     public OrderDetailPageTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
-        // The page injects TimeProvider for its polling loop. These render-only
-        // tests never start polling, so the system clock satisfies the dependency.
+        // The page injects TimeProvider (for the degraded-settlement timer) and the circuit subscription.
+        // These render-only tests never arm the timer or drive the subscription, so a system clock and a
+        // stub subscription satisfy the dependencies; the initial load stays in OnInitializedAsync.
         Services.AddSingleton(TimeProvider.System);
+        Services.AddSingleton<ICircuitResourceSubscription>(new StubCircuitResourceSubscription());
     }
 
     [Fact]

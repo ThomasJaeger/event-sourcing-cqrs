@@ -93,8 +93,17 @@ internal sealed class CircuitResourceSubscription : ICircuitResourceSubscription
         await marshal(() => apply(state));
     }
 
+    private bool _disposed;
+
     public ValueTask DisposeAsync()
     {
+        // Idempotent: the page disposes the subscription from its own DisposeAsync, and DI disposes it again
+        // at circuit-scope end. A second pass must not re-cancel an already-disposed CancellationTokenSource.
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+        _disposed = true;
         _cts.Cancel();
         _registration?.Dispose();
         _cts.Dispose();
