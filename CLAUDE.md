@@ -57,7 +57,7 @@ Two architectural decisions on disk (the self-contained event-store-adapter rule
 * PostgreSQL 16 for read models, with a mix of relational tables and JSONB columns.
 * Blazor Server for the UI, ASP.NET Core minimal APIs for the JSON API.
 * Tailwind for styling.
-* SignalR for live dashboard updates.
+* In-process notification dispatch for live dashboard updates (server-rendered Blazor circuits, ADR 0032).
 * xUnit, FluentAssertions, FsCheck (property-based tests), Stryker.NET (mutation tests), Testcontainers (PostgreSQL, SQL Server, and KurrentDB), LocalStack (DynamoDB).
 * Docker Compose to run the whole system locally with one command.
 

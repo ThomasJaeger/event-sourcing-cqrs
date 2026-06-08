@@ -89,7 +89,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 
 **Documentation.** README that maps every chapter to its code. Architecture decision records (ADRs) for major choices. Cross-reference map between book chapters and code files at the front of each Part 4 chapter.
 
-**Access control.** Role-based access control across the system. A permission model with a role-to-permission mapping, checked as permissions rather than role names. User-to-role assignments held in a small event-sourced Access context, so authorization changes are auditable; the role-to-permission mapping in startup-validated config. Command authorization as an Application pipeline behavior. Query and read-model authorization as role-and-ownership row filtering. SignalR subscription authorization as a resource-ownership check at the hub. Real authentication at both hosts, establishing identity where the actor is currently hardwired empty, with the principal abstracted so an external identity provider can slot in later.
+**Access control.** Role-based access control across the system. A permission model with a role-to-permission mapping, checked as permissions rather than role names. User-to-role assignments held in a small event-sourced Access context, so authorization changes are auditable; the role-to-permission mapping in startup-validated config. Command authorization as an Application pipeline behavior. Query and read-model authorization as role-and-ownership row filtering. Subscription authorization as a resource-ownership check. Real authentication at both hosts, establishing identity where the actor is currently hardwired empty, with the principal abstracted so an external identity provider can slot in later.
 
 **Multi-tenancy.** Tenant isolation by a shared-schema discriminator, with read-isolation enforced by infrastructure (row-level security or a mandatory filter) rather than per-query discipline, and complete cross-tenant isolation tests at every boundary. Tenant context on the principal, in event metadata, and in stream identifiers. Tenant-scoped read models and dashboards. The existing event corpus migrated to a default tenant by an additive, append-only-respecting backfill. Tenant isolation enforced as an authorization boundary.
 
@@ -130,7 +130,7 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | License | MIT | Book commitment |
 | Repository host | github.com/ThomasJaeger | Book commitment |
 | Tenant isolation model | Shared-schema discriminator with infrastructure-enforced read isolation | RBAC and multi-tenancy foundation |
-| Authorization model | Permission-based; command authz as a pipeline behavior, query and read authz as row filtering, hub subscription authz as a resource-ownership check, identity from a real principal | RBAC and multi-tenancy foundation |
+| Authorization model | Permission-based; command authz as a pipeline behavior, query and read authz as row filtering, subscription authz as a resource-ownership check, identity from a real principal | RBAC and multi-tenancy foundation |
 | TenantId type | Typed wrapper, a security-justified exception to the raw-Guid convention (amends ADR 0005's scope) | RBAC and multi-tenancy foundation |
 
 The manuscript and the implementation agree on .NET 10 / C# 14 as of April 2026. The Track A pass updated Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters. ADR 0001 in this repo records the original deviation and is now closed at superseded-by-manuscript status.
@@ -388,6 +388,8 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 **Status note.** Phase 8 delivered the SignalR hub and the LISTEN/NOTIFY backplane (Cluster 1, CI-green at bfb4727). The retrofit sites, the two new dashboards, the LiveBadge component, hub-side rate limiting, and the cross-tab verification moved to the live-dashboards-completion phase, because they depend on the authentication-and-authorization and multi-tenancy foundation. The two done-when criteria above move with them; the hub-broadcasts-on-projection-commit capability they imply is proven by Cluster 1.
 
+Retired in Phase 11: the runtime hub was replaced by in-process notification dispatch (ADR 0032).
+
 ### Phase 9: Authentication and Authorization (RBAC)
 
 **Goals.** A permission model with a startup-validated role-to-permission mapping, checked as permissions. User-to-role assignments in a small event-sourced Access context with a bootstrap administrator; the role-to-permission mapping in config. Command authorization as an Application pipeline behavior, folded after logging and before idempotency so an unauthorized command consumes no idempotency storage and reaches neither validation nor the handler. Every command declares its required permission, with startup validation failing loudly on a gap. Query and read-model authorization as role-and-ownership row filtering. SignalR subscription authorization at the hub (hub authentication plus the resource-ownership check that closes the direct-object-reference exposure). Real authentication at both hosts, establishing identity where the actor is hardwired empty, with the principal abstracted for a future external identity provider. Identity propagation through the async chains, with caused commands and resurfaced delayed commands authorizing under a system actor while preserving the originating correlation. A system role holding the permissions process managers exercise. Tests at every enforcement point, complete per the cross-tenant coverage mandate's authz boundaries.
@@ -406,7 +408,7 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 
 ### Phase 11: Live Dashboards Completion
 
-**Goals.** The deferred Phase 8 work, built authz-and-tenant-aware from the start. The three retrofit sites (OrderDetail, OrderCreate, InventoryDashboard) receive SignalR notifications instead of polling. The two new dashboards (customer-facing order tracking, SaaS admin metrics). The shared LiveBadge connection-status component. Hub-side rate limiting. The cross-tab verification.
+**Goals.** The deferred Phase 8 work, built authz-and-tenant-aware from the start. The three retrofit sites (OrderDetail, OrderCreate, InventoryDashboard) receive in-process notifications instead of polling. The two new dashboards (customer-facing order tracking, SaaS admin metrics). The shared LiveBadge connection-status component reflecting circuit and connection state. Per-subscriber bounded coalescing in the dispatcher (the in-process successor to the planned hub-side rate limiting). The cross-tab verification.
 
 **Out of scope.** As the original Phase 8 scope named.
 

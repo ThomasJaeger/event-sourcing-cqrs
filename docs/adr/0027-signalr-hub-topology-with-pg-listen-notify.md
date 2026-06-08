@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (May 2026)
+Accepted (May 2026). Superseded by ADR 0032 (June 2026).
 
 ## Context
 
