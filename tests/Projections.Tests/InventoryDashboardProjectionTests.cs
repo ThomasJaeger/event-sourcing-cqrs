@@ -185,17 +185,15 @@ public class InventoryDashboardProjectionTests
     }
 
     [Fact]
-    public async Task InventoryCreated_stages_an_inventory_notification_keyed_by_the_sku()
+    public async Task InventoryCreated_stages_a_notification_keyed_by_the_collection_sentinel()
     {
         var store = new InMemoryInventoryDashboardStore();
         var projection = Projection(store);
-
         await projection.HandleAsync(
             Context(new InventoryCreated(Guid.NewGuid(), "SKU-1", At), position: 1), CancellationToken.None);
-
         var staged = store.StagedNotifications.Should().ContainSingle().Subject;
         staged.ProjectionName.Should().Be(projection.Name);
-        staged.ResourceId.Should().Be("SKU-1");
+        staged.ResourceId.Should().Be(CollectionResourceIds.AllInventory);
         staged.EventName.Should().Be(nameof(InventoryCreated));
         staged.Widgets.Should().BeEmpty();
     }
@@ -230,23 +228,60 @@ public class InventoryDashboardProjectionTests
     }
 
     [Fact]
-    public async Task InventoryAdjusted_stages_keyed_by_the_returned_sku()
+    public async Task InventoryAdjusted_stages_keyed_by_the_collection_sentinel()
     {
         var store = new InMemoryInventoryDashboardStore();
         var projection = Projection(store);
         var inventoryId = Guid.NewGuid();
         await projection.HandleAsync(
             Context(new InventoryCreated(inventoryId, "SKU-1", At), position: 1), CancellationToken.None);
-
         await projection.HandleAsync(
             Context(new InventoryAdjusted(inventoryId, "SKU-1", 100, "restock", At), position: 2),
             CancellationToken.None);
-
-        // The created row and the adjustment each stage; the adjustment keys on the
-        // sku its UPDATE returns, not on the InventoryId the event carries.
+        // The created row and the adjustment each stage; both publish under the
+        // collection sentinel, since the page re-queries the whole list on any change.
         store.StagedNotifications.Should().HaveCount(2);
-        store.StagedNotifications[1].ResourceId.Should().Be("SKU-1");
+        store.StagedNotifications[1].ResourceId.Should().Be(CollectionResourceIds.AllInventory);
         store.StagedNotifications[1].EventName.Should().Be(nameof(InventoryAdjusted));
+    }
+
+    [Fact]
+    public async Task InventoryReserved_stages_a_notification_keyed_by_the_collection_sentinel()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+        var inventoryId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new InventoryCreated(inventoryId, "SKU-1", At), position: 1), CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new InventoryReserved(inventoryId, Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 5, At), position: 2),
+            CancellationToken.None);
+        // A collection page subscribes under one sentinel resource-id, so every
+        // inventory change publishes under that sentinel rather than the per-sku id.
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be(CollectionResourceIds.AllInventory);
+        store.StagedNotifications[1].EventName.Should().Be(nameof(InventoryReserved));
+    }
+
+    [Fact]
+    public async Task InventoryReleased_stages_a_notification_keyed_by_the_collection_sentinel()
+    {
+        var store = new InMemoryInventoryDashboardStore();
+        var projection = Projection(store);
+        var inventoryId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        var lineId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new InventoryCreated(inventoryId, "SKU-1", At), position: 1), CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new InventoryReserved(inventoryId, orderId, lineId, "SKU-1", 5, At), position: 2),
+            CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new InventoryReleased(inventoryId, orderId, lineId, "cancelled", At), position: 3),
+            CancellationToken.None);
+        store.StagedNotifications.Should().HaveCount(3);
+        store.StagedNotifications[2].ResourceId.Should().Be(CollectionResourceIds.AllInventory);
+        store.StagedNotifications[2].EventName.Should().Be(nameof(InventoryReleased));
     }
 
     [Fact]

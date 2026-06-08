@@ -5,6 +5,7 @@ using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Hosts.Web;
 using EventSourcingCqrs.Hosts.Web.Components.Pages;
+using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,31 +14,28 @@ using Xunit;
 
 namespace EventSourcingCqrs.Hosts.Web.Tests.Components.Inventory;
 
-// The dashboard's AdjustInventory dispatch and its page-owned polling loop. Each
-// test renders the dashboard with one row, opens the per-row adjust dialog, submits
-// a signed delta and reason, and drives the FakeTimeProvider to exercise the
-// optimistic badge, the settle-on-on-hand-match-and-refresh, the deadline, and the
-// four dispatch-failure arms.
-public sealed class InventoryDashboardAdjustPollingTests : BunitContext
+// The dashboard's AdjustInventory dispatch under the in-process notification
+// subscription (ADR 0032, ADR 0033). The adjust badge settles when a re-queried
+// list shows the SKU's on-hand reaching the snapshot-plus-delta target.
+public sealed class InventoryDashboardAdjustPushTests : BunitContext
 {
     private static readonly DateTimeOffset BaseTime = new(2026, 5, 26, 12, 0, 0, TimeSpan.Zero);
-
     private readonly StubApiClient stubApiClient = new();
     private readonly FakeTimeProvider fakeTime = new(BaseTime);
+    private readonly StubCircuitResourceSubscription subscription = new();
 
-    public InventoryDashboardAdjustPollingTests()
+    public InventoryDashboardAdjustPushTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
         Services.AddSingleton<TimeProvider>(fakeTime);
+        Services.AddSingleton<ICircuitResourceSubscription>(subscription);
     }
 
     [Fact]
     public void Clicking_adjust_opens_the_dialog_with_the_current_on_hand()
     {
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         cut.Find(".adjust-button").Click();
-
         cut.Find("dd.font-semibold").TextContent.Trim().Should().Be("12");
     }
 
@@ -47,9 +45,7 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
         var inventoryId = Guid.NewGuid();
         stubApiClient.EnqueueCommandResult(typeof(AdjustInventory), Accepted());
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12, inventoryId: inventoryId));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-
         var command = stubApiClient.CapturedCommands.Select(c => c.Command)
             .OfType<AdjustInventory>().Should().ContainSingle().Subject;
         command.InventoryId.Should().Be(inventoryId);
@@ -62,24 +58,19 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
     {
         stubApiClient.EnqueueCommandResult(typeof(AdjustInventory), Accepted());
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-
         cut.Markup.Should().Contain("Adjusting...");
     }
 
     [Fact]
-    public async Task Polling_settles_when_onhand_matches_the_expected_value_and_refreshes()
+    public async Task A_push_reaching_the_expected_onhand_settles_the_adjust_badge_and_refreshes()
     {
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
         stubApiClient.EnqueueCommandResult(typeof(AdjustInventory), Accepted());
-        stubApiClient.EnqueueQueryResult<GetInventoryDashboardBySku, InventoryDashboardRow?>(Row("SKU-1", onHand: 17));
         stubApiClient.EnqueueQueryResult<GetAllInventoryDashboard, IReadOnlyList<InventoryDashboardRow>>(
             new[] { Row("SKU-1", onHand: 17) });
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-        await PollOnce(cut);
-
+        await subscription.DeliverAsync();
         cut.WaitForAssertion(() =>
         {
             cut.Markup.Should().Contain("Adjusted");
@@ -88,30 +79,25 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
     }
 
     [Fact]
-    public async Task Polling_times_out_at_the_deadline_with_a_failed_badge()
+    public async Task No_settling_push_within_the_window_shows_the_degraded_badge()
     {
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
         stubApiClient.EnqueueCommandResult(typeof(AdjustInventory), Accepted());
-        // On-hand never reaches the snapshot 12 plus the delta 5 (= 17).
         stubApiClient.EnqueueQueryResult<GetInventoryDashboardBySku, InventoryDashboardRow?>(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
         await cut.InvokeAsync(() => fakeTime.Advance(TimeSpan.FromSeconds(31)));
-
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("taking longer than expected"));
     }
 
     [Fact]
-    public void Adjust_dispatch_validation_failure_renders_the_message_and_does_not_poll()
+    public void Adjust_dispatch_validation_failure_renders_the_message_and_leaves_the_subscription_live()
     {
         stubApiClient.SeedCommandFailure<AdjustInventory>(new ApiValidationException(
             new Dictionary<string, IReadOnlyList<string>> { ["Reason"] = new[] { "Reason is required" } }));
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-
         cut.Markup.Should().Contain("Reason is required");
-        stubApiClient.CapturedQueries.OfType<GetInventoryDashboardBySku>().Should().BeEmpty();
+        subscription.DisposeCallCount.Should().Be(0);
     }
 
     [Fact]
@@ -120,11 +106,9 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
         stubApiClient.SeedCommandFailure<AdjustInventory>(new ApiBusinessRuleException(
             "RULE", "would make available stock negative."));
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "-99", reason: "shrinkage");
-
         cut.Markup.Should().Contain("would make available stock negative.");
-        stubApiClient.CapturedQueries.OfType<GetInventoryDashboardBySku>().Should().BeEmpty();
+        subscription.DisposeCallCount.Should().Be(0);
     }
 
     [Fact]
@@ -132,11 +116,9 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
     {
         stubApiClient.SeedCommandFailure<AdjustInventory>(new ApiConcurrencyException(0));
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-
         cut.Markup.Should().Contain("changed while you were adjusting");
-        stubApiClient.CapturedQueries.OfType<GetInventoryDashboardBySku>().Should().BeEmpty();
+        subscription.DisposeCallCount.Should().Be(0);
     }
 
     [Fact]
@@ -145,11 +127,9 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
         stubApiClient.SeedCommandFailure<AdjustInventory>(
             new ApiInfrastructureException("connection refused", statusCode: 500));
         var cut = RenderDashboardWith(Row("SKU-1", onHand: 12));
-
         OpenAndSubmit(cut, delta: "5", reason: "restock");
-
         cut.Markup.Should().Contain("Something went wrong");
-        stubApiClient.CapturedQueries.OfType<GetInventoryDashboardBySku>().Should().BeEmpty();
+        subscription.DisposeCallCount.Should().Be(0);
     }
 
     private IRenderedComponent<InventoryDashboard> RenderDashboardWith(InventoryDashboardRow row)
@@ -165,13 +145,6 @@ public sealed class InventoryDashboardAdjustPollingTests : BunitContext
         cut.Find("#deltaInput").Input(delta);
         cut.Find("#reasonInput").Input(reason);
         cut.Find("#dialogAdjustButton").Click();
-    }
-
-    private async Task PollOnce(IRenderedComponent<InventoryDashboard> cut)
-    {
-        var before = stubApiClient.CapturedQueries.Count;
-        await cut.InvokeAsync(() => fakeTime.Advance(TimeSpan.FromSeconds(1)));
-        cut.WaitForState(() => stubApiClient.CapturedQueries.Count > before);
     }
 
     private static CommandAcceptedResponse Accepted() => new(BaseTime.UtcDateTime);

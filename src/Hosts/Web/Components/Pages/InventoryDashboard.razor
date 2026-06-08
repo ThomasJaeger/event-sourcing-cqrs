@@ -1,10 +1,14 @@
 @page "/inventory"
+@using EventSourcingCqrs.Application
 @using EventSourcingCqrs.Application.Commands.Fulfillment
 @using EventSourcingCqrs.Application.Queries.Fulfillment
+@using EventSourcingCqrs.Domain.Abstractions
 @using EventSourcingCqrs.Domain.Fulfillment.ReadModels
 @using EventSourcingCqrs.Hosts.Web.Components.Inventory
+@using EventSourcingCqrs.Hosts.Web.Hubs
 @inject IApiClient ApiClient
 @inject TimeProvider TimeProvider
+@inject ICircuitResourceSubscription Subscription
 @implements IAsyncDisposable
 
 <PageTitle>Inventory</PageTitle>
@@ -99,11 +103,59 @@ else
     private BadgeState opBadge = BadgeState.Idle;
     private string opBadgeMessage = string.Empty;
     private string? opFailureMessage;
-    private CancellationTokenSource? pollingCts;
+
+    // The in-flight operation's settle predicate and outcome message, captured at
+    // dispatch. The collection subscription re-queries the whole list on any
+    // notification (it carries no per-operation context), then ApplyAsync tests
+    // this predicate against the fresh list to settle the operation badge. Null
+    // when no operation is awaiting a settle.
+    private Func<IReadOnlyList<InventoryDashboardRow>, bool>? settlePredicate;
+    private string opSettledMessage = string.Empty;
+
+    // Per-operation degraded fallback. Armed on dispatch, cancelled on the settling
+    // re-query and on page teardown, so the deadline surfaces the failed badge if no
+    // settling notification arrives within the window.
+    private CancellationTokenSource? degradedCts;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync(CancellationToken.None);
+    }
+
+    // Subscribe on the first interactive render, not OnInitializedAsync, so a
+    // prerender pass does not double-subscribe (ADR 0032). The InventoryDashboard is
+    // a collection page over all SKUs, so it subscribes under the collection-scoped
+    // sentinel and the projection emits the same sentinel (ADR 0033). Every
+    // notification re-queries the whole list, marshalled onto the render thread.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await Subscription.StartAsync(
+                SubscriptionResourceType.Inventory,
+                CollectionResourceIds.AllInventory,
+                ct => ApiClient.QueryAsync(new GetAllInventoryDashboard(), ct),
+                ApplyAsync,
+                render => InvokeAsync(render),
+                CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            // Disposed mid-arm; the page is going away, nothing to surface.
+        }
+        catch (Exception)
+        {
+            // The arm failed (authorization, dispatcher, transport). The page keeps
+            // its initial one-shot data and stays up; it is simply not live until a
+            // reload. Do not dispose, do not rethrow, do not tear down the circuit.
+            // A page-level liveness signal for this silent-not-live state is owed to
+            // the shared LiveBadge slice.
+        }
     }
 
     private async Task LoadAsync(CancellationToken ct)
@@ -111,8 +163,25 @@ else
         rows = await ApiClient.QueryAsync(new GetAllInventoryDashboard(), ct);
     }
 
-    private void OpenCreateDialog() => showCreateDialog = true;
+    // The snapshot and every notification land here, marshalled. The live feed is
+    // unconditional: refresh the table from authoritative state. If an operation is
+    // awaiting a settle, test its captured predicate against the fresh list, and on
+    // a match settle the badge and disarm that operation's degraded fallback.
+    private async Task ApplyAsync(IReadOnlyList<InventoryDashboardRow>? list)
+    {
+        rows = list;
+        if (settlePredicate is not null && list is not null && settlePredicate(list))
+        {
+            settlePredicate = null;
+            degradedCts?.Cancel();
+            opBadge = BadgeState.Settled;
+            opBadgeMessage = opSettledMessage;
+        }
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
 
+    private void OpenCreateDialog() => showCreateDialog = true;
     private void CloseCreateDialog() => showCreateDialog = false;
 
     // Snapshots the row's current on-hand at open time; the settle predicate adds
@@ -131,16 +200,14 @@ else
     {
         showCreateDialog = false;
         BeginOperation("Create", "Creating...");
-
         try
         {
             // A fresh InventoryId per click; the entered SKU is the only operator
             // input. Idempotency key minted at click time per ADR 0021.
             var command = new CreateInventory(Guid.NewGuid(), sku);
             await ApiClient.SendCommandAsync(command, Guid.NewGuid().ToString(), CancellationToken.None);
-
-            // The new SKU's row appearing at all is the settled state.
-            await StartPolling(sku, _ => true, "Created");
+            // The new SKU's row appearing in the list is the settled state.
+            ArmSettle(list => list.Any(r => r.Sku == sku), "Created");
         }
         catch (ApiValidationException ex)
         {
@@ -167,14 +234,12 @@ else
         var expectedOnHand = adjustSnapshotOnHand + input.Delta;
         var command = new AdjustInventory(adjustInventoryId, input.Delta, input.Reason);
         BeginOperation("Adjust", "Adjusting...");
-
         try
         {
             await ApiClient.SendCommandAsync(command, Guid.NewGuid().ToString(), CancellationToken.None);
-
-            // The dashboard's on-hand reaching the snapshot-plus-delta target is the
-            // settled state.
-            await StartPolling(sku, row => row.OnHandQuantity == expectedOnHand, "Adjusted");
+            // The dashboard's on-hand for this SKU reaching the snapshot-plus-delta
+            // target is the settled state.
+            ArmSettle(list => list.Any(r => r.Sku == sku && r.OnHandQuantity == expectedOnHand), "Adjusted");
         }
         catch (ApiValidationException ex)
         {
@@ -202,6 +267,39 @@ else
         opFailureMessage = null;
     }
 
+    // Captures the settle predicate for the in-flight operation and arms its degraded
+    // fallback. The settling re-query (ApplyAsync) and page teardown (DisposeAsync)
+    // both cancel the timer, so its lifecycle is owned, not fire-and-forget.
+    private void ArmSettle(Func<IReadOnlyList<InventoryDashboardRow>, bool> predicate, string settledMessage)
+    {
+        settlePredicate = predicate;
+        opSettledMessage = settledMessage;
+        degradedCts?.Cancel();
+        degradedCts = new CancellationTokenSource();
+        _ = RunDegradedTimerAsync(degradedCts.Token);
+    }
+
+    private async Task RunDegradedTimerAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), TimeProvider, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await InvokeAsync(() =>
+        {
+            settlePredicate = null;
+            opBadge = BadgeState.Failed;
+            opBadgeMessage = $"{opLabel} may still be processing";
+            opFailureMessage =
+                "The command was accepted but is taking longer than expected. Refresh to check status.";
+            StateHasChanged();
+        });
+    }
+
     private void FailOperation(string failureMessage)
     {
         opBadge = BadgeState.Failed;
@@ -218,75 +316,13 @@ else
                 : ex.Message);
     }
 
-    // Delay-first polling for the read model to reflect the dispatched command,
-    // matching OrderDetail.StartPolling: a 30-second deadline and a five-failure
-    // transient cap on the read-side query. isSettled tests the fetched row (create
-    // settles on any row appearing, adjust on the on-hand reaching its target). On
-    // settlement the table refreshes in place; the operator stays on the dashboard
-    // rather than redirecting.
-    private async Task StartPolling(string sku, Func<InventoryDashboardRow, bool> isSettled, string settledMessage)
-    {
-        pollingCts?.Cancel();
-        pollingCts = new CancellationTokenSource();
-        var token = pollingCts.Token;
-
-        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
-        var transientFailures = 0;
-
-        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
-                var row = await ApiClient.QueryAsync(new GetInventoryDashboardBySku(sku), token);
-                transientFailures = 0;
-
-                if (row is not null && isSettled(row))
-                {
-                    await LoadAsync(token);
-                    opBadge = BadgeState.Settled;
-                    opBadgeMessage = settledMessage;
-                    StateHasChanged();
-                    return;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (ApiInfrastructureException)
-            {
-                // Transient: keep polling up to a small retry limit before giving
-                // up. The 30s deadline is the outer guard.
-                transientFailures++;
-                if (transientFailures >= 5)
-                {
-                    MarkPollingTimeout();
-                    return;
-                }
-            }
-        }
-
-        // Deadline elapsed without the read model reaching the settled state.
-        if (!token.IsCancellationRequested)
-        {
-            MarkPollingTimeout();
-        }
-    }
-
-    private void MarkPollingTimeout()
-    {
-        opBadge = BadgeState.Failed;
-        opBadgeMessage = $"{opLabel} may still be processing";
-        opFailureMessage =
-            "The command was accepted but is taking longer than expected. Refresh to check status.";
-        StateHasChanged();
-    }
-
+    // Idempotent and safe whether or not the page ever armed: degradedCts is null
+    // until an operation dispatches, and the subscription's DisposeAsync is a no-op
+    // before any start and across repeated calls (ADR 0032).
     public async ValueTask DisposeAsync()
     {
-        pollingCts?.Cancel();
-        pollingCts?.Dispose();
-        await Task.CompletedTask;
+        degradedCts?.Cancel();
+        degradedCts?.Dispose();
+        await Subscription.DisposeAsync();
     }
 }

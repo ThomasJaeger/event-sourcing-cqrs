@@ -45,7 +45,7 @@ public sealed class InventoryDashboardProjection
         }
         await uow.CreateDashboardAsync(
             context.Event.InventoryId, context.Event.Sku, context.Metadata.OccurredUtc, ct);
-        StageNotification(uow, context.Event.Sku, nameof(InventoryCreated), context.Metadata.Tenant);
+        StageNotification(uow, nameof(InventoryCreated), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -62,7 +62,7 @@ public sealed class InventoryDashboardProjection
             context.Event.InventoryId, context.Event.QuantityDelta, context.Metadata.OccurredUtc, ct);
         if (sku is not null)
         {
-            StageNotification(uow, sku, nameof(InventoryAdjusted), context.Metadata.Tenant);
+            StageNotification(uow, nameof(InventoryAdjusted), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -83,7 +83,7 @@ public sealed class InventoryDashboardProjection
             new InventoryReservationRow(e.InventoryId, e.OrderId, e.LineId, e.Quantity, e.ReservedUtc), ct);
         if (sku is not null)
         {
-            StageNotification(uow, sku, nameof(InventoryReserved), context.Metadata.Tenant);
+            StageNotification(uow, nameof(InventoryReserved), context.Metadata.Tenant);
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
@@ -117,18 +117,19 @@ public sealed class InventoryDashboardProjection
             await uow.DeleteReservationAsync(e.InventoryId, e.OrderId, e.LineId, ct);
             if (sku is not null)
             {
-                StageNotification(uow, sku, nameof(InventoryReleased), context.Metadata.Tenant);
+                StageNotification(uow, nameof(InventoryReleased), context.Metadata.Tenant);
             }
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
-    // Stages an inventory notification for the SignalR hub, keyed by sku for the
-    // inventory:{sku} group (D2). InventoryDashboard is a v1 subscriber. The sku
-    // comes from the mutation's RETURNING clause, so a zero-row UPDATE stages
-    // nothing. The widget set is empty for now: the page re-queries authoritative
-    // state on any notification (D1), and the precise Chapter 13 widget vocabulary
-    // lands with the Cluster 2 retrofit page.
-    private void StageNotification(IInventoryDashboardUnitOfWork uow, string sku, string eventName, TenantId tenant)
-        => uow.PublishOnCommit(new NotificationEnvelope(Name, sku, eventName, [], tenant));
+    // Stages a collection-scoped inventory notification for in-process dispatch
+    // to the subscribed dashboard circuits (ADR 0032). Keyed by the AllInventory
+    // sentinel rather than a per-sku id, since the InventoryDashboard is a
+    // collection page that re-queries the whole list on any change (ADR 0033).
+    // Carries no row data: the page reads authoritative state on receipt. The
+    // adjust, reserve, and release handlers stage only when their mutation
+    // returned a row, so a zero-row change stages nothing.
+    private void StageNotification(IInventoryDashboardUnitOfWork uow, string eventName, TenantId tenant)
+        => uow.PublishOnCommit(new NotificationEnvelope(Name, CollectionResourceIds.AllInventory, eventName, [], tenant));
 }

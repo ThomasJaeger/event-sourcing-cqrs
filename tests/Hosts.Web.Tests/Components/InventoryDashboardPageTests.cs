@@ -3,6 +3,7 @@ using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Hosts.Web;
 using EventSourcingCqrs.Hosts.Web.Components.Pages;
+using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,7 @@ namespace EventSourcingCqrs.Hosts.Web.Tests.Components;
 public class InventoryDashboardPageTests : BunitContext
 {
     private readonly StubApiClient stubApiClient = new();
+    private readonly StubCircuitResourceSubscription subscription = new();
 
     public InventoryDashboardPageTests()
     {
@@ -20,6 +22,7 @@ public class InventoryDashboardPageTests : BunitContext
         // The page injects TimeProvider for its create-polling loop. These
         // render-only tests never dispatch, so the system clock satisfies it.
         Services.AddSingleton(TimeProvider.System);
+        Services.AddSingleton<ICircuitResourceSubscription>(subscription);
     }
 
     [Fact]
