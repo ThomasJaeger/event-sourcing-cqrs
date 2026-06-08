@@ -2,6 +2,7 @@ using Bunit;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Hosts.Web;
+using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Hosts.Web.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,9 +23,11 @@ public sealed class OrderCreatePageTests : BunitContext
     public OrderCreatePageTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
-        // The page injects TimeProvider for the PlaceOrder polling loop. These
-        // navigation tests never start polling, so the system clock satisfies it.
+        // The page injects TimeProvider for the PlaceOrder degraded-settlement timer and the circuit
+        // subscription it arms on Place. These navigation and line-dispatch tests never reach Place, so a
+        // system clock and a stub subscription satisfy the dependencies once the page injects them.
         Services.AddSingleton(TimeProvider.System);
+        Services.AddSingleton<ICircuitResourceSubscription>(new StubCircuitResourceSubscription());
     }
 
     [Fact]

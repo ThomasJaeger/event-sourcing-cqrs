@@ -1,12 +1,15 @@
 @page "/orders/new"
+@using EventSourcingCqrs.Application
 @using EventSourcingCqrs.Application.Commands.Sales
 @using EventSourcingCqrs.Application.Queries.Sales
 @using EventSourcingCqrs.Domain.Sales
 @using EventSourcingCqrs.Domain.SharedKernel
 @using EventSourcingCqrs.Hosts.Web.Components.OrderCreate
+@using EventSourcingCqrs.Hosts.Web.Hubs
 @inject IApiClient ApiClient
 @inject TimeProvider TimeProvider
 @inject NavigationManager NavigationManager
+@inject ICircuitResourceSubscription Subscription
 @implements IAsyncDisposable
 
 <PageTitle>New Order</PageTitle>
@@ -84,7 +87,8 @@
     private bool isDispatchingLine;
     private string? lineFailureMessage;
 
-    private CancellationTokenSource? pollingCts;
+    private CancellationTokenSource? degradedCts;
+    private bool placedSettled;
     private BadgeState placeBadgeState = BadgeState.Idle;
     private string placeMessage = string.Empty;
     private bool isPlacing;
@@ -176,11 +180,11 @@
         }
     }
 
-    // PlaceOrder is the wizard's final dispatch. It transitions the badge to
-    // Pending optimistically, then polls GetOrderDetail for the Draft-to-Placed
-    // status flip (D6); the PM cascade downstream of OrderPlaced surfaces at the
-    // order-detail page the poll redirects to. Page-owned to match the line
-    // dispatches, since the polling loop owns the page's TimeProvider and disposal.
+    // PlaceOrder is the wizard's final dispatch. It transitions the badge to Pending optimistically, then
+    // arms a live wait on the order-detail projection (ADR 0032): a degraded timer that surfaces the failed
+    // badge at the 30-second deadline, plus the circuit subscription that watches for the Draft-to-Placed
+    // flip and settles in ApplyAsync. The PM cascade downstream of OrderPlaced surfaces at the order-detail
+    // page the settle redirects to.
     private async Task HandlePlaceOrder()
     {
         placeFailureMessage = null;
@@ -193,11 +197,6 @@
             var command = new PlaceOrder(orderId);
             var idempotencyKey = Guid.NewGuid().ToString();
             await ApiClient.SendCommandAsync(command, idempotencyKey, CancellationToken.None);
-
-            pollingCts?.Cancel();
-            pollingCts?.Dispose();
-            pollingCts = new CancellationTokenSource();
-            _ = StartPlacePolling(pollingCts.Token);
         }
         catch (ApiValidationException ex)
         {
@@ -208,87 +207,118 @@
                     ? ex.Message
                     : "The order could not be placed.";
             isPlacing = false;
+            return;
         }
         catch (ApiBusinessRuleException ex)
         {
             placeBadgeState = BadgeState.Failed;
             placeFailureMessage = ex.Message;
             isPlacing = false;
+            return;
         }
         catch (ApiConcurrencyException)
         {
             placeBadgeState = BadgeState.Failed;
             placeFailureMessage = "The order changed while you were placing it. Please refresh and try again.";
             isPlacing = false;
+            return;
         }
         catch (ApiInfrastructureException ex)
         {
             placeBadgeState = BadgeState.Failed;
             placeFailureMessage = $"The order could not be placed: {ex.Message}";
             isPlacing = false;
+            return;
+        }
+
+        // Dispatch accepted. Arm the degraded timer first and independently of the subscription, so the
+        // deadline still surfaces the failed badge even if the arm below throws. The subscription registers
+        // under the order's default-form id, the "D" form OrderDetailProjection's envelope emits, matching
+        // OrderDetail's subscriber.
+        ArmDegradedTimer();
+        try
+        {
+            await Subscription.StartAsync(
+                SubscriptionResourceType.Order,
+                orderId.ToString(),
+                ct => ApiClient.QueryAsync(new GetOrderDetail(orderId), ct),
+                ApplyAsync,
+                render => InvokeAsync(render),
+                CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            // Disposed mid-arm; the page is going away, nothing to surface.
+        }
+        catch (Exception)
+        {
+            // The arm failed (authorization, dispatcher, transport). The order itself was already accepted,
+            // so leave the subscription in place and the degraded timer armed: the documented failure mode is
+            // the deadline surfacing the failed badge. Do not dispose, do not rethrow, do not tear down the page.
         }
     }
 
-    // Mirrors OrderDetail.razor's StartPolling: 1-second TimeProvider-driven
-    // delays, a 30-second deadline, a five-retry cap on transient read failures,
-    // and OperationCanceled exit on disposal. On the Status flip to Placed it
-    // settles the badge and redirects to the order-detail page (N.a), where the
-    // user watches the PM cascade unfold.
-    private async Task StartPlacePolling(CancellationToken token)
+    // The initial snapshot and every push land here, marshalled. On the Draft-to-Placed flip the wait is
+    // over: settle the badge, disarm the degraded timer, dispose the subscription to close the delivery path
+    // at the source, then navigate to the order-detail page where the user watches the PM cascade unfold.
+    // The placedSettled guard makes this idempotent: a second, in-flight push after the terminal one neither
+    // re-navigates nor throws on the navigating-away page (the already-terminal backstop).
+    private async Task ApplyAsync(OrderDetailView? view)
     {
-        var deadline = TimeProvider.GetUtcNow().AddSeconds(30);
-        var transientFailures = 0;
-
-        while (!token.IsCancellationRequested && TimeProvider.GetUtcNow() < deadline)
+        if (placedSettled)
         {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider, token);
-                var detail = await ApiClient.QueryAsync(new GetOrderDetail(orderId), token);
-                transientFailures = 0;
-
-                if (detail?.Header.Status == OrderStatus.Placed)
-                {
-                    placeBadgeState = BadgeState.Settled;
-                    placeMessage = "Order placed.";
-                    await InvokeAsync(StateHasChanged);
-                    NavigationManager.NavigateTo($"/orders/{orderId}");
-                    return;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (ApiInfrastructureException)
-            {
-                transientFailures++;
-                if (transientFailures >= 5)
-                {
-                    placeBadgeState = BadgeState.Failed;
-                    placeFailureMessage = "The order detail could not be retrieved. The order may still have been placed; check the orders list.";
-                    isPlacing = false;
-                    await InvokeAsync(StateHasChanged);
-                    return;
-                }
-            }
+            return;
         }
+        if (view?.Header.Status == OrderStatus.Placed)
+        {
+            placedSettled = true;
+            placeBadgeState = BadgeState.Settled;
+            placeMessage = "Order placed.";
+            isPlacing = false;
+            degradedCts?.Cancel();
+            StateHasChanged();
+            await Subscription.DisposeAsync();
+            NavigationManager.NavigateTo($"/orders/{orderId}");
+        }
+    }
 
-        // The 30-second window elapsed without the status flipping to Placed.
-        if (!token.IsCancellationRequested)
+    // Arms the degraded fallback for the live wait. Cancel-and-reassign mirrors OrderDetail; the final token
+    // source is disposed in DisposeAsync. The background run is cancelled on the settling push (ApplyAsync)
+    // and on page teardown (DisposeAsync), so its lifecycle is owned, not fire-and-forget.
+    private void ArmDegradedTimer()
+    {
+        degradedCts?.Cancel();
+        degradedCts = new CancellationTokenSource();
+        _ = RunDegradedTimerAsync(degradedCts.Token);
+    }
+
+    // If the Placed push does not arrive within the window, surface the "taking longer than expected" failed
+    // badge. The order may still be processing; the user is pointed at the orders list.
+    private async Task RunDegradedTimerAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), TimeProvider, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await InvokeAsync(() =>
         {
             placeBadgeState = BadgeState.Failed;
             placeFailureMessage = "Placing the order is taking longer than expected. The order may still be processing; check the orders list.";
             isPlacing = false;
-            await InvokeAsync(StateHasChanged);
-        }
+            StateHasChanged();
+        });
     }
 
+    // Idempotent and safe whether or not the page ever armed: degradedCts is null until PlaceOrder, and the
+    // subscription's DisposeAsync is a no-op before any start and across repeated calls (ADR 0032).
     public async ValueTask DisposeAsync()
     {
-        pollingCts?.Cancel();
-        pollingCts?.Dispose();
-        pollingCts = null;
-        await Task.CompletedTask;
+        degradedCts?.Cancel();
+        degradedCts?.Dispose();
+        await Subscription.DisposeAsync();
     }
 }
