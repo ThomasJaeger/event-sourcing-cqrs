@@ -11,12 +11,11 @@ using WebHost::EventSourcingCqrs.Hosts.Web.Hubs;
 
 namespace EventSourcingCqrs.IntegrationTests.SignalR;
 
-// Commit 2 (ADR 0032): the Web host's in-process notification composition. The dispatcher is a singleton
-// (one in-process fan-out for the whole host, so a change reaches every circuit/tab), and the circuit
-// subscription is scoped (one per Blazor circuit, so each page deregisters its own). Asserted by resolving
-// from the host's provider through a WebApplicationFactory, the same harness shape DashboardHubRouteTests
-// uses. This is a composition choice, not a framework guarantee: mis-registering it is a real defect. RED
-// until GREEN adds the registrations; their absence makes the resolve throw.
+// The Web host's in-process notification composition (ADR 0032). The dispatcher is a singleton (one
+// in-process fan-out for the whole host, so a change reaches every circuit/tab) and the circuit subscription
+// is transient (one per page instance, since the page owns and disposes it). Asserted by resolving from the
+// host's provider through a WebApplicationFactory boot. This is a composition choice, not a framework
+// guarantee: mis-registering either lifetime is a real defect.
 public class ResourceNotificationCompositionTests
     : IClassFixture<ResourceNotificationCompositionTests.WebHostFactory>
 {

@@ -1,178 +1,147 @@
-using System.Security.Claims;
+using System.Collections.Concurrent;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Hosts.Web.Authentication;
 using EventSourcingCqrs.Hosts.Web.Hubs;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace EventSourcingCqrs.Hosts.Web.Tests.Hubs;
 
-// The structural subscription coverage harness (ADR 0031's coverage mandate, ADR 0027). The subscription
-// surface is the SubscriptionResourceType enum, not a DI-registered type set, so coverage is a direct
-// enum-exhaustiveness walk rather than the FindUncovered(Type) detector the query, command, and projection
-// boundaries use. The meta-test asserts the closed loop: every resource type has a subscribe case
-// (completeness), each case drives the production ParseResource and parses back to its type (liveness), each
-// known projection routes through DispatchAsync to its group (broadcast routing), and the prefix it routes
-// to is one the subscribe door recognizes (round-trip).
-//
-// The per-member subscribe and per-entry broadcast cases are the same bodies the standalone hub [Fact]s
-// invoke, so the isolation and routing logic lives once. GroupPrefixes is private, so the broadcast checks
-// drive the known projections and do not prove the absence of an extra unmapped entry; that limitation is
-// recorded in the P10.9 close-doc. The cross-tenant isolation of the tenant-qualified group is proven in
-// DashboardHubAuthorizationTests and HubBackplaneHostedServiceTests, so this harness gates exhaustiveness,
-// not isolation.
+// The structural subscription coverage harness (ADR 0031's coverage mandate), re-pointed onto the in-process
+// dispatcher after the SignalR hub retired (ADR 0032). The subscription surface is the SubscriptionResourceType
+// enum, walked exhaustively: every resource type must have a publishing projection in the routing map
+// (completeness), a notification for one tenant must reach only that tenant's subscriber (routing isolation),
+// and a subscribe must register under the tenant the authorize ALLOW returns, never a caller-supplied one
+// (subscribe-key tenant sourcing). A resource type added to the enum without a route fails the completeness
+// gate; a routing or tenant-sourcing regression fails its per-type case.
 public class SubscriptionResourceCoverageTests
 {
     private static readonly Guid Actor = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid Tenant = Guid.Parse("55555555-5555-5555-5555-555555555555");
-
-    // One subscribe case per resource type. The completeness gate keys on this map, and each case is the
-    // per-member subscribe assertion the standalone hub test also invokes.
-    private static readonly IReadOnlyDictionary<SubscriptionResourceType, Func<Task>> SubscribeCases =
-        new Dictionary<SubscriptionResourceType, Func<Task>>
-        {
-            [SubscriptionResourceType.Order] = OrderSubscribeCaseAsync,
-            [SubscriptionResourceType.Inventory] = InventorySubscribeCaseAsync,
-        };
-
-    // One broadcast case per known publishing projection, the per-entry assertion the standalone hub test
-    // also invokes. GroupPrefixes is private, so this is a hand-list driven through DispatchAsync.
-    private static readonly IReadOnlyDictionary<string, Func<Task>> BroadcastCases =
-        new Dictionary<string, Func<Task>>
-        {
-            ["order-detail"] = OrderDetailBroadcastCaseAsync,
-            ["inventory-dashboard"] = InventoryDashboardBroadcastCaseAsync,
-        };
+    private static readonly TenantId TenantA = TenantId.From(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+    private static readonly TenantId TenantB = TenantId.From(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
 
     [Fact]
-    public async Task Every_subscription_resource_type_is_covered_live_and_round_trips()
+    public async Task Every_subscription_resource_type_is_covered_routing_isolated_and_tenant_sourced()
     {
         var members = Enum.GetValues<SubscriptionResourceType>();
 
-        // Completeness: a resource type with no subscribe case fails here, so a type added to the enum
-        // without a case fails the build.
-        members.Where(m => !SubscribeCases.ContainsKey(m)).Should().BeEmpty();
+        // Completeness: a resource type subscribable but with no publishing projection would deliver nothing.
+        // A new enum member added without a routing-map entry fails here, so it fails the build.
+        var routed = ResourceRouting.ProjectionResourceTypes.Values.Distinct();
+        members.Should().BeSubsetOf(routed);
 
-        // Liveness: each member's case drives the production ParseResource through SubscribeToResource and
-        // asserts the parsed member and the tenant-qualified join.
-        foreach (var run in SubscribeCases.Values)
+        foreach (var resourceType in members)
         {
-            await run();
-        }
-
-        // Broadcast routing: each known publishing projection's case drives DispatchAsync to its group.
-        foreach (var run in BroadcastCases.Values)
-        {
-            await run();
-        }
-
-        // Round-trip: the prefix each known projection broadcasts to is one the subscribe door recognizes,
-        // so no projection broadcasts to an unsubscribable group. This drives the known projections;
-        // GroupPrefixes is private, so it does not prove the absence of an extra unmapped entry.
-        foreach (var projectionName in BroadcastCases.Keys)
-        {
-            await AssertBroadcastPrefixIsRecognizedAsync(projectionName);
+            await AssertRoutingIsolatedByTenantAsync(resourceType);
+            await AssertSubscribeKeySourcedFromAllowTenantAsync(resourceType);
         }
     }
 
-    // The per-member subscribe cases, the bodies An_authorized_order_subscribe and
-    // An_authorized_inventory_subscribe invoke.
-    internal static async Task OrderSubscribeCaseAsync()
+    // A publish for tenant A reaches tenant A's subscriber and not tenant B's subscriber on the same resource
+    // id. ResourceKey carries the tenant, so the same id under two tenants is two distinct keys.
+    private static async Task AssertRoutingIsolatedByTenantAsync(SubscriptionResourceType resourceType)
     {
-        var orderId = Guid.NewGuid();
-        var client = StubSubscriptionAuthorizationClient.Allow(Tenant);
-        var groups = new RecordingGroupManager();
-        using var hub = new DashboardHub(client)
-        {
-            Context = new FakeHubCallerContext("conn-1", PrincipalFor(Actor)),
-            Groups = groups,
-        };
+        var projectionName = ProjectionFor(resourceType);
+        await using var dispatcher = NewDispatcher();
+        var a = new Recorder();
+        var b = new Recorder();
+        using var subA = dispatcher.Subscribe(new ResourceKey(TenantA, resourceType, "resource-1"), a.Handler);
+        using var subB = dispatcher.Subscribe(new ResourceKey(TenantB, resourceType, "resource-1"), b.Handler);
 
-        await hub.SubscribeToResource($"order:{orderId}");
+        dispatcher.Publish(new NotificationEnvelope(projectionName, "resource-1", "Changed", [], TenantA));
 
-        groups.Calls.Should().ContainSingle()
-            .Which.Should().Be(("add", "conn-1", $"tenant:55555555555555555555555555555555:order:{orderId}"));
-        client.Calls.Should().ContainSingle();
-        client.Calls[0].ActorId.Should().Be(Actor);
-        client.Calls[0].Request.ResourceType.Should().Be(SubscriptionResourceType.Order);
-        client.Calls[0].Request.ResourceId.Should().Be(orderId.ToString());
+        await a.WaitForCountAsync(1, TimeSpan.FromSeconds(2));
+        await Task.Delay(100); // any erroneous cross-tenant delivery would land in this window
+        b.Received.Should().Be(0, $"tenant B must not receive tenant A's {resourceType} notification");
     }
 
-    internal static async Task InventorySubscribeCaseAsync()
+    // A subscribe whose authorize ALLOW carries tenant B registers under tenant B (the allow's tenant), never
+    // a caller-side tenant: a publish for B reaches the page, a publish for A does not. Tenant B differs from
+    // the routing-isolation case's tenant A so a wrong sourcing cannot pass by accident.
+    private static async Task AssertSubscribeKeySourcedFromAllowTenantAsync(SubscriptionResourceType resourceType)
     {
-        var client = StubSubscriptionAuthorizationClient.Allow(Tenant);
-        var groups = new RecordingGroupManager();
-        using var hub = new DashboardHub(client)
-        {
-            Context = new FakeHubCallerContext("conn-1", PrincipalFor(Actor)),
-            Groups = groups,
-        };
+        var projectionName = ProjectionFor(resourceType);
+        await using var dispatcher = NewDispatcher();
+        var allowTenantB = StubSubscriptionAuthorizationClient.Allow(TenantB.Value);
+        await using var subscription = new CircuitResourceSubscription(
+            dispatcher, allowTenantB, new StubCircuitIdentity(Actor));
 
-        await hub.SubscribeToResource("inventory:SKU-1");
-
-        groups.Calls.Should().ContainSingle()
-            .Which.Should().Be(("add", "conn-1", "tenant:55555555555555555555555555555555:inventory:SKU-1"));
-        client.Calls.Should().ContainSingle();
-        client.Calls[0].Request.ResourceType.Should().Be(SubscriptionResourceType.Inventory);
-        client.Calls[0].Request.ResourceId.Should().Be("SKU-1");
-    }
-
-    // The per-entry broadcast cases, the bodies Dispatch_order_detail_envelope and
-    // Dispatch_inventory_dashboard_envelope invoke.
-    internal static async Task OrderDetailBroadcastCaseAsync()
-    {
-        var hubContext = new RecordingHubContext();
-        var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("order-detail", "order-7", "OrderShipped", ["status"], WellKnownTenants.Default);
-
-        await service.DispatchAsync(envelope, CancellationToken.None);
-
-        hubContext.Broadcasts.Should().ContainSingle();
-        var (group, method, args) = hubContext.Broadcasts[0];
-        group.Should().Be("tenant:00000000000000000000000000000001:order:order-7");
-        method.Should().Be(HubBackplaneHostedService.ClientMethod);
-        args.Should().ContainSingle().Which.Should().Be(envelope);
-    }
-
-    internal static async Task InventoryDashboardBroadcastCaseAsync()
-    {
-        var hubContext = new RecordingHubContext();
-        var service = Service(hubContext);
-        var envelope = new NotificationEnvelope("inventory-dashboard", "SKU-1", "InventoryAdjusted", ["on_hand"], WellKnownTenants.Default);
-
-        await service.DispatchAsync(envelope, CancellationToken.None);
-
-        hubContext.Broadcasts.Should().ContainSingle();
-        hubContext.Broadcasts[0].Group.Should().Be("tenant:00000000000000000000000000000001:inventory:SKU-1");
-    }
-
-    // Drives a known projection's broadcast, reads the prefix off the group it routed to, and confirms the
-    // subscribe door's ParseResource recognizes that prefix. A guid id is valid for both the order prefix,
-    // which requires one, and the free-form inventory sku.
-    private static async Task AssertBroadcastPrefixIsRecognizedAsync(string projectionName)
-    {
-        var hubContext = new RecordingHubContext();
-        await Service(hubContext).DispatchAsync(
-            new NotificationEnvelope(projectionName, "round-trip", "Changed", [], TenantId.From(Tenant)),
+        var applied = new ConcurrentQueue<int>();
+        var value = 0;
+        await subscription.StartAsync(
+            resourceType, "resource-1",
+            _ => Task.FromResult(Interlocked.Increment(ref value)),
+            v =>
+            {
+                applied.Enqueue(v);
+                return Task.CompletedTask;
+            },
+            async render => await render(),
             CancellationToken.None);
-        var prefix = hubContext.Broadcasts.Should().ContainSingle().Which.Group.Split(':')[2];
+        var afterSnapshot = applied.Count; // the snapshot applied once
 
-        var client = StubSubscriptionAuthorizationClient.Allow(Tenant);
-        using var hub = new DashboardHub(client)
-        {
-            Context = new FakeHubCallerContext("conn-1", PrincipalFor(Actor)),
-            Groups = new RecordingGroupManager(),
-        };
-        await hub.SubscribeToResource($"{prefix}:{Guid.NewGuid()}");
-        client.Calls.Should().ContainSingle();
+        // Tenant B is the allow's tenant: a B-tenant notification reaches the subscriber.
+        dispatcher.Publish(new NotificationEnvelope(projectionName, "resource-1", "Changed", [], TenantB));
+        await WaitUntilAsync(() => applied.Count == afterSnapshot + 1, TimeSpan.FromSeconds(2));
+
+        // Tenant A is NOT the allow's tenant: an A-tenant notification must not reach the B-keyed subscriber.
+        dispatcher.Publish(new NotificationEnvelope(projectionName, "resource-1", "Changed", [], TenantA));
+        await Task.Delay(100);
+        applied.Count.Should().Be(
+            afterSnapshot + 1,
+            $"the {resourceType} subscriber must be keyed on the allow tenant, not the caller side");
     }
 
-    private static HubBackplaneHostedService Service(RecordingHubContext hubContext)
-        => new(new StubBackplane(), hubContext, NullLogger<HubBackplaneHostedService>.Instance,
-            new RecordingResourceNotificationDispatcher());
+    private static string ProjectionFor(SubscriptionResourceType resourceType) =>
+        ResourceRouting.ProjectionResourceTypes.First(entry => entry.Value == resourceType).Key;
 
-    private static ClaimsPrincipal PrincipalFor(Guid actorId) =>
-        new(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.NameIdentifier, actorId.ToString()) }, "Test"));
+    private static ResourceNotificationDispatcher NewDispatcher() =>
+        new(new RecordingLogger<ResourceNotificationDispatcher>());
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return;
+            }
+            await Task.Delay(10);
+        }
+        throw new TimeoutException($"Condition was not met within {timeout}.");
+    }
+
+    private sealed class Recorder
+    {
+        private int _count;
+
+        public int Received => Volatile.Read(ref _count);
+
+        public Func<NotificationEnvelope, Task> Handler => _ =>
+        {
+            Interlocked.Increment(ref _count);
+            return Task.CompletedTask;
+        };
+
+        public async Task WaitForCountAsync(int count, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (Volatile.Read(ref _count) >= count)
+                {
+                    return;
+                }
+                await Task.Delay(10);
+            }
+            throw new TimeoutException($"Expected at least {count} notification(s) within {timeout}.");
+        }
+    }
+
+    private sealed class StubCircuitIdentity(Guid actorId) : ICircuitForwardedIdentityProvider
+    {
+        public Task<Guid> GetActorIdAsync() => Task.FromResult(actorId);
+    }
 }

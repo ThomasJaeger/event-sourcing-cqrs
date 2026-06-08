@@ -150,16 +150,12 @@ builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
 
-// SignalR live dashboards (Phase 8, ADR 0027). The hub broadcasts a small
-// notification to a per-resource group when a projection commits; subscribing
-// pages re-query authoritative state on receipt (notification-only push, D1).
-// The backplane LISTENs on the read-model database's projection_committed
-// channel, the web host's first Postgres dependency. NotificationContract gives
-// the publisher and the backplane one serializer and one channel, so no
-// JsonSerializerOptions registration is needed here (Commit 5.5).
+// In-process live dashboards (ADR 0032, superseding the SignalR hub of ADR 0027). The backplane LISTENs
+// on the read-model database's projection_committed channel (the web host's first Postgres dependency);
+// the hosted reader feeds the in-process dispatcher, which fans each notification out to the circuit-scoped
+// subscribers. NotificationContract gives the publisher and the backplane one serializer and one channel.
 var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STRING"]
     ?? throw new InvalidOperationException("READ_MODEL_CONNECTION_STRING is not set.");
-builder.Services.AddSignalR();
 builder.Services.AddSingleton<IOptions<HubBackplaneOptions>>(
     Options.Create(new HubBackplaneOptions { ConnectionString = readModelConnectionString }));
 builder.Services.AddSingleton<IHubBackplaneConnection, PostgresHubBackplaneConnection>();
@@ -183,10 +179,6 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-
-// The hub requires an authenticated connection (P9.6): an unauthenticated negotiate is refused, and
-// each subscribe is further authorized per resource inside the hub against the Api host.
-app.MapHub<DashboardHub>("/hubs/dashboard").RequireAuthorization();
 
 // The operator login and logout. SignInAsync establishes a name-identifier-only principal for the
 // configured actor; the framework seeds the circuit from it. Antiforgery is validated in the handler

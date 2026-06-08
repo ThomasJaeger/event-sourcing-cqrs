@@ -4,7 +4,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 namespace EventSourcingCqrs.Hosts.Web.Hubs;
 
 // The in-process routing key, the single key-derivation site that replaces the formatted SignalR group
-// string (HubGroup.ForResource) and its re-parse. A subscriber registers under a key and the dispatcher
+// string the retired hub used and its re-parse. A subscriber registers under a key and the dispatcher
 // derives the same key from a published envelope, so the publish side and the subscribe side cannot drift:
 // the key is a typed value compared by value, not a string composed on one side and parsed on the other.
 //
