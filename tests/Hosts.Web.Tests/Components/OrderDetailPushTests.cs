@@ -51,6 +51,21 @@ public sealed class OrderDetailPushTests : BunitContext
         subscription.LastResourceType.Should().Be(SubscriptionResourceType.Order);
     }
 
+    // Invariant (arm-throw): when StartAsync faults at the arm with a non-OperationCanceledException, the render does not throw, the subscription is left in place (not disposed), and the page keeps the initial order it loaded in OnInitializedAsync.
+    [Fact]
+    public void An_arm_failure_at_render_is_caught_and_leaves_the_page_on_its_initial_data()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+        subscription.ThrowFromStart(new ApiInfrastructureException("subscription arm failed", statusCode: 503));
+
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+
+        subscription.StartCallCount.Should().Be(1);
+        subscription.Disposed.Should().BeFalse();
+        cut.Find("h1").TextContent.Should().Contain(orderId.ToString());
+    }
+
     // G (blocker 7): the page subscribes under OrderId.ToString() (default "D"), byte-equal to
     // OrderDetailProjection's envelope ResourceId (orderId.ToString()); ResourceKey equality is ordinal,
     // so the "N" form would not route.
