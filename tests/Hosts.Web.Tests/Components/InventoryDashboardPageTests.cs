@@ -19,8 +19,7 @@ public class InventoryDashboardPageTests : BunitContext
     public InventoryDashboardPageTests()
     {
         Services.AddSingleton<IApiClient>(stubApiClient);
-        // The page injects TimeProvider for its create-polling loop. These
-        // render-only tests never dispatch, so the system clock satisfies it.
+        // The page injects TimeProvider for the degraded fallback timer it arms on dispatch; these render-only tests never dispatch, so the system clock satisfies it.
         Services.AddSingleton(TimeProvider.System);
         Services.AddSingleton<ICircuitResourceSubscription>(subscription);
     }

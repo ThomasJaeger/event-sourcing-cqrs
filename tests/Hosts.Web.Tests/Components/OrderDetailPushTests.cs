@@ -66,6 +66,21 @@ public sealed class OrderDetailPushTests : BunitContext
         cut.Find("h1").TextContent.Should().Contain(orderId.ToString());
     }
 
+    // Invariant (arm-cancel): pins the OperationCanceledException catch arm so a cancellation faulting StartAsync cannot escape and fault the circuit; the page stays on its initial data with the subscription in place.
+    [Fact]
+    public void A_cancellation_during_the_arm_is_caught_and_leaves_the_page_on_its_initial_data()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+        subscription.ThrowFromStart(new OperationCanceledException());
+
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+
+        subscription.StartCallCount.Should().Be(1);
+        subscription.Disposed.Should().BeFalse();
+        cut.Find("h1").TextContent.Should().Contain(orderId.ToString());
+    }
+
     // G (blocker 7): the page subscribes under OrderId.ToString() (default "D"), byte-equal to
     // OrderDetailProjection's envelope ResourceId (orderId.ToString()); ResourceKey equality is ordinal,
     // so the "N" form would not route.

@@ -187,6 +187,28 @@ public sealed class WizardPlaceOrderPushTests : BunitContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("taking longer than expected"));
     }
 
+    // Invariant (arm-cancel): pins the OperationCanceledException catch arm so a cancellation faulting
+    // StartAsync cannot escape and fault the circuit. The click does not throw, the page stays on its
+    // initial data with the subscription in place, and the degraded timer still surfaces the failed badge
+    // at the deadline.
+    [Fact]
+    public async Task When_the_arm_is_canceled_the_click_does_not_throw_the_subscription_stays_and_the_deadline_degrades()
+    {
+        var cut = RenderAtReview();
+        stubApiClient.EnqueueCommandResult(typeof(PlaceOrder), Accepted());
+        subscription.ThrowFromStart(new OperationCanceledException());
+
+        var click = () => cut.Find("#placeOrderButton").Click();
+        click.Should().NotThrow();
+
+        subscription.StartCallCount.Should().Be(1);
+        subscription.Disposed.Should().BeFalse();
+
+        await cut.InvokeAsync(() => fakeTime.Advance(TimeSpan.FromSeconds(31)));
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("taking longer than expected"));
+    }
+
     // Does-not-subscribe (green on write): a failed dispatch renders its message and never arms the
     // subscription. The current page already never arms; GREEN arms only after an accepted dispatch.
     [Fact]

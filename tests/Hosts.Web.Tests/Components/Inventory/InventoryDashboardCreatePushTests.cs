@@ -124,6 +124,18 @@ public sealed class InventoryDashboardCreatePushTests : BunitContext
     }
 
     [Fact]
+    public void A_cancellation_during_the_arm_is_caught_and_leaves_the_page_on_its_initial_data()
+    {
+        subscription.ThrowFromStart(new OperationCanceledException());
+        stubApiClient.EnqueueQueryResult<GetAllInventoryDashboard, IReadOnlyList<InventoryDashboardRow>>(
+            new[] { Row("SKU-1") });
+        var cut = Render<InventoryDashboard>();
+        subscription.StartCallCount.Should().Be(1);
+        subscription.Disposed.Should().BeFalse();
+        cut.FindAll("tbody tr").Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task Disposing_the_page_disposes_the_subscription()
     {
         RenderDashboard();
