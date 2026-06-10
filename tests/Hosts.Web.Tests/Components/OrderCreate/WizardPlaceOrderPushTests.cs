@@ -209,6 +209,54 @@ public sealed class WizardPlaceOrderPushTests : BunitContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("taking longer than expected"));
     }
 
+    // P11.9 (green on write): the OCE arm is teardown, not failure; it must not surface the NotLive badge.
+    [Fact]
+    public void When_the_arm_is_canceled_the_not_live_badge_does_not_surface()
+    {
+        var cut = RenderAtReview();
+        stubApiClient.EnqueueCommandResult(typeof(PlaceOrder), Accepted());
+        subscription.ThrowFromStart(new OperationCanceledException());
+
+        cut.Find("#placeOrderButton").Click();
+
+        cut.Markup.Should().NotContain("Live updates are unavailable");
+    }
+
+    // P11.9 (green on write): before any place dispatch the liveness state is Idle and renders no badge.
+    [Fact]
+    public void Before_place_dispatch_no_liveness_badge_renders()
+    {
+        var cut = RenderAtReview();
+
+        cut.FindAll("#liveBadge").Should().BeEmpty();
+    }
+
+    // P11.9: a successful arm after Place surfaces the Live badge near the place controls.
+    [Fact]
+    public void A_successful_arm_after_place_surfaces_the_live_badge()
+    {
+        var cut = RenderAtReview();
+        stubApiClient.EnqueueCommandResult(typeof(PlaceOrder), Accepted());
+
+        cut.Find("#placeOrderButton").Click();
+
+        cut.Find("#liveBadge").TextContent.Trim().Should().Be("Live");
+    }
+
+    // P11.9: when the arm throws, the degraded timer stays the dispatch-outcome authority and the NotLive
+    // badge surfaces the liveness loss, pointing the user at the orders list.
+    [Fact]
+    public void When_the_arm_throws_the_not_live_badge_surfaces()
+    {
+        var cut = RenderAtReview();
+        stubApiClient.EnqueueCommandResult(typeof(PlaceOrder), Accepted());
+        subscription.ThrowFromStart(new InvalidOperationException("dispatcher unavailable"));
+
+        cut.Find("#placeOrderButton").Click();
+
+        cut.Find("#liveBadge").TextContent.Should().Contain("Live updates are unavailable");
+    }
+
     // Does-not-subscribe (green on write): a failed dispatch renders its message and never arms the
     // subscription. The current page already never arms; GREEN arms only after an accepted dispatch.
     [Fact]

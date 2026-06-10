@@ -21,7 +21,10 @@ else if (detail is null)
 }
 else
 {
-    <h1 class="text-2xl font-bold mb-4">Order @detail.Header.OrderId</h1>
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-bold">Order @detail.Header.OrderId</h1>
+        <LiveBadge State="@liveness" />
+    </div>
 
     <div class="mb-6 grid grid-cols-2 gap-4">
         <div>
@@ -97,6 +100,10 @@ else
     private CancelOrderButton? cancelButton;
     private CancellationTokenSource? degradedCts;
 
+    // Subscription liveness, decided once at the arm (ADR 0034): Connecting until StartAsync returns, then
+    // Live, or NotLive when the arm fails. LiveBadge renders it beside the page heading.
+    private LivenessState liveness = LivenessState.Connecting;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync(CancellationToken.None);
@@ -123,6 +130,8 @@ else
                 ApplyAsync,
                 render => InvokeAsync(render),
                 CancellationToken.None);
+            liveness = LivenessState.Live;
+            StateHasChanged();
         }
         catch (OperationCanceledException)
         {
@@ -132,10 +141,11 @@ else
         {
             // The arm failed (authorization, dispatcher, transport). The page keeps the
             // order it loaded in OnInitializedAsync and stays up; it is simply not live
-            // until a reload. The cancel-scoped degraded timer does not surface this, so
-            // the failure is silent. Do not dispose, do not rethrow, do not tear down the
-            // circuit. A page-level liveness signal for this silent-not-live state is
-            // owed to the shared LiveBadge slice.
+            // until a reload. The cancel-scoped degraded timer does not surface this;
+            // LiveBadge does, beside the page heading. Do not dispose, do not rethrow,
+            // do not tear down the circuit.
+            liveness = LivenessState.NotLive;
+            StateHasChanged();
         }
     }
 

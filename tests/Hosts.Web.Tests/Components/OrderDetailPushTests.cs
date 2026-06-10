@@ -81,6 +81,44 @@ public sealed class OrderDetailPushTests : BunitContext
         cut.Find("h1").TextContent.Should().Contain(orderId.ToString());
     }
 
+    // P11.9 (green on write): the OCE arm is teardown, not failure; it must not surface the NotLive badge.
+    [Fact]
+    public void A_cancellation_during_the_arm_does_not_surface_the_not_live_badge()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+        subscription.ThrowFromStart(new OperationCanceledException());
+
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+
+        cut.Markup.Should().NotContain("Live updates unavailable");
+    }
+
+    // P11.9: a successful arm surfaces the Live badge inside the loaded detail region.
+    [Fact]
+    public void A_successful_arm_at_render_surfaces_the_live_badge()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+
+        cut.Find("#liveBadge").TextContent.Trim().Should().Be("Live");
+    }
+
+    // P11.9: the arm failure that previously left the page silently not live now surfaces the NotLive badge.
+    [Fact]
+    public void An_arm_failure_at_render_surfaces_the_not_live_badge()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+        subscription.ThrowFromStart(new ApiInfrastructureException("subscription arm failed", statusCode: 503));
+
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+
+        cut.Find("#liveBadge").TextContent.Should().Contain("Live updates unavailable; reload to refresh.");
+    }
+
     // G (blocker 7): the page subscribes under OrderId.ToString() (default "D"), byte-equal to
     // OrderDetailProjection's envelope ResourceId (orderId.ToString()); ResourceKey equality is ordinal,
     // so the "N" form would not route.

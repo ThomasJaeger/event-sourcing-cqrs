@@ -135,6 +135,40 @@ public sealed class InventoryDashboardCreatePushTests : BunitContext
         cut.FindAll("tbody tr").Should().ContainSingle();
     }
 
+    // P11.9 (green on write): the OCE arm is teardown, not failure; it must not surface the NotLive badge.
+    [Fact]
+    public void A_cancellation_during_the_arm_does_not_surface_the_not_live_badge()
+    {
+        subscription.ThrowFromStart(new OperationCanceledException());
+        stubApiClient.EnqueueQueryResult<GetAllInventoryDashboard, IReadOnlyList<InventoryDashboardRow>>(
+            new[] { Row("SKU-1") });
+        var cut = Render<InventoryDashboard>();
+
+        cut.Markup.Should().NotContain("Live updates unavailable");
+    }
+
+    // P11.9: a successful arm at render surfaces the Live badge in the dashboard header.
+    [Fact]
+    public void A_successful_arm_at_render_surfaces_the_live_badge()
+    {
+        var cut = RenderDashboard();
+
+        cut.Find("#liveBadge").TextContent.Trim().Should().Be("Live");
+    }
+
+    // P11.9: the arm failure that previously left the dashboard silently not live now surfaces the
+    // NotLive badge.
+    [Fact]
+    public void An_arm_failure_at_render_surfaces_the_not_live_badge()
+    {
+        subscription.ThrowFromStart(new ApiInfrastructureException("subscription arm failed", statusCode: 503));
+        stubApiClient.EnqueueQueryResult<GetAllInventoryDashboard, IReadOnlyList<InventoryDashboardRow>>(
+            new[] { Row("SKU-1") });
+        var cut = Render<InventoryDashboard>();
+
+        cut.Find("#liveBadge").TextContent.Should().Contain("Live updates unavailable; reload to refresh.");
+    }
+
     [Fact]
     public async Task Disposing_the_page_disposes_the_subscription()
     {

@@ -1,0 +1,24 @@
+@if (State == LivenessState.Connecting)
+{
+    <span id="liveBadge" class="inline-flex items-center px-2 py-1 rounded text-sm bg-gray-100 text-gray-600 ml-2">
+        <span class="inline-block w-2 h-2 bg-gray-400 rounded-full animate-pulse mr-2"></span>
+        Connecting
+    </span>
+}
+else if (State == LivenessState.Live)
+{
+    <span id="liveBadge" class="inline-flex items-center px-2 py-1 rounded text-sm bg-green-100 text-green-800 ml-2">
+        Live
+    </span>
+}
+else if (State == LivenessState.NotLive)
+{
+    <span id="liveBadge" class="inline-flex items-center px-2 py-1 rounded text-sm bg-red-100 text-red-800 ml-2">
+        @NotLiveDetail
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired] public LivenessState State { get; set; }
+    [Parameter] public string NotLiveDetail { get; set; } = "Live updates unavailable; reload to refresh.";
+}

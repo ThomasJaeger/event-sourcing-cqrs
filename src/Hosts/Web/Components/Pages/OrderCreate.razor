@@ -61,6 +61,7 @@
                                 BadgeMessage="@placeMessage"
                                 IsPlacing="@isPlacing"
                                 FailureMessage="@placeFailureMessage"
+                                Liveness="@liveness"
                                 OnPlace="@HandlePlaceOrder" />
             break;
     }
@@ -88,6 +89,10 @@
     private string? lineFailureMessage;
 
     private CancellationTokenSource? degradedCts;
+
+    // Subscription liveness, decided once at the PlaceOrder arm (ADR 0034): Idle until a place dispatches,
+    // Connecting through the arm, then Live or NotLive. ReviewAndPlaceStep renders it via LiveBadge.
+    private LivenessState liveness = LivenessState.Idle;
     private bool placedSettled;
     private BadgeState placeBadgeState = BadgeState.Idle;
     private string placeMessage = string.Empty;
@@ -236,6 +241,7 @@
         // under the order's default-form id, the "D" form OrderDetailProjection's envelope emits, matching
         // OrderDetail's subscriber.
         ArmDegradedTimer();
+        liveness = LivenessState.Connecting;
         try
         {
             await Subscription.StartAsync(
@@ -245,6 +251,7 @@
                 ApplyAsync,
                 render => InvokeAsync(render),
                 CancellationToken.None);
+            liveness = LivenessState.Live;
         }
         catch (OperationCanceledException)
         {
@@ -253,8 +260,10 @@
         catch (Exception)
         {
             // The arm failed (authorization, dispatcher, transport). The order itself was already accepted,
-            // so leave the subscription in place and the degraded timer armed: the documented failure mode is
-            // the deadline surfacing the failed badge. Do not dispose, do not rethrow, do not tear down the page.
+            // so leave the subscription in place and the degraded timer armed: the deadline stays the
+            // dispatch-outcome authority while LiveBadge surfaces the liveness loss. Do not dispose, do not
+            // rethrow, do not tear down the page.
+            liveness = LivenessState.NotLive;
         }
     }
 

@@ -60,6 +60,9 @@
         {
             <PendingBadge State="@BadgeState" Message="@BadgeMessage" />
         }
+
+        <LiveBadge State="@Liveness"
+                   NotLiveDetail="Live updates are unavailable. The order may still be processing; check the orders list." />
     </div>
 </div>
 
@@ -72,6 +75,7 @@
     [Parameter] public string BadgeMessage { get; set; } = string.Empty;
     [Parameter] public bool IsPlacing { get; set; }
     [Parameter] public string? FailureMessage { get; set; }
+    [Parameter] public LivenessState Liveness { get; set; } = LivenessState.Idle;
     [Parameter] public EventCallback OnPlace { get; set; }
 
     // Disabled while a place is in flight (Pending) or already settled, so the

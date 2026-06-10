@@ -14,7 +14,10 @@
 <PageTitle>Inventory</PageTitle>
 
 <div class="flex items-center justify-between mb-4">
-    <h1 class="text-2xl font-bold">Inventory</h1>
+    <div class="flex items-center">
+        <h1 class="text-2xl font-bold">Inventory</h1>
+        <LiveBadge State="@liveness" />
+    </div>
     <button id="createInventoryButton"
             type="button"
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
@@ -117,6 +120,10 @@ else
     // settling notification arrives within the window.
     private CancellationTokenSource? degradedCts;
 
+    // Subscription liveness, decided once at the arm (ADR 0034): Connecting until StartAsync returns, then
+    // Live, or NotLive when the arm fails. LiveBadge renders it in the dashboard header.
+    private LivenessState liveness = LivenessState.Connecting;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync(CancellationToken.None);
@@ -143,6 +150,8 @@ else
                 ApplyAsync,
                 render => InvokeAsync(render),
                 CancellationToken.None);
+            liveness = LivenessState.Live;
+            StateHasChanged();
         }
         catch (OperationCanceledException)
         {
@@ -153,8 +162,9 @@ else
             // The arm failed (authorization, dispatcher, transport). The page keeps
             // its initial one-shot data and stays up; it is simply not live until a
             // reload. Do not dispose, do not rethrow, do not tear down the circuit.
-            // A page-level liveness signal for this silent-not-live state is owed to
-            // the shared LiveBadge slice.
+            // LiveBadge surfaces this not-live state in the dashboard header.
+            liveness = LivenessState.NotLive;
+            StateHasChanged();
         }
     }
 
