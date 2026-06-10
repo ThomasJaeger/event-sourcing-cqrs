@@ -40,7 +40,20 @@ internal sealed class SubscriptionAuthorizationClient : ISubscriptionAuthorizati
         message.Headers.Add(ForwardedIdentityHeaders.HeaderName, identityValue);
         message.Headers.Add(ForwardedIdentityHeaders.SignatureHeaderName, _signer.Sign(identityValue));
 
-        var response = await _httpClient.SendAsync(message, ct);
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(message, ct);
+        }
+        // HttpClient's timeout convention: an elapsed Timeout surfaces as TaskCanceledException
+        // carrying a TimeoutException inner, indistinguishable by type from teardown cancellation.
+        // This client owns the transport, so it translates the shape here; callers read a timeout
+        // as failure, not cancellation (ADR 0035). A TaskCanceledException without that inner is
+        // genuine cancellation and propagates unchanged.
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            throw new TimeoutException("The subscription authorization call timed out.", ex);
+        }
         // Fail closed: any non-success status (a 401 from a rejected signature, a 5xx) denies the
         // subscription rather than throwing into the hub method. The hub turns a false into its uniform
         // refusal.

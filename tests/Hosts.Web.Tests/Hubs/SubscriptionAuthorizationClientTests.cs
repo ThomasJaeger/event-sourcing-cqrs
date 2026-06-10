@@ -71,6 +71,48 @@ public class SubscriptionAuthorizationClientTests
         result.Allowed.Should().BeFalse();
     }
 
+    // P11.10: an HttpClient send timeout reaches this client as TaskCanceledException wrapping
+    // TimeoutException. That shape is infrastructure failure, not teardown; AuthorizeAsync translates
+    // it at the HTTP boundary so callers classify a timeout as failure rather than cancellation.
+    [Fact]
+    public async Task A_send_timeout_surfaces_as_TimeoutException_not_cancellation()
+    {
+        var sendTimeout = new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.",
+            new TimeoutException());
+        var handler = new TimingOutHandler(sendTimeout);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.localhost") };
+        var client = new SubscriptionAuthorizationClient(httpClient, NewSigner());
+
+        var act = () => client.AuthorizeAsync(
+            Actor,
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.Order, Guid.NewGuid().ToString()),
+            CancellationToken.None);
+
+        var thrown = (await act.Should().ThrowAsync<TimeoutException>()).Which;
+        thrown.InnerException.Should().BeSameAs(sendTimeout);
+    }
+
+    // Green on write: pins the discriminator's boundary. A TaskCanceledException without a
+    // TimeoutException inner is genuine cancellation, not a timeout; the translation must not
+    // widen to swallow it.
+    [Fact]
+    public async Task A_cancellation_without_a_timeout_inner_propagates_unchanged()
+    {
+        var cancellation = new TaskCanceledException("A task was canceled.");
+        var handler = new TimingOutHandler(cancellation);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.localhost") };
+        var client = new SubscriptionAuthorizationClient(httpClient, NewSigner());
+
+        var act = () => client.AuthorizeAsync(
+            Actor,
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.Order, Guid.NewGuid().ToString()),
+            CancellationToken.None);
+
+        var thrown = (await act.Should().ThrowAsync<TaskCanceledException>()).Which;
+        thrown.Should().BeSameAs(cancellation);
+    }
+
     private static ForwardedIdentitySigner NewSigner() =>
         new(new ForwardedIdentitySigningKey(new ForwardedIdentitySigningOptions { Secret = Secret }));
 
@@ -98,5 +140,19 @@ public class SubscriptionAuthorizationClientTests
             }
             return Task.FromResult(message);
         }
+    }
+
+    // Faults the send the way an elapsed HttpClient.Timeout does: a TaskCanceledException carrying a
+    // TimeoutException inner. CapturingHandler stays a canned-response double; faulting is a different
+    // contract, so it gets its own handler.
+    private sealed class TimingOutHandler : HttpMessageHandler
+    {
+        private readonly TaskCanceledException _sendTimeout;
+
+        public TimingOutHandler(TaskCanceledException sendTimeout) => _sendTimeout = sendTimeout;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromException<HttpResponseMessage>(_sendTimeout);
     }
 }

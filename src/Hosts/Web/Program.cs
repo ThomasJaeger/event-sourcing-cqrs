@@ -114,6 +114,9 @@ builder.Services.AddHttpClient<IApiClient, ApiClient>(client =>
 builder.Services.AddHttpClient<ISubscriptionAuthorizationClient, SubscriptionAuthorizationClient>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
+    // 10 seconds, not the 100-second HttpClient default: the authorize call is an in-cluster round
+    // trip to the Api host, and a subscribe should not hold a page's arm open longer (ADR 0035).
+    client.Timeout = TimeSpan.FromSeconds(10);
 });
 
 // Forwarded-identity signing (P9.3b). The Web host signs every dispatched request with the circuit's
