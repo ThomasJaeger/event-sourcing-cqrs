@@ -1,0 +1,123 @@
+@page "/my-orders"
+@using EventSourcingCqrs.Application
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Sales.ReadModels
+@using EventSourcingCqrs.Hosts.Web.Authentication
+@using EventSourcingCqrs.Hosts.Web.Hubs
+@inject IApiClient ApiClient
+@inject ICircuitResourceSubscription Subscription
+@inject ICircuitForwardedIdentityProvider IdentityProvider
+@implements IAsyncDisposable
+
+<PageTitle>My Orders</PageTitle>
+
+<div class="flex items-center mb-4">
+    <h1 class="text-2xl font-bold">My Orders</h1>
+    <LiveBadge State="@liveness" />
+</div>
+
+@if (orders is null)
+{
+    <p class="text-gray-500">Loading...</p>
+}
+else if (orders.Count == 0)
+{
+    <p class="text-gray-500">No orders yet.</p>
+}
+else
+{
+    <table class="min-w-full border border-gray-300">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-4 py-2 text-left">Order</th>
+                <th class="px-4 py-2 text-left">Status</th>
+                <th class="px-4 py-2 text-right">Total</th>
+                <th class="px-4 py-2 text-left">Placed</th>
+                <th class="px-4 py-2 text-left">Last Updated</th>
+                <th class="px-4 py-2 text-left">Returned</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in orders)
+            {
+                <tr class="border-t border-gray-200">
+                    <td class="px-4 py-2 font-mono text-sm">@row.OrderId</td>
+                    <td class="px-4 py-2">@row.Status</td>
+                    <td class="px-4 py-2 text-right">@row.Total</td>
+                    <td class="px-4 py-2">@row.PlacedUtc.ToString("u")</td>
+                    <td class="px-4 py-2">@row.LastUpdatedUtc.ToString("u")</td>
+                    <td class="px-4 py-2">@(row.IsReturned ? "Yes" : "No")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<OrderListRow>? orders;
+
+    // Subscription liveness, decided once at the arm (ADR 0034): Connecting until StartAsync returns, then
+    // Live, or NotLive when the arm fails. LiveBadge renders it beside the page heading.
+    private LivenessState liveness = LivenessState.Connecting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        orders = await ApiClient.QueryAsync(new ListOrders(0, 50), CancellationToken.None);
+    }
+
+    // Subscribe on the first interactive render, not OnInitializedAsync, so a prerender pass does
+    // not double-subscribe (ADR 0032). The page subscribes under its own customer id, the actor-is-
+    // customer convention (ADR 0037), so only this customer's order changes re-query. Every
+    // notification re-queries the owner-scoped list, marshalled onto the render thread.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            var actorId = await IdentityProvider.GetActorIdAsync();
+            await Subscription.StartAsync(
+                SubscriptionResourceType.CustomerOrders,
+                actorId.ToString(),
+                ct => ApiClient.QueryAsync(new ListOrders(0, 50), ct),
+                ApplyAsync,
+                render => InvokeAsync(render),
+                CancellationToken.None);
+            liveness = LivenessState.Live;
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation reaching this arm is not a liveness verdict; teardown faulting the marshal
+            // leg lands here. The arm sets nothing (ADR 0034).
+        }
+        catch (Exception)
+        {
+            // The arm failed (authorization, dispatcher, transport, or a circuit whose identity is
+            // unavailable, which faults the actor resolve above). The page keeps its initial one-shot
+            // data and stays up; it is simply not live until a reload. Do not dispose, do not rethrow,
+            // do not tear down the circuit. LiveBadge surfaces this not-live state beside the heading.
+            liveness = LivenessState.NotLive;
+            StateHasChanged();
+        }
+    }
+
+    // The snapshot and every notification land here, marshalled. The live feed is unconditional:
+    // refresh the table from authoritative state.
+    private async Task ApplyAsync(IReadOnlyList<OrderListRow>? list)
+    {
+        orders = list;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    // Safe whether or not the page ever armed: the subscription's DisposeAsync is a no-op before
+    // any start and across repeated calls (ADR 0032).
+    public async ValueTask DisposeAsync()
+    {
+        await Subscription.DisposeAsync();
+    }
+}

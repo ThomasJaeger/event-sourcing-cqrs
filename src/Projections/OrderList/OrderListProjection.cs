@@ -183,10 +183,10 @@ public sealed class OrderListProjection
     // Stages a per-customer notification for in-process dispatch to the subscribed
     // dashboard circuits. Each envelope is keyed by the owning customer's id, so
     // only that customer's circuits re-query their order list on a change (the
-    // owner-scoped counterpart of the inventory dashboard's collection sentinel).
-    // Carries no row data: the page reads authoritative state on receipt. The
-    // update handlers stage only when their UPDATE matched a row, so a zero-row
-    // change stages nothing.
+    // owner-scoped counterpart of the inventory dashboard's collection sentinel,
+    // ADR 0037). Carries no row data: the page reads authoritative state on
+    // receipt. The update handlers stage only when their UPDATE matched a row, so
+    // a zero-row change stages nothing.
     private void StageNotification(IOrderListUnitOfWork uow, Guid customerId, string eventName, TenantId tenant)
         => uow.PublishOnCommit(new NotificationEnvelope(Name, customerId.ToString(), eventName, [], tenant));
 }
