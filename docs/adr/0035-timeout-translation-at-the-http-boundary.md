@@ -24,7 +24,7 @@ The authorize registration sets a 10-second timeout in place of the 100-second H
 
 A timed-out authorize call now faults the StartAsync arm with TimeoutException, lands in the pages' Exception arm, and reads NotLive. ADR 0034's Consequences paragraph is amended to record the repaired reading and point here.
 
-The residual this ADR does not repair: an ApiClient timeout during the initial snapshot is swallowed by the catch (OperationCanceledException) arm in CircuitResourceSubscription.RefreshAsync, so StartAsync completes and the page reads Live with no snapshot delivered. That false-Live leg is its own slice; the dispatcher delivery path's exception handling gets grounded before any repair there, because the same RefreshAsync runs on notification-driven refreshes inside the dispatcher's drain loop. The residual is repaired by ADR 0036.
+The residual this ADR did not repair: an ApiClient timeout during the initial snapshot was swallowed by the catch (OperationCanceledException) arm in CircuitResourceSubscription.RefreshAsync, so StartAsync completed and the page read Live with no snapshot delivered. That false-Live leg was its own slice; the dispatcher delivery path's exception handling got grounded before the repair, because the same RefreshAsync runs on notification-driven refreshes inside the dispatcher's drain loop. The residual is repaired by ADR 0036.
 
 The translation is deliberately local to the one client. ApiClient keeps its untranslated transport exceptions; its callers own command-dispatch and query semantics with their own exception taxonomy (the ApiClientException hierarchy), and widening this decision to that surface is a separate decision with its own consumers to ground.
 

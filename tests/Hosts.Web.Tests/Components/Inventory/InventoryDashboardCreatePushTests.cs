@@ -135,7 +135,7 @@ public sealed class InventoryDashboardCreatePushTests : BunitContext
         cut.FindAll("tbody tr").Should().ContainSingle();
     }
 
-    // P11.9 (green on write): the OCE arm is teardown, not failure; it must not surface the NotLive badge.
+    // P11.9 (green on write): cancellation during the arm must not surface the NotLive badge.
     [Fact]
     public void A_cancellation_during_the_arm_does_not_surface_the_not_live_badge()
     {

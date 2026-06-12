@@ -209,7 +209,7 @@ public sealed class WizardPlaceOrderPushTests : BunitContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("taking longer than expected"));
     }
 
-    // P11.9 (green on write): the OCE arm is teardown, not failure; it must not surface the NotLive badge.
+    // P11.9 (green on write): cancellation during the arm must not surface the NotLive badge.
     [Fact]
     public void When_the_arm_is_canceled_the_not_live_badge_does_not_surface()
     {

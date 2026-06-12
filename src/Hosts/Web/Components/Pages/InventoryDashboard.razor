@@ -155,7 +155,8 @@ else
         }
         catch (OperationCanceledException)
         {
-            // Disposed mid-arm; the page is going away, nothing to surface.
+            // Cancellation reaching this arm is not a liveness verdict; teardown faulting the marshal
+            // leg lands here. The arm sets nothing (ADR 0034).
         }
         catch (Exception)
         {

@@ -12,7 +12,9 @@ internal interface ICircuitResourceSubscription : IAsyncDisposable
 {
     // Authorizes and starts a live subscription for one resource. query reads authoritative state; apply
     // updates the page from it; marshal is the component's InvokeAsync, the boundary onto the render thread.
-    // Throws ResourceSubscriptionDeniedException if the Api gate refuses or returns no tenant.
+    // Throws ResourceSubscriptionDeniedException when the gate refuses or returns no tenant, and
+    // TimeoutException when the authorize or snapshot leg times out (ADRs 0035, 0036); cancellation
+    // propagates unchanged.
     Task StartAsync<TState>(
         SubscriptionResourceType resourceType,
         string resourceId,
