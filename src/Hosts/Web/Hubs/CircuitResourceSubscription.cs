@@ -68,8 +68,10 @@ internal sealed class CircuitResourceSubscription : ICircuitResourceSubscription
     // Re-queries authoritative state and applies it, marshalled onto the render thread. Each refresh takes a
     // monotonic token and only the latest-issued result applies, so a late snapshot cannot clobber a fresher
     // notification's result and vice versa; both reads return current state, so latest-issued is at least as
-    // fresh. Notification-driven refreshes run on the dispatcher's drain loop, which isolates a throw; the
-    // initial snapshot's throw surfaces to the StartAsync caller.
+    // fresh. Cancellation by the component's own token is teardown and returns quietly on both legs. A query
+    // timeout translates to TimeoutException and surfaces, to the StartAsync caller on the snapshot leg and
+    // to the dispatcher drain loop's isolation on the notification leg. Any other throw, a foreign
+    // cancellation included, propagates unchanged.
     private async Task RefreshAsync<TState>(
         Func<CancellationToken, Task<TState>> query,
         Func<TState, Task> apply,
@@ -81,9 +83,22 @@ internal sealed class CircuitResourceSubscription : ICircuitResourceSubscription
         {
             state = await query(_cts.Token);
         }
-        catch (OperationCanceledException)
+        // Teardown: the component's own token is the only cancellation this type owns, so disposal
+        // canceling an in-flight query stays silent. This filter sits first so a teardown racing a
+        // timeout resolves as teardown.
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
         {
             return;
+        }
+        // HttpClient's timeout convention: an elapsed Timeout surfaces as TaskCanceledException
+        // carrying a TimeoutException inner, indistinguishable by type from teardown cancellation.
+        // The translation mirrors SubscriptionAuthorizationClient's (ADR 0035); callers read a timeout
+        // as failure, not cancellation, so a timed-out snapshot faults StartAsync instead of reading
+        // Live. A TaskCanceledException without that inner is genuine cancellation and propagates
+        // unchanged.
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
+            throw new TimeoutException("The resource subscription's state re-query timed out.", ex);
         }
 
         if (Interlocked.Read(ref _issued) != token)

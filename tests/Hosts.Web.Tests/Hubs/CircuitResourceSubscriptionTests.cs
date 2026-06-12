@@ -271,6 +271,174 @@ public class CircuitResourceSubscriptionTests
         await secondDispose.Should().NotThrowAsync();
     }
 
+    // P11.11: an elapsed HttpClient.Timeout surfaces from the snapshot query as TaskCanceledException
+    // wrapping TimeoutException. That shape is infrastructure failure, not teardown, so it must fault
+    // StartAsync as TimeoutException for the page's Exception arm to read NotLive (the ADR 0035 residual).
+    [Fact]
+    public async Task A_snapshot_timeout_faults_StartAsync_as_TimeoutException()
+    {
+        await using var dispatcher = NewDispatcher();
+        var applied = new ConcurrentQueue<int>();
+        var sendTimeout = new TaskCanceledException("timeout", new TimeoutException());
+        await using var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+
+        var start = () => subscription.StartAsync(
+            SubscriptionResourceType.Order, "order-1",
+            _ => Task.FromException<int>(sendTimeout),
+            value =>
+            {
+                applied.Enqueue(value);
+                return Task.CompletedTask;
+            },
+            async render => await render(),
+            CancellationToken.None);
+
+        var thrown = (await start.Should().ThrowAsync<TimeoutException>()).Which;
+        thrown.InnerException.Should().BeSameAs(sendTimeout);
+        applied.Should().BeEmpty();
+    }
+
+    // P11.11 (green on write): the registration precedes the snapshot and a faulted snapshot must not
+    // unwind it. The arm can fail while the dispatcher leg keeps working; a later delivery re-queries
+    // and applies.
+    [Fact]
+    public async Task A_snapshot_timeout_leaves_the_registration_armed_so_a_later_delivery_applies()
+    {
+        await using var dispatcher = NewDispatcher();
+        var applied = new ConcurrentQueue<int>();
+        var calls = 0;
+        await using var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+
+        Func<CancellationToken, Task<int>> query = _ =>
+            Interlocked.Increment(ref calls) == 1
+                ? Task.FromException<int>(new TaskCanceledException("timeout", new TimeoutException()))
+                : Task.FromResult(42);
+
+        try
+        {
+            await subscription.StartAsync(
+                SubscriptionResourceType.Order, "order-1",
+                query,
+                value =>
+                {
+                    applied.Enqueue(value);
+                    return Task.CompletedTask;
+                },
+                async render => await render(),
+                CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            // The faulted arm is A_snapshot_timeout_faults_StartAsync_as_TimeoutException's subject.
+        }
+
+        dispatcher.Publish(OrderEnvelope());
+
+        await WaitUntilAsync(() => applied.Contains(42), TimeSpan.FromSeconds(2));
+        applied.Should().Equal(42);
+    }
+
+    // P11.11 (green on write): teardown cancels the component's own token while the snapshot is in
+    // flight. That cancellation stays quiet; the repair must not turn disposal into a thrown timeout.
+    [Fact]
+    public async Task A_teardown_cancellation_during_the_snapshot_still_returns_quietly()
+    {
+        await using var dispatcher = NewDispatcher();
+        var applied = new ConcurrentQueue<int>();
+        var queryEntered = new TaskCompletionSource();
+        var releaseQuery = new TaskCompletionSource();
+        var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+
+        Func<CancellationToken, Task<int>> query = async ct =>
+        {
+            queryEntered.SetResult();
+            await releaseQuery.Task.WaitAsync(ct); // throws when DisposeAsync cancels the component token
+            return 1;
+        };
+
+        var start = subscription.StartAsync(
+            SubscriptionResourceType.Order, "order-1",
+            query,
+            value =>
+            {
+                applied.Enqueue(value);
+                return Task.CompletedTask;
+            },
+            async render => await render(),
+            CancellationToken.None);
+
+        await queryEntered.Task;
+        await subscription.DisposeAsync(); // cancels the in-flight snapshot mid-arm
+
+        var awaitingStart = async () => await start;
+        await awaitingStart.Should().NotThrowAsync();
+        applied.Should().BeEmpty();
+    }
+
+    // P11.11: a TaskCanceledException without a TimeoutException inner is genuine cancellation, not a
+    // timeout. The translation must not widen to rewrap it; the same instance propagates unchanged.
+    [Fact]
+    public async Task A_bare_cancellation_from_the_query_propagates_unchanged()
+    {
+        await using var dispatcher = NewDispatcher();
+        var cancellation = new TaskCanceledException("external");
+        await using var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+
+        var start = () => subscription.StartAsync(
+            SubscriptionResourceType.Order, "order-1",
+            _ => Task.FromException<int>(cancellation),
+            _ => Task.CompletedTask,
+            async render => await render(),
+            CancellationToken.None);
+
+        var thrown = (await start.Should().ThrowAsync<TaskCanceledException>()).Which;
+        thrown.Should().BeSameAs(cancellation);
+    }
+
+    // P11.11 (green on write): pins the notification leg. A timed-out delivery applies nothing and its
+    // throw is isolated on the dispatcher's drain loop, so the subscriber survives and the next delivery
+    // re-queries and applies.
+    [Fact]
+    public async Task A_push_delivery_timeout_is_isolated_and_a_following_delivery_still_applies()
+    {
+        await using var dispatcher = NewDispatcher();
+        var applied = new ConcurrentQueue<int>();
+        var calls = 0;
+        await using var subscription = new CircuitResourceSubscription(
+            dispatcher, StubSubscriptionAuthorizationClient.Allow(TenantGuid), new StubCircuitIdentity(Actor));
+
+        Func<CancellationToken, Task<int>> query = _ => Interlocked.Increment(ref calls) switch
+        {
+            1 => Task.FromResult(1),
+            2 => Task.FromException<int>(new TaskCanceledException("timeout", new TimeoutException())),
+            _ => Task.FromResult(3),
+        };
+
+        await subscription.StartAsync(
+            SubscriptionResourceType.Order, "order-1",
+            query,
+            value =>
+            {
+                applied.Enqueue(value);
+                return Task.CompletedTask;
+            },
+            async render => await render(),
+            CancellationToken.None);
+        applied.Should().Equal(1); // the snapshot
+
+        dispatcher.Publish(OrderEnvelope());
+        await WaitUntilAsync(() => Volatile.Read(ref calls) >= 2, TimeSpan.FromSeconds(2)); // the timed-out delivery ran
+
+        dispatcher.Publish(OrderEnvelope());
+        await WaitUntilAsync(() => applied.Contains(3), TimeSpan.FromSeconds(2));
+        await Task.Delay(100); // an apply from the timed-out delivery would land here
+        applied.Should().Equal(1, 3);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
