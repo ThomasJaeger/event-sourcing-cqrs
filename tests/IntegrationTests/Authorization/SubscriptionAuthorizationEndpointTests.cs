@@ -151,6 +151,97 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
             .Allowed.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task An_owner_may_subscribe_to_its_own_customer_orders_collection()
+    {
+        var customerActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(customerActor, Role.Customer);
+
+        // actor-equals-customer: the collection's resource id is the caller's own customer id.
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, customerActor.ToString()),
+            customerActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>();
+        body!.Allowed.Should().BeTrue();
+        body.Tenant.Should().Be(WellKnownTenants.Default.Value);
+    }
+
+    [Fact]
+    public async Task An_owner_scoped_principal_is_denied_another_customers_customer_orders_collection()
+    {
+        var customerActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(customerActor, Role.Customer);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, Guid.NewGuid().ToString()),
+            customerActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_operational_principal_may_subscribe_to_any_customers_customer_orders_collection()
+    {
+        var supportActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(supportActor, Role.Support);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, Guid.NewGuid().ToString()),
+            supportActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task An_owner_scoped_principal_is_denied_a_malformed_customer_orders_resource_id()
+    {
+        var customerActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(customerActor, Role.Customer);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, "not-a-customer-id"),
+            customerActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_principal_without_ViewOrder_is_denied_a_customer_orders_subscription()
+    {
+        // No seeded role: the authoritative role load returns an empty set, which lacks ViewOrder.
+        var rolelessActor = Guid.NewGuid();
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, rolelessActor.ToString()),
+            rolelessActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_denied_customer_orders_subscription_carries_no_tenant()
+    {
+        var customerActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(customerActor, Role.Customer);
+
+        var body = await ReadAuthorizeBodyAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, Guid.NewGuid().ToString()),
+            customerActor);
+
+        // Tenant is omitted from the JSON on deny, so the deny bytes carry no tenant.
+        body.Should().Be("{\"allowed\":false}");
+    }
+
     private async Task<Guid> SeedOrderAsync(Guid ownerCustomerId)
     {
         var orderId = Guid.NewGuid();

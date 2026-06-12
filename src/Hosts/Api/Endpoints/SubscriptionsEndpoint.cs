@@ -49,6 +49,8 @@ public static class SubscriptionsEndpoint
                     request.ResourceId, actorId, principal.Roles, authorizer, ownership, orderDetailStore, ct),
                 SubscriptionResourceType.Inventory =>
                     authorizer.IsAuthorized(principal.Roles, Permission.ViewInventory),
+                SubscriptionResourceType.CustomerOrders => IsCustomerOrdersSubscriptionAllowed(
+                    request.ResourceId, actorId, principal.Roles, authorizer, ownership),
                 _ => false,
             };
 
@@ -96,5 +98,35 @@ public static class SubscriptionsEndpoint
         var ownerId = ownership.ResolveCustomerId(actorId);
         var header = await orderDetailStore.GetHeaderAsync(orderId, ct);
         return header is not null && header.CustomerId == ownerId;
+    }
+
+    // The same gate-and-ownership split for the customer-orders collection, decided without a read-model
+    // read: ownership is the actor-is-customer convention (IResourceOwnershipResolver maps the actor to
+    // the customer id it owns), so the decision compares ids and needs no tenant scope. An operational
+    // principal (Support, Admin) may subscribe to any customer's collection; an owner-scoped principal
+    // (Customer) only to its own. A malformed customer id is a denied decision, not a 500.
+    private static bool IsCustomerOrdersSubscriptionAllowed(
+        string resourceId,
+        Guid actorId,
+        IReadOnlyCollection<Role> roles,
+        IPermissionAuthorizer authorizer,
+        IResourceOwnershipResolver ownership)
+    {
+        if (!authorizer.IsAuthorized(roles, Permission.ViewOrder))
+        {
+            return false;
+        }
+
+        if (authorizer.IsAuthorized(roles, Permission.ViewCustomer))
+        {
+            return true;
+        }
+
+        if (!Guid.TryParse(resourceId, out var customerId))
+        {
+            return false;
+        }
+
+        return ownership.ResolveCustomerId(actorId) == customerId;
     }
 }
