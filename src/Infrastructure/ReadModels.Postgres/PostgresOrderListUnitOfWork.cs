@@ -65,21 +65,27 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task UpdateStatusAsync(
+    public async Task<Guid?> UpdateStatusAsync(
         Guid orderId, OrderStatus status, DateTime lastUpdatedUtc, CancellationToken ct)
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // No row for orderId means the order was cancelled while still a draft
-        // and was never placed; the update touches zero rows, which is correct.
+        // No row for orderId under the current tenant means the order was
+        // cancelled while still a draft and was never placed; the update touches
+        // zero rows and returns null, which is correct. RETURNING hands back the
+        // matched row's customer id without a second read.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.order_list " +
             "SET status = @status, last_updated_utc = @last_updated_utc " +
-            "WHERE order_id = @order_id";
+            "WHERE order_id = @order_id AND tenant_id = @tenant " +
+            "RETURNING customer_id";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, status.ToString());
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
-        await cmd.ExecuteNonQueryAsync(ct);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : (Guid)result;
     }
 
     public async Task InsertShipmentMappingAsync(
@@ -118,22 +124,28 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
         return result is null or DBNull ? null : (Guid)result;
     }
 
-    public async Task MarkReturnedAsync(
+    public async Task<Guid?> MarkReturnedAsync(
         Guid orderId, DateTime returnedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // No row for orderId means the order_list row was never created; the
-        // update touches zero rows, which is harmless.
+        // No row for orderId under the current tenant means the order_list row
+        // was never created; the update touches zero rows and returns null,
+        // which is harmless. RETURNING hands back the matched row's customer id
+        // without a second read.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.order_list " +
             "SET is_returned = true, returned_utc = @returned_utc, " +
             "last_updated_utc = @last_updated_utc " +
-            "WHERE order_id = @order_id";
+            "WHERE order_id = @order_id AND tenant_id = @tenant " +
+            "RETURNING customer_id";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("returned_utc", NpgsqlDbType.TimestampTz, returnedUtc);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
-        await cmd.ExecuteNonQueryAsync(ct);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : (Guid)result;
     }
 
     public void PublishOnCommit(NotificationEnvelope envelope)

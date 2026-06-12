@@ -71,6 +71,7 @@ public sealed class OrderListProjection
             IsReturned: false,
             ReturnedUtc: null);
         await uow.InsertAsync(row, ct);
+        StageNotification(uow, context.Event.CustomerId, nameof(OrderPlaced), context.Metadata.Tenant);
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -82,8 +83,12 @@ public sealed class OrderListProjection
         {
             return;
         }
-        await uow.UpdateStatusAsync(
+        var customerId = await uow.UpdateStatusAsync(
             context.Event.OrderId, OrderStatus.Shipped, context.Metadata.OccurredUtc, ct);
+        if (customerId is not null)
+        {
+            StageNotification(uow, customerId.Value, nameof(OrderShipped), context.Metadata.Tenant);
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -97,8 +102,12 @@ public sealed class OrderListProjection
         }
         // An order cancelled while still a draft was never placed: no row
         // exists and the update touches nothing, which is the right outcome.
-        await uow.UpdateStatusAsync(
+        var customerId = await uow.UpdateStatusAsync(
             context.Event.OrderId, OrderStatus.Cancelled, context.Metadata.OccurredUtc, ct);
+        if (customerId is not null)
+        {
+            StageNotification(uow, customerId.Value, nameof(OrderCancelled), context.Metadata.Tenant);
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -113,8 +122,12 @@ public sealed class OrderListProjection
         {
             return;
         }
-        await uow.UpdateStatusAsync(
+        var customerId = await uow.UpdateStatusAsync(
             context.Event.OrderId, OrderStatus.Completed, context.Metadata.OccurredUtc, ct);
+        if (customerId is not null)
+        {
+            StageNotification(uow, customerId.Value, nameof(OrderCompleted), context.Metadata.Tenant);
+        }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
 
@@ -157,9 +170,23 @@ public sealed class OrderListProjection
         }
         else
         {
-            await uow.MarkReturnedAsync(
+            var customerId = await uow.MarkReturnedAsync(
                 orderId.Value, context.Event.ReturnedUtc, context.Metadata.OccurredUtc, ct);
+            if (customerId is not null)
+            {
+                StageNotification(uow, customerId.Value, nameof(ShipmentReturned), context.Metadata.Tenant);
+            }
         }
         await uow.CommitAsync(Name, context.GlobalPosition, ct);
     }
+
+    // Stages a per-customer notification for in-process dispatch to the subscribed
+    // dashboard circuits. Each envelope is keyed by the owning customer's id, so
+    // only that customer's circuits re-query their order list on a change (the
+    // owner-scoped counterpart of the inventory dashboard's collection sentinel).
+    // Carries no row data: the page reads authoritative state on receipt. The
+    // update handlers stage only when their UPDATE matched a row, so a zero-row
+    // change stages nothing.
+    private void StageNotification(IOrderListUnitOfWork uow, Guid customerId, string eventName, TenantId tenant)
+        => uow.PublishOnCommit(new NotificationEnvelope(Name, customerId.ToString(), eventName, [], tenant));
 }

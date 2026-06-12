@@ -72,11 +72,11 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
             return Task.CompletedTask;
         }
 
-        public Task UpdateStatusAsync(
+        public Task<Guid?> UpdateStatusAsync(
             Guid orderId, OrderStatus status, DateTime lastUpdatedUtc, CancellationToken ct)
         {
             store.UpdateCount++;
-            // Absent order_id: no-op, matching the SQL UPDATE touching zero rows.
+            // Absent order_id: no-op and null, matching the SQL UPDATE touching zero rows.
             if (store._rows.TryGetValue(orderId, out var existing))
             {
                 store._rows[orderId] = existing with
@@ -84,8 +84,9 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
                     Status = status,
                     LastUpdatedUtc = lastUpdatedUtc,
                 };
+                return Task.FromResult<Guid?>(existing.CustomerId);
             }
-            return Task.CompletedTask;
+            return Task.FromResult<Guid?>(null);
         }
 
         public Task InsertShipmentMappingAsync(
@@ -102,10 +103,10 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
                     ? orderId
                     : (Guid?)null);
 
-        public Task MarkReturnedAsync(
+        public Task<Guid?> MarkReturnedAsync(
             Guid orderId, DateTime returnedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
         {
-            // Absent order_id: no-op, matching the SQL UPDATE touching zero rows.
+            // Absent order_id: no-op and null, matching the SQL UPDATE touching zero rows.
             if (store._rows.TryGetValue(orderId, out var existing))
             {
                 store._rows[orderId] = existing with
@@ -114,8 +115,9 @@ internal sealed class InMemoryOrderListStore : IOrderListStore
                     ReturnedUtc = returnedUtc,
                     LastUpdatedUtc = lastUpdatedUtc,
                 };
+                return Task.FromResult<Guid?>(existing.CustomerId);
             }
-            return Task.CompletedTask;
+            return Task.FromResult<Guid?>(null);
         }
 
         public void PublishOnCommit(NotificationEnvelope envelope)

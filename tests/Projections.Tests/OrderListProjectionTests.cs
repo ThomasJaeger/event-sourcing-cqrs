@@ -363,6 +363,178 @@ public class OrderListProjectionTests
         (await store.GetAsync(orderId, CancellationToken.None))!.IsReturned.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task OrderPlaced_stages_a_notification_keyed_by_the_events_customer_id()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var customerId = Guid.NewGuid();
+        // A non-default tenant so the assertion proves the staged envelope carries the
+        // event's metadata tenant through, not merely that the default is present. The
+        // shared Metadata helper hardcodes WellKnownTenants.Default, so the metadata is
+        // built inline here with the chosen tenant.
+        var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
+        var context = new EventContext<OrderPlaced>(
+            new OrderPlaced(Guid.NewGuid(), customerId, new Money(10m, Currency.USD), PlacedAt),
+            new EventMetadata(
+                EventId: Guid.NewGuid(),
+                CorrelationId: Guid.NewGuid(),
+                CausationId: Guid.NewGuid(),
+                ActorId: Guid.Empty,
+                Source: "test",
+                SchemaVersion: 1,
+                OccurredUtc: SystemAt,
+                Tenant: tenant),
+            GlobalPosition: 1);
+
+        await projection.HandleAsync(context, CancellationToken.None);
+
+        var staged = store.StagedNotifications.Should().ContainSingle().Subject;
+        staged.ProjectionName.Should().Be("order-list");
+        staged.ResourceId.Should().Be(customerId.ToString());
+        staged.EventName.Should().Be(nameof(OrderPlaced));
+        staged.Widgets.Should().BeEmpty();
+        staged.Tenant.Should().Be(tenant);
+    }
+
+    [Fact]
+    public async Task OrderShipped_stages_a_notification_keyed_by_the_rows_customer_id()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, customerId, new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new OrderShipped(orderId, "UPS", "1Z999", ShippedAt),
+                position: 2, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be(customerId.ToString());
+        store.StagedNotifications[1].EventName.Should().Be(nameof(OrderShipped));
+    }
+
+    [Fact]
+    public async Task OrderCancelled_stages_a_notification_keyed_by_the_rows_customer_id()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, customerId, new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new OrderCancelled(orderId, "out of stock", Guid.NewGuid(), ShippedAt),
+                position: 2, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be(customerId.ToString());
+        store.StagedNotifications[1].EventName.Should().Be(nameof(OrderCancelled));
+    }
+
+    [Fact]
+    public async Task OrderCompleted_stages_a_notification_keyed_by_the_rows_customer_id()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, customerId, new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new OrderCompleted(orderId, ShippedAt),
+                position: 2, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be(customerId.ToString());
+        store.StagedNotifications[1].EventName.Should().Be(nameof(OrderCompleted));
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_stages_a_notification_keyed_by_the_resolved_rows_customer_id()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var orderId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var shipmentId = Guid.NewGuid();
+        await projection.HandleAsync(
+            Context(new OrderPlaced(orderId, customerId, new Money(10m, Currency.USD), PlacedAt),
+                position: 1, occurredUtc: PlacedAt),
+            CancellationToken.None);
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, orderId, SampleAddress(), [], PlacedAt),
+                position: 2),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(shipmentId, "damaged", ShippedAt),
+                position: 3, occurredUtc: ShippedAt),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().HaveCount(2);
+        store.StagedNotifications[1].ResourceId.Should().Be(customerId.ToString());
+        store.StagedNotifications[1].EventName.Should().Be(nameof(ShipmentReturned));
+    }
+
+    [Fact]
+    public async Task OrderShipped_when_the_order_was_never_placed_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+
+        // No row exists for this order, so there is no customer to notify.
+        await projection.HandleAsync(
+            Context(new OrderShipped(Guid.NewGuid(), "UPS", "1Z999", ShippedAt), position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_with_no_mapping_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+
+        // No ShipmentScheduled recorded a mapping, so the return resolves no
+        // order and there is no customer to notify.
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(Guid.NewGuid(), "damaged", ShippedAt), position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ShipmentScheduled_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+
+        // The mapping insert makes no order_list change, so no subscriber needs
+        // a refresh.
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(Guid.NewGuid(), Guid.NewGuid(), SampleAddress(), [], PlacedAt),
+                position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
     private static Address SampleAddress() => new("1 Main St", "Smalltown", "12345", "US");
 
     private static EventContext<TEvent> Context<TEvent>(

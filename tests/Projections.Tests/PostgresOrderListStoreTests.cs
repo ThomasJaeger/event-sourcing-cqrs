@@ -17,6 +17,8 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
     private const string ProjectionName = "order-list";
     private static readonly DateTime PlacedAt = new(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime UpdatedAt = new(2026, 5, 15, 14, 30, 0, DateTimeKind.Utc);
+    private static readonly TenantId OtherTenant =
+        TenantId.From(Guid.Parse("99999999-9999-9999-9999-999999999999"));
 
     private readonly PostgresFixture _fixture;
 
@@ -396,6 +398,126 @@ public class PostgresOrderListStoreTests : IClassFixture<PostgresFixture>
 
         received.Should().BeEmpty();
         (await store.GetAsync(row.OrderId, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateStatus_returns_the_matched_rows_customer_id()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        var customerId = await uow.UpdateStatusAsync(
+            row.OrderId, OrderStatus.Shipped, UpdatedAt, CancellationToken.None);
+
+        customerId.Should().Be(row.CustomerId);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_on_an_absent_order_id_returns_null()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
+
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        var customerId = await uow.UpdateStatusAsync(
+            Guid.NewGuid(), OrderStatus.Cancelled, UpdatedAt, CancellationToken.None);
+
+        customerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MarkReturned_returns_the_matched_rows_customer_id()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        var customerId = await uow.MarkReturnedAsync(
+            row.OrderId, UpdatedAt, UpdatedAt, CancellationToken.None);
+
+        customerId.Should().Be(row.CustomerId);
+    }
+
+    [Fact]
+    public async Task MarkReturned_on_an_absent_order_id_returns_null()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
+
+        await using var uow = await store.BeginAsync(CancellationToken.None);
+        var customerId = await uow.MarkReturnedAsync(
+            Guid.NewGuid(), UpdatedAt, UpdatedAt, CancellationToken.None);
+
+        customerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateStatus_under_another_tenant_returns_null_and_leaves_the_row_unchanged()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), tenantAccessor);
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+
+        // The row above belongs to the default tenant; the update runs as another.
+        tenantAccessor.Current = OtherTenant;
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            var customerId = await uow.UpdateStatusAsync(
+                row.OrderId, OrderStatus.Shipped, UpdatedAt, CancellationToken.None);
+            customerId.Should().BeNull();
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        // Read back under the seeding tenant: the cross-tenant update touched nothing.
+        tenantAccessor.Current = WellKnownTenants.Default;
+        var unchanged = await store.GetAsync(row.OrderId, CancellationToken.None);
+        unchanged!.Status.Should().Be(OrderStatus.Placed);
+        unchanged.LastUpdatedUtc.Should().Be(PlacedAt);
+    }
+
+    [Fact]
+    public async Task MarkReturned_under_another_tenant_returns_null_and_leaves_the_row_not_returned()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var store = new PostgresOrderListStore(factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), tenantAccessor);
+        var row = SampleRow(Guid.NewGuid());
+        await InsertAndCommitAsync(store, row, position: 1);
+
+        // The row above belongs to the default tenant; the update runs as another.
+        tenantAccessor.Current = OtherTenant;
+        await using (var uow = await store.BeginAsync(CancellationToken.None))
+        {
+            var customerId = await uow.MarkReturnedAsync(
+                row.OrderId, UpdatedAt, UpdatedAt, CancellationToken.None);
+            customerId.Should().BeNull();
+            await uow.CommitAsync(ProjectionName, 2, CancellationToken.None);
+        }
+
+        // Read back under the seeding tenant: the cross-tenant update touched nothing.
+        tenantAccessor.Current = WellKnownTenants.Default;
+        var unchanged = await store.GetAsync(row.OrderId, CancellationToken.None);
+        unchanged!.IsReturned.Should().BeFalse();
+        unchanged.ReturnedUtc.Should().BeNull();
     }
 
     private static async Task InsertAndCommitAsync(

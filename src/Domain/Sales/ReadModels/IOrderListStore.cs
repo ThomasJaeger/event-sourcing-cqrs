@@ -40,7 +40,10 @@ public interface IOrderListUnitOfWork : IAsyncDisposable
 
     Task InsertAsync(OrderListRow row, CancellationToken ct);
 
-    Task UpdateStatusAsync(
+    // Updates the row's status and last_updated_utc. Returns the affected row's
+    // customer id when a row matched, null when no row matched the order id
+    // under the current tenant.
+    Task<Guid?> UpdateStatusAsync(
         Guid orderId,
         OrderStatus status,
         DateTime lastUpdatedUtc,
@@ -60,9 +63,10 @@ public interface IOrderListUnitOfWork : IAsyncDisposable
     // ShipmentReturned handler no-ops on null. See ADR 0020.
     Task<Guid?> GetOrderIdByShipmentIdAsync(Guid shipmentId, CancellationToken ct);
 
-    // Marks the order returned: sets is_returned and returned_utc. Touches zero
-    // rows if no order_list row exists, which is harmless.
-    Task MarkReturnedAsync(
+    // Marks the order returned: sets is_returned and returned_utc. Returns the
+    // affected row's customer id when a row matched, null when no row matched
+    // the order id under the current tenant.
+    Task<Guid?> MarkReturnedAsync(
         Guid orderId,
         DateTime returnedUtc,
         DateTime lastUpdatedUtc,
