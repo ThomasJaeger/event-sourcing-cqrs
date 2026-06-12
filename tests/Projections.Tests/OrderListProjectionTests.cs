@@ -535,6 +535,56 @@ public class OrderListProjectionTests
         store.StagedNotifications.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task OrderCancelled_when_the_order_was_never_placed_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+
+        // The order was cancelled while still a draft: no row exists, so there
+        // is no customer to notify.
+        await projection.HandleAsync(
+            Context(new OrderCancelled(Guid.NewGuid(), "changed mind", Guid.NewGuid(), ShippedAt),
+                position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OrderCompleted_when_the_order_was_never_placed_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+
+        // No row exists for this order, so there is no customer to notify.
+        await projection.HandleAsync(
+            Context(new OrderCompleted(Guid.NewGuid(), ShippedAt), position: 1),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ShipmentReturned_with_a_mapping_but_no_order_row_stages_nothing()
+    {
+        var store = new InMemoryOrderListStore();
+        var projection = new OrderListProjection(store, NullLogger<OrderListProjection>.Instance);
+        var shipmentId = Guid.NewGuid();
+        // The mapping exists but the order_list row does not: the scheduled
+        // handler inserts the mapping without requiring a row.
+        await projection.HandleAsync(
+            Context(new ShipmentScheduled(shipmentId, Guid.NewGuid(), SampleAddress(), [], PlacedAt),
+                position: 1),
+            CancellationToken.None);
+
+        await projection.HandleAsync(
+            Context(new ShipmentReturned(shipmentId, "damaged", ShippedAt), position: 2),
+            CancellationToken.None);
+
+        store.StagedNotifications.Should().BeEmpty();
+    }
+
     private static Address SampleAddress() => new("1 Main St", "Smalltown", "12345", "US");
 
     private static EventContext<TEvent> Context<TEvent>(

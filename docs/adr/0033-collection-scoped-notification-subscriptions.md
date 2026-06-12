@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (June 2026). Extends ADR 0032.
+Accepted (June 2026). Extends ADR 0032. Amended (June 2026) by ADR 0037 for collections scoped to one owning principal.
 
 ## Context
 
@@ -12,7 +12,7 @@ The InventoryDashboard is a collection page. It renders every SKU for the tenant
 
 ## Decision
 
-A collection page subscribes under a stable collection-scoped sentinel resource id, and the publishing projection emits the same sentinel. InventoryDashboardProjection emits CollectionResourceIds.AllInventory for every inventory change, and the InventoryDashboard page subscribes under that one sentinel and re-queries the whole list on any notification. The per-SKU resource id is removed; it had no consumer.
+A tenant-wide collection page subscribes under a stable collection-scoped sentinel resource id, and the publishing projection emits the same sentinel. InventoryDashboardProjection emits CollectionResourceIds.AllInventory for every inventory change, and the InventoryDashboard page subscribes under that one sentinel and re-queries the whole list on any notification. The per-SKU resource id is removed; it had no consumer.
 
 The sentinel is a single shared constant in Domain.Abstractions, CollectionResourceIds.AllInventory, referenced by both the projection emit and the page subscribe so the two sides are byte-identical, since the dispatcher routes by ordinal ResourceKey equality. The value is a non-empty, non-whitespace string: the subscribe side rejects null or whitespace.
 
@@ -24,7 +24,7 @@ A collection page receives one notification per relevant change for the tenant a
 
 The sentinel carries no per-resource ownership, which suits inventory: its subscription authorization is a blanket ViewInventory permission with no per-SKU ownership check, so a tenant-wide key loses no ownership granularity. Cross-tenant isolation now rests entirely on the tenant field of the ResourceKey, since the sentinel is constant across SKUs; that isolation is proven by a cross-tenant routing test under the coverage mandate ADR 0031 sets, not by the resource id varying.
 
-The collection-sentinel pattern is the template the remaining collection dashboards follow. Each adds its own constant to CollectionResourceIds and emits and subscribes under it.
+The collection-sentinel pattern is the template the remaining tenant-wide collection dashboards follow. Each adds its own constant to CollectionResourceIds and emits and subscribes under it. A collection scoped to one owning principal follows ADR 0037, which records why a sentinel is the wrong shape for it.
 
 ## Relationship to other ADRs
 

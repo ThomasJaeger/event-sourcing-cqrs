@@ -242,6 +242,24 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
         body.Should().Be("{\"allowed\":false}");
     }
 
+    [Fact]
+    public async Task An_operational_principal_is_allowed_a_malformed_customer_orders_resource_id()
+    {
+        var supportActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(supportActor, Role.Support);
+
+        // The ViewCustomer allow precedes the Guid parse, matching the Order branch shape: the
+        // operational decision does not depend on the id, and a subscription under a non-Guid key
+        // can never receive a dispatch, since projections stage only Guid form keys.
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(SubscriptionResourceType.CustomerOrders, "not-a-customer-id"),
+            supportActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>())!
+            .Allowed.Should().BeTrue();
+    }
+
     private async Task<Guid> SeedOrderAsync(Guid ownerCustomerId)
     {
         var orderId = Guid.NewGuid();
