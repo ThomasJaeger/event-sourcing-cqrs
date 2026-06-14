@@ -75,7 +75,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(20);
+        rows.Should().HaveCount(21);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -136,6 +136,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[19].Version.Should().Be(20);
         rows[19].Name.Should().Be("tenant_scoped_delayed_commands");
         rows[19].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[20].Version.Should().Be(21);
+        rows[20].Name.Should().Be("create_order_throughput");
+        rows[20].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -157,7 +160,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0018 tenant_scoped_sku_uniqueness.");
         log.Should().Contain("Applying 0019 tenant_scoped_command_idempotency.");
         log.Should().Contain("Applying 0020 tenant_scoped_delayed_commands.");
-        log.Should().Contain("Applied 20 migration(s).");
+        log.Should().Contain("Applying 0021 create_order_throughput.");
+        log.Should().Contain("Applied 21 migration(s).");
     }
 
     [Fact]
@@ -177,7 +181,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(20);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(21);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -233,11 +237,11 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(20);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(21);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
-        // pending batch (0001 through 0020); the other sees nothing pending.
+        // pending batch (0001 through 0021); the other sees nothing pending.
         // That signature is what the advisory lock produces and nothing else does.
         var combined = logA.Concat(logB).ToList();
         combined.Count(m => m == "Applying 0001 initial_event_store.").Should().Be(1);
@@ -289,7 +293,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 20 migration(s) pending.");
+        log.Should().Contain("Dry run: 21 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -310,6 +314,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0018 tenant_scoped_sku_uniqueness"));
         log.Should().Contain(m => m.EndsWith("0019 tenant_scoped_command_idempotency"));
         log.Should().Contain(m => m.EndsWith("0020 tenant_scoped_delayed_commands"));
+        log.Should().Contain(m => m.EndsWith("0021 create_order_throughput"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();

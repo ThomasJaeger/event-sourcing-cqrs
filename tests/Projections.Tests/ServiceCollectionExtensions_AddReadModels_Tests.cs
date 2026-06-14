@@ -12,6 +12,7 @@ using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.OrderThroughput;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,22 +52,25 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
 
         // Each projection is one instance surfaced under every interface its
         // consumers resolve; the forwarding registrations hand back the same
-        // singleton. Seven projections now, so the IProjection set holds all.
+        // singleton. Eight projections now, so the IProjection set holds all.
         var orderList = provider.GetRequiredService<OrderListProjection>();
         var customerSummary = provider.GetRequiredService<CustomerSummaryProjection>();
         var orderDetail = provider.GetRequiredService<OrderDetailProjection>();
-        // OrderPlaced and OrderCancelled now have three handlers (OrderList,
-        // CustomerSummary, OrderDetail); the dispatcher fans out to all three via
-        // GetServices.
+        var orderThroughput = provider.GetRequiredService<OrderThroughputProjection>();
+        // OrderPlaced and OrderCancelled now have four handlers (OrderList,
+        // CustomerSummary, OrderDetail, OrderThroughput); the dispatcher fans out to
+        // all four via GetServices.
         provider.GetServices<IEventHandler<OrderPlaced>>()
-            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail);
+            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail).And.Contain(orderThroughput);
         provider.GetServices<IEventHandler<OrderCancelled>>()
-            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail);
-        // OrderShipped now has two handlers (OrderList and OrderDetail); OrderDrafted
-        // and the other line and address events are OrderDetail-only.
+            .Should().Contain(orderList).And.Contain(customerSummary).And.Contain(orderDetail).And.Contain(orderThroughput);
+        // OrderShipped now has three handlers (OrderList, OrderDetail, OrderThroughput);
+        // OrderDrafted and the other line and address events are handled by OrderDetail
+        // and OrderThroughput (the throughput meter counts every order event).
         provider.GetServices<IEventHandler<OrderShipped>>()
-            .Should().Contain(orderList).And.Contain(orderDetail);
-        provider.GetRequiredService<IEventHandler<OrderDrafted>>().Should().BeSameAs(orderDetail);
+            .Should().Contain(orderList).And.Contain(orderDetail).And.Contain(orderThroughput);
+        provider.GetServices<IEventHandler<OrderDrafted>>()
+            .Should().Contain(orderDetail).And.Contain(orderThroughput);
 
         var skuToInventory = provider.GetRequiredService<SkuToInventoryIdProjection>();
         var inventoryDashboard = provider.GetRequiredService<InventoryDashboardProjection>();
@@ -100,10 +104,11 @@ public class ServiceCollectionExtensions_AddReadModels_Tests
         provider.GetRequiredService<IEventHandler<RoleRevoked>>().Should().BeSameAs(currentRoles);
 
         var projections = provider.GetServices<IProjection>().ToList();
-        projections.Should().HaveCount(7);
+        projections.Should().HaveCount(8);
         projections.Should().Contain(orderList);
         projections.Should().Contain(customerSummary);
         projections.Should().Contain(inventoryDashboard);
+        projections.Should().Contain(orderThroughput);
         projections.Should().Contain(skuToInventory);
         projections.Should().Contain(orderToPayment);
         projections.Should().Contain(orderDetail);

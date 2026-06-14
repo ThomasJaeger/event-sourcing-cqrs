@@ -18,6 +18,7 @@ using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.OrderThroughput;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
@@ -33,7 +34,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 // builders and Ctx, the Sku Env and ReadMappingRowsAsync) stays in the tenant-tagging test classes the
 // cases extend and is invoked here.
 //
-// Five projections are tenant-scoped and carry a real isolation case: a write tagged under one tenant is
+// Six projections are tenant-scoped and carry a real isolation case: a write tagged under one tenant is
 // invisible under another. Two are global by design and carry a recorded-decision case rather than an
 // isolation assertion the read does not perform. OrderIdToPaymentId is keyed on a globally-unique order_id
 // whose sole consumer (ReturnProcessManagerHandler) passes a tenant-bound order_id, so its read needs no
@@ -58,6 +59,7 @@ internal static class CrossTenantProjectionCases
             [typeof(OrderDetailProjection)] = () => OrderDetailIsolatesAsync(fixture),
             [typeof(CustomerSummaryProjection)] = () => CustomerSummaryIsolatesAsync(fixture),
             [typeof(InventoryDashboardProjection)] = () => InventoryDashboardIsolatesAsync(fixture),
+            [typeof(OrderThroughputProjection)] = () => OrderThroughputIsolatesAsync(fixture),
             [typeof(SkuToInventoryIdProjection)] = () => SkuToInventoryIdIsolatesAsync(fixture),
             [typeof(OrderIdToPaymentIdProjection)] = () => OrderIdToPaymentIdGlobalByOrderIdAsync(fixture),
             [typeof(CurrentRolesProjection)] = () => CurrentRolesGlobalPerUserAsync(fixture),
@@ -130,6 +132,25 @@ internal static class CrossTenantProjectionCases
             .Should().NotBeNull("the dashboard row must be tagged with the writing tenant");
         stub.Current = TenantB;
         (await store.GetBySkuAsync("SKU-INV", CancellationToken.None)).Should().BeNull();
+    }
+
+    private static async Task OrderThroughputIsolatesAsync(PostgresFixture fixture)
+    {
+        await using var ds = NpgsqlDataSource.Create(await fixture.CreateMigratedDatabaseAsync());
+        var (store, projection, stub) = ProjectionTenantTaggingTests.NewOrderThroughput(ds, TenantA);
+
+        // The projection counts an order event into its occurrence-second bucket under
+        // the writing tenant.
+        await projection.HandleAsync(
+            ProjectionTenantTaggingTests.Ctx(
+                new OrderPlaced(Guid.NewGuid(), Guid.NewGuid(), new Money(10m, Currency.USD), At), 1),
+            CancellationToken.None);
+
+        stub.Current = TenantA;
+        (await store.GetBucketsAsync(CancellationToken.None))
+            .Should().ContainSingle("the throughput bucket must be tagged with the writing tenant");
+        stub.Current = TenantB;
+        (await store.GetBucketsAsync(CancellationToken.None)).Should().BeEmpty();
     }
 
     private static async Task SkuToInventoryIdIsolatesAsync(PostgresFixture fixture)

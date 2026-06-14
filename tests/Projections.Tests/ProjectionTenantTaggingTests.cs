@@ -19,6 +19,7 @@ using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.OrderThroughput;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -357,6 +358,16 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             store,
             new InventoryDashboardProjection(store, NullLogger<InventoryDashboardProjection>.Instance),
             stub);
+    }
+
+    internal static (PostgresOrderThroughputStore Store, OrderThroughputProjection Projection, StubTenantAccessor Stub)
+        NewOrderThroughput(NpgsqlDataSource ds, TenantId? tenant)
+    {
+        var factory = new NpgsqlReadModelConnectionFactory(ds);
+        var stub = new StubTenantAccessor { Current = tenant };
+        var store = new PostgresOrderThroughputStore(
+            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), stub);
+        return (store, new OrderThroughputProjection(store), stub);
     }
 
     internal static EventContext<TEvent> Ctx<TEvent>(TEvent @event, long position, TenantId? tenant = null)

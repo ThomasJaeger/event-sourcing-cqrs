@@ -11,6 +11,7 @@ using EventSourcingCqrs.Projections.InventoryDashboard;
 using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.Projections.OrderIdToPaymentId;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.OrderThroughput;
 using EventSourcingCqrs.Projections.SkuToInventoryId;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -76,6 +77,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IInventoryDashboardStore, PostgresInventoryDashboardStore>();
         services.AddProjection<InventoryDashboardProjection>();
+
+        services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
+        services.AddProjection<OrderThroughputProjection>();
 
         services.AddSingleton<IOrderDetailStore, PostgresOrderDetailStore>();
         services.AddProjection<OrderDetailProjection>();
