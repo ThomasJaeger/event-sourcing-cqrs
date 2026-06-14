@@ -15,4 +15,9 @@ public static class CollectionResourceIds
     // collection page over all SKUs, so the projection emits and the page
     // subscribes under this sentinel rather than a per-sku resource-id.
     public const string AllInventory = "all-inventory";
+
+    // The tenant's order-throughput metrics. The admin throughput dashboard is a
+    // tenant-wide meter, so the projection emits and the page subscribes under this
+    // sentinel rather than a per-resource id.
+    public const string OrderThroughputMetrics = "order-throughput-metrics";
 }
