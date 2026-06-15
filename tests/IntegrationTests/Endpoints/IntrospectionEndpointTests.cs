@@ -55,14 +55,14 @@ public class IntrospectionEndpointTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task GetQueries_returns_exactly_the_five_query_discriminators()
+    public async Task GetQueries_returns_exactly_the_six_query_discriminators()
     {
         var tokens = await GetTokensAsync("/queries");
 
         tokens.Should().BeEquivalentTo(new[]
         {
             "ListOrders", "GetOrderDetail", "GetCustomerSummary",
-            "GetAllInventoryDashboard", "GetInventoryDashboardBySku",
+            "GetAllInventoryDashboard", "GetInventoryDashboardBySku", "GetOrderThroughput",
         });
     }
 

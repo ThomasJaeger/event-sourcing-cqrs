@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.Hosts.Api.Endpoints;
 // matching POST endpoint accepts, so a client can discover the valid envelope
 // tokens. The command catalog is the Api host's 14 user commands (the per-host
 // registry composition excludes PM-dispatched and timeout commands, Commit 11);
-// the query catalog is the 5 read models. Both map the registry's Type set
+// the query catalog is the 6 read models. Both map the registry's Type set
 // through NameFor to the token strings, sorted for a deterministic response.
 // Synchronous: the registries are in-memory and the read touches no I/O.
 public static class IntrospectionEndpoint

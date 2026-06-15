@@ -39,6 +39,7 @@ internal static class CrossTenantQueryCases
             [typeof(GetCustomerSummary)] = () => GetCustomerSummaryIsolatesAsync(fixture),
             [typeof(GetAllInventoryDashboard)] = () => GetAllInventoryDashboardIsolatesAsync(fixture),
             [typeof(GetInventoryDashboardBySku)] = () => GetInventoryDashboardBySkuIsolatesAsync(fixture),
+            [typeof(GetOrderThroughput)] = () => GetOrderThroughputIsolatesAsync(fixture),
         };
     }
 
@@ -126,6 +127,35 @@ internal static class CrossTenantQueryCases
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    private static async Task GetOrderThroughputIsolatesAsync(ApiFixture fixture)
+    {
+        // Throughput is a tenant-wide collection with no owning id, so isolation is the collection
+        // shape: the default tenant's bucket is present and the other tenant's bucket is absent.
+        // TruncateAsync is a no-op for this store, so the case isolates by distinct unique seconds
+        // rather than truncating, and the seconds sit far from now so residual rows cannot collide.
+        var defaultSecond = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var otherSecond = new DateTime(2024, 1, 2, 3, 4, 6, DateTimeKind.Utc);
+        var store = fixture.Factory.Services.GetRequiredService<IOrderThroughputStore>();
+        await fixture.SeedAsTenantAsync(WellKnownTenants.Default, async () =>
+        {
+            await using (var uow = await store.BeginAsync(default))
+            {
+                await uow.IncrementSecondAsync(defaultSecond, default);
+                await uow.CommitAsync("cross-tenant-order-throughput", 1, default);
+            }
+        });
+        await SeedOrderThroughputUnderTenantAsync(fixture, otherSecond, 1, OtherTenant);
+
+        var response = await fixture.Factory.CreateClient()
+            .PostQueryAsync("GetOrderThroughput", new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var seconds = (await response.Content.ReadFromJsonAsync<IReadOnlyList<OrderThroughputRow>>())!
+            .Select(r => r.SecondUtc).ToList();
+        seconds.Should().Contain(defaultSecond);
+        seconds.Should().NotContain(otherSecond);
+    }
+
     private static OrderListRow OrderListRowFor(Guid orderId) => new(
         OrderId: orderId,
         CustomerId: Guid.NewGuid(),
@@ -210,6 +240,21 @@ internal static class CrossTenantQueryCases
         command.Parameters.AddWithValue("reserved_quantity", NpgsqlDbType.Integer, 0);
         command.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, SeededAt);
         command.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedOrderThroughputUnderTenantAsync(
+        ApiFixture fixture, DateTime secondUtc, long count, Guid tenantId)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "INSERT INTO read_models.order_throughput (tenant_id, second_utc, count) " +
+            "VALUES (@tenant_id, @second_utc, @count)";
+        command.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenantId);
+        command.Parameters.AddWithValue("second_utc", NpgsqlDbType.TimestampTz, secondUtc);
+        command.Parameters.AddWithValue("count", NpgsqlDbType.Bigint, count);
         await command.ExecuteNonQueryAsync();
     }
 }
