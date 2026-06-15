@@ -28,4 +28,5 @@ public enum Permission
     DispatchShipment,
     DeliverShipment,
     MarkOrderCompleted,
+    ViewOrderThroughput,
 }

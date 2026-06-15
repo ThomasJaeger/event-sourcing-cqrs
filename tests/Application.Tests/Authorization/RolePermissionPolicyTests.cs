@@ -40,7 +40,7 @@ public class RolePermissionPolicyTests
     public void Admin_holds_every_permission_including_the_six_new_command_permissions()
     {
         Policy[Role.Admin].Should().BeEquivalentTo(Enum.GetValues<Permission>());
-        Policy[Role.Admin].Should().HaveCount(22);
+        Policy[Role.Admin].Should().HaveCount(23);
     }
 
     [Fact]
