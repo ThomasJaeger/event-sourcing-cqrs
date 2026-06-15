@@ -49,6 +49,8 @@ public static class SubscriptionsEndpoint
                     request.ResourceId, actorId, principal.Roles, authorizer, ownership, orderDetailStore, ct),
                 SubscriptionResourceType.Inventory =>
                     authorizer.IsAuthorized(principal.Roles, Permission.ViewInventory),
+                SubscriptionResourceType.OrderThroughput =>
+                    authorizer.IsAuthorized(principal.Roles, Permission.ViewOrderThroughput),
                 SubscriptionResourceType.CustomerOrders => IsCustomerOrdersSubscriptionAllowed(
                     request.ResourceId, actorId, principal.Roles, authorizer, ownership),
                 _ => false,

@@ -17,6 +17,7 @@ public enum SubscriptionResourceType
     Order,
     Inventory,
     CustomerOrders,
+    OrderThroughput,
 }
 
 // The actor is not on the request: the Api host reads it from the authenticated principal (the signed

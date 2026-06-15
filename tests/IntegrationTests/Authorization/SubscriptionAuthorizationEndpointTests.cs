@@ -120,6 +120,27 @@ public class SubscriptionAuthorizationEndpointTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task An_admin_may_subscribe_to_the_tenant_wide_order_throughput_metrics()
+    {
+        // ViewOrderThroughput is admin-only, so an Admin actor may subscribe to the tenant-wide throughput
+        // meter. The throughput arm mirrors Inventory: a permission-only check that ignores the ResourceId,
+        // which carries the tenant-wide metrics sentinel. RED until the AuthorizeAsync arm exists; today
+        // OrderThroughput falls to the _ => false default and the response denies.
+        var adminActor = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(adminActor, Role.Admin);
+
+        var response = await PostAuthorizeAsAsync(
+            new SubscriptionAuthorizationRequest(
+                SubscriptionResourceType.OrderThroughput, CollectionResourceIds.OrderThroughputMetrics),
+            adminActor);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SubscriptionAuthorizationResponse>();
+        body!.Allowed.Should().BeTrue();
+        body.Tenant.Should().Be(WellKnownTenants.Default.Value);
+    }
+
+    [Fact]
     public async Task An_unauthenticated_request_is_rejected_with_401()
     {
         var client = _fixture.Factory.CreateClient();

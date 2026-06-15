@@ -18,6 +18,7 @@ internal static class ResourceRouting
             ["order-detail"] = SubscriptionResourceType.Order,
             ["inventory-dashboard"] = SubscriptionResourceType.Inventory,
             ["order-list"] = SubscriptionResourceType.CustomerOrders,
+            ["order-throughput"] = SubscriptionResourceType.OrderThroughput,
         };
 
     // Derives the routing key from an envelope, or false when the projection has no mapping. The key
