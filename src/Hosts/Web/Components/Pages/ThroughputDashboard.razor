@@ -1,0 +1,135 @@
+@page "/admin/throughput"
+@using EventSourcingCqrs.Application
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Abstractions
+@using EventSourcingCqrs.Domain.Sales.ReadModels
+@using EventSourcingCqrs.Hosts.Web.Hubs
+@inject IApiClient ApiClient
+@inject TimeProvider TimeProvider
+@inject ICircuitResourceSubscription Subscription
+@implements IAsyncDisposable
+
+<PageTitle>Order Throughput</PageTitle>
+
+<div class="flex items-center mb-4">
+    <h1 class="text-2xl font-bold">Order Throughput</h1>
+    <LiveBadge State="@liveness" />
+</div>
+
+@if (denied)
+{
+    <p class="text-red-700">You are not authorized to view order throughput.</p>
+}
+else
+{
+    var reading = OrderThroughputRate.Compute(rows ?? Array.Empty<OrderThroughputRow>(), RateWindow);
+
+    if (reading is null)
+    {
+        <p class="text-gray-500">There is no throughput data yet.</p>
+    }
+    else
+    {
+        var ratePerMinute = reading.WindowedCount * 60.0 / RateWindow.TotalSeconds;
+        var ageSeconds = (int)(TimeProvider.GetUtcNow().UtcDateTime - reading.AsOfUtc).TotalSeconds;
+
+        <p class="text-3xl font-semibold">@(ratePerMinute.ToString("0.#")) orders/min</p>
+        <p class="text-sm text-gray-600">As of @(reading.AsOfUtc.ToString("u"))</p>
+        <p class="text-sm text-gray-600">Updated @ageSeconds seconds ago</p>
+    }
+}
+
+@code {
+    // A per-minute meter over the most recent 60 seconds of buckets. Inside the projection's
+    // 300-second retention (OrderThroughputProjection.RetentionWindow), so the reader always has
+    // the buckets this window folds. The rate is reported per minute against this window explicitly.
+    private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(60);
+
+    private IReadOnlyList<OrderThroughputRow>? rows;
+    private bool denied;
+
+    // Subscription liveness, decided once at the arm (ADR 0034): Connecting until StartAsync returns,
+    // then Live, or NotLive when the arm fails. A denied load never arms and leaves the badge Idle.
+    private LivenessState liveness = LivenessState.Connecting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(CancellationToken.None);
+    }
+
+    // Subscribe on the first interactive render, not OnInitializedAsync, so a prerender pass does not
+    // double-subscribe (ADR 0032). The meter is a tenant-wide collection, so it subscribes under the
+    // collection-scoped sentinel and the projection emits the same sentinel (ADR 0033). Every
+    // notification re-queries the meter, marshalled onto the render thread. A denied load never arms.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (denied)
+        {
+            liveness = LivenessState.Idle;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            await Subscription.StartAsync(
+                SubscriptionResourceType.OrderThroughput,
+                CollectionResourceIds.OrderThroughputMetrics,
+                ct => ApiClient.QueryAsync(new GetOrderThroughput(), ct),
+                ApplyAsync,
+                render => InvokeAsync(render),
+                CancellationToken.None);
+            liveness = LivenessState.Live;
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation reaching this arm is not a liveness verdict; teardown faulting the marshal
+            // leg lands here. The arm sets nothing (ADR 0034).
+        }
+        catch (Exception)
+        {
+            // The arm failed (authorization, dispatcher, transport). The page keeps its initial
+            // one-shot data and stays up; it is simply not live until a reload. Do not dispose, do
+            // not rethrow, do not tear down the circuit. LiveBadge surfaces this not-live state.
+            liveness = LivenessState.NotLive;
+            StateHasChanged();
+        }
+    }
+
+    // The meter's load: dispatch the admin throughput query. A denial (the order-throughput
+    // permission, surfaced as ApiAuthorizationException across the HTTP boundary) sets the denied
+    // flag so the page renders a denied state and never arms; any other failure is left to surface.
+    private async Task LoadAsync(CancellationToken ct)
+    {
+        try
+        {
+            rows = await ApiClient.QueryAsync(new GetOrderThroughput(), ct);
+        }
+        catch (ApiAuthorizationException)
+        {
+            denied = true;
+        }
+    }
+
+    // The snapshot and every notification land here, marshalled: refresh the meter from authoritative
+    // state. The meter issues no command, so there is no settle predicate, degraded timer, or
+    // operation badge.
+    private async Task ApplyAsync(IReadOnlyList<OrderThroughputRow>? list)
+    {
+        rows = list;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    // The subscription's DisposeAsync is a no-op before any start and across repeated calls (ADR 0032).
+    public async ValueTask DisposeAsync()
+    {
+        await Subscription.DisposeAsync();
+    }
+}
