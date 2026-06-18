@@ -34,7 +34,7 @@ Produce one pasteable executor block that:
 - prints HEAD, tree state, 0 ahead and 0 behind against origin/main, and the latest main CI conclusion, with no expected values baked in,
 - applies the CI equality gate: CI covers HEAD only when a completed successful run's headSha equals HEAD; the ancestor, in-progress, and absent cases each stop and surface to the orchestrator loop,
 - confirms ADR 0039 is on disk and Phase 11 is closed,
-- grounds the operational-reader substrate this close already verified: read_models.projection_checkpoints is global (migration 0017); event_store.outbox carries the sent_utc IS NULL pending index with attempt_count and last_error; event_store.events.tenant_id is a generated column,
+- grounds the operational-reader substrate this close already verified: read_models.projection_checkpoints is global, created in migration 0003 (migration 0017 keeps it out of the tenant_id rollout); event_store.outbox carries the sent_utc IS NULL pending index with attempt_count and last_error; event_store.events.tenant_id is a generated column,
 - reports the AdminConsole host state: an empty .gitkeep at src/Hosts/AdminConsole, no Program.cs, no csproj, absent from the solution.
 
 Report file:line first, verbatim where structure matters, and flag any drift from how a surface is named here. No edits, no staging, no commits.
