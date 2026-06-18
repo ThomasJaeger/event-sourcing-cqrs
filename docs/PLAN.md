@@ -414,6 +414,8 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 
 **Done when.** The original Phase 8 done-when criteria (an order placed in one tab updates the customer dashboard in another within seconds; the admin dashboard's metrics match the AdminConsole tools), now with each surface tenant-scoped and authorized.
 
+**Status note.** Phase 11 is closed on its named closer, the live /admin/throughput meter (RED #7, commit e882b23). The second done-when criterion above, that the admin dashboard's metrics match the AdminConsole tools, carries forward to Phase 12 as an exit condition, because the AdminConsole host does not exist yet and there is no operator-tool side to compare against. The criterion moves with Phase 12, the same way Phase 8 moved its done-when into this phase.
+
 ### Phase 12: AdminConsole
 
 **Goals.**
@@ -431,6 +433,8 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 - A reader can use the AdminConsole to investigate "what happened to order X" and trace the full chain.
 - The Replay Tool successfully rebuilds each projection.
 - The Projection Status Dashboard accurately reflects projection state.
+
+**Decision note.** Operational metrics (projection lag, outbox depth, events per second) live in the AdminConsole, per ADR 0039, and stay out of the Web host throughput meter. The operational reader is Phase 12's first slice, born at the Projection Status Dashboard and tested standalone before the dashboard consumes it; projection lag is head position minus checkpoint position over the global read_models.projection_checkpoints table. The inherited Phase 11 cross-tab done-when, that the admin dashboard's metrics match the AdminConsole tools, is a Phase 12 exit condition.
 
 ### Phase 13: KurrentDB adapter
 
