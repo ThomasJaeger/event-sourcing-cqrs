@@ -27,5 +27,6 @@
     <Project Path="tests/Workers.Tests/Workers.Tests.csproj" />
     <Project Path="tests/IntegrationTests/IntegrationTests.csproj" />
     <Project Path="tests/Hosts.Web.Tests/Hosts.Web.Tests.csproj" />
+    <Project Path="tests/Hosts.AdminConsole.Tests/Hosts.AdminConsole.Tests.csproj" />
   </Folder>
 </Solution>

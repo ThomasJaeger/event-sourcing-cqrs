@@ -2,4 +2,7 @@
   <PropertyGroup>
     <RootNamespace>EventSourcingCqrs.Hosts.AdminConsole</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\Application.csproj" />
+  </ItemGroup>
 </Project>
