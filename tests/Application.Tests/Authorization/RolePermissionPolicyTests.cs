@@ -40,7 +40,19 @@ public class RolePermissionPolicyTests
     public void Admin_holds_every_permission_including_the_six_new_command_permissions()
     {
         Policy[Role.Admin].Should().BeEquivalentTo(Enum.GetValues<Permission>());
-        Policy[Role.Admin].Should().HaveCount(23);
+        Policy[Role.Admin].Should().HaveCount(24);
+    }
+
+    [Fact]
+    public void AccessAdminConsole_is_granted_to_Admin_and_to_no_other_role()
+    {
+        // ADR 0040: AccessAdminConsole is the operator-console access capability. Admin holds it through
+        // the computed-from-enumeration grant; Customer, Support, and System must not, so console access
+        // stays an operator capability.
+        Policy[Role.Admin].Should().Contain(Permission.AccessAdminConsole);
+        Policy[Role.Customer].Should().NotContain(Permission.AccessAdminConsole);
+        Policy[Role.Support].Should().NotContain(Permission.AccessAdminConsole);
+        Policy[Role.System].Should().NotContain(Permission.AccessAdminConsole);
     }
 
     [Fact]

@@ -29,4 +29,5 @@ public enum Permission
     DeliverShipment,
     MarkOrderCompleted,
     ViewOrderThroughput,
+    AccessAdminConsole,
 }
