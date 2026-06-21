@@ -82,11 +82,9 @@ public static class ServiceCollectionExtensions
 
         RegisterHandlers(services);
 
-        // Permission-based authorization policy substrate. The role-to-permission policy is part of
-        // the application definition and validates at composition: an incomplete or malformed policy
-        // throws here, at startup, rather than at the first authorization decision.
-        services.AddSingleton(new RolePermissionRegistry(RolePermissionPolicy.Default));
-        services.AddSingleton<IPermissionAuthorizer, PermissionAuthorizer>();
+        // Permission-based authorization policy substrate, single-sourced in AddPermissionAuthorization
+        // so a host that authorizes without dispatching commands composes the same registrations.
+        services.AddPermissionAuthorization();
 
         // Maps an authenticated actor to the customer it owns, so the ownership-filtering query handlers
         // compare a resolved customer id against a read-model row. The P9.5 implementation is the
@@ -118,6 +116,19 @@ public static class ServiceCollectionExtensions
             throw new QueryPermissionDeclarationException(undeclaredQueries);
         }
 
+        return services;
+    }
+
+    // The permission-based authorization substrate: the validated role-to-permission policy and the
+    // authorizer over it. The registry validates the policy in its constructor, so a malformed policy
+    // throws here at composition rather than at the first authorization decision. A host that
+    // authorizes without dispatching commands (the AdminConsole, ADR 0040) composes this alone, free
+    // of the command and query stack; AddApplication delegates here so the substrate has one home.
+    public static IServiceCollection AddPermissionAuthorization(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton(new RolePermissionRegistry(RolePermissionPolicy.Default));
+        services.AddSingleton<IPermissionAuthorizer, PermissionAuthorizer>();
         return services;
     }
 

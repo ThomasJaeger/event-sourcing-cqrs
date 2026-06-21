@@ -15,6 +15,9 @@
     <ProjectReference Include="..\..\src\Hosts\Web\Hosts.Web.csproj">
       <Aliases>WebHost</Aliases>
     </ProjectReference>
+    <ProjectReference Include="..\..\src\Hosts\AdminConsole\Hosts.AdminConsole.csproj">
+      <Aliases>AdminConsoleHost</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\TestInfrastructure\TestInfrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
