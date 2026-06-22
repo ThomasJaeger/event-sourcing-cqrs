@@ -4,6 +4,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Application\Application.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
+    <ProjectReference Include="..\..\Projections\Projections.csproj" />
   </ItemGroup>
 </Project>

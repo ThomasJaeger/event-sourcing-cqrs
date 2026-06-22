@@ -15,8 +15,9 @@ public class AdminConsoleAuthorizationTests
     public async Task Unauthenticated_request_to_a_gated_route_is_redirected_to_the_login_path()
     {
         using var factory = new WebApplicationFactory<AdminConsoleHost::Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting(
-                "READ_MODEL_CONNECTION_STRING", "Host=localhost;Database=unused;Username=u;Password=p"));
+            .WithWebHostBuilder(builder => builder
+                .UseSetting("READ_MODEL_CONNECTION_STRING", "Host=localhost;Database=unused;Username=u;Password=p")
+                .UseSetting("EVENT_STORE_CONNECTION_STRING", "Host=localhost;Database=unused;Username=u;Password=p"));
         using var client = factory.CreateClient(
             new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 

@@ -36,6 +36,9 @@ public sealed class AdminConsoleAdmitFixture : IAsyncLifetime
         Factory = new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("READ_MODEL_CONNECTION_STRING", ConnectionString);
+            // The Projection Status Dashboard's head reader needs the event-store connection; in v1 it
+            // is the same migrated database, which carries event_store.events for the head read.
+            builder.UseSetting("EVENT_STORE_CONNECTION_STRING", ConnectionString);
             // Override the default scheme with a test scheme that authenticates the seeded Admin actor,
             // so the fallback policy authenticates against it. ConfigureTestServices runs after the
             // host's own AddAuthentication, so its DefaultScheme wins.

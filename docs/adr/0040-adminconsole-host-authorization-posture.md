@@ -80,7 +80,9 @@ exposed. The Event Store Browser and Correlation-ID Tracer (Phase 12) inherit th
 no per-page work. The handler reuses IPermissionAuthorizer, so the role-to-permission policy
 stays the one source of authorization truth across hosts. The AdminConsole acquires a
 current-roles read dependency for server-side role resolution. ADR 0038's Web-host posture is
-superseded for pages behind this gate.
+superseded for pages behind this gate. The console later also acquires an event-store
+head-position read for the Projection Status Dashboard, composed focused so it touches no write
+path, and the dashboard renders an explicit operator-visible error state when that read fails.
 
 A wording-versus-code divergence in ADR 0028 is noted, not resolved here: its Decision states
 that roles and permissions live on the runtime principal, while the code computes permissions

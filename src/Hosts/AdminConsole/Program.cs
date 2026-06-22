@@ -1,7 +1,9 @@
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
+using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Projections.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
@@ -15,14 +17,26 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 // The deny path's two dependencies: the permission authorizer and the current-roles read the handler
-// resolves roles through. The console composes these focused registrations rather than the full
-// command or projection stack, so it carries no event store and no projection set. Throw-on-missing
+// resolves roles through. The console composes focused read registrations rather than the full
+// command, event-store, or projection stacks. Throw-on-missing
 // at startup, the same guard the Web host uses, so a misconfigured deployment fails to boot rather
 // than failing the first authorization decision.
 var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STRING"]
     ?? throw new InvalidOperationException("READ_MODEL_CONNECTION_STRING is not set.");
 builder.Services.AddPermissionAuthorization();
 builder.Services.AddCurrentRolesReadModel(options => options.ConnectionString = readModelConnectionString);
+
+// The Projection Status Dashboard reads projection lag in process (ADR 0040): the head of the event
+// stream minus each projection's checkpoint. It composes the reader's three ports focused, with no
+// read-model or event-store over-provisioning. The checkpoint store comes from AddCurrentRolesReadModel
+// above; AddEventStoreHeadPosition adds only the head read and its connection, not the full event store;
+// AddProjectionRoster adds the name-only projection set. Throw-on-missing for the event-store
+// connection, the same guard the read-model connection uses.
+var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
+    ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
+builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
+builder.Services.AddProjectionRoster();
+builder.Services.AddSingleton<ProjectionLagReader>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.

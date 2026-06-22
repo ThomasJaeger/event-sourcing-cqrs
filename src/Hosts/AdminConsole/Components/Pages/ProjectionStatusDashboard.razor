@@ -1,0 +1,63 @@
+@page "/projections"
+@using EventSourcingCqrs.Projections.Infrastructure
+@inject ProjectionLagReader Reader
+
+<PageTitle>Projection Status</PageTitle>
+
+<h1 class="text-2xl font-bold p-6">Projection Status</h1>
+
+@if (error)
+{
+    <p class="px-6 text-red-700">Unable to load projection status.</p>
+}
+else if (rows is { Count: 0 })
+{
+    <p class="px-6 text-gray-500">No projections registered.</p>
+}
+else if (rows is not null)
+{
+    <table class="px-6">
+        <thead>
+            <tr>
+                <th class="text-left pr-8">Projection</th>
+                <th class="text-left pr-8">Head</th>
+                <th class="text-left pr-8">Checkpoint</th>
+                <th class="text-left pr-8">Positions Behind</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in rows)
+            {
+                <tr>
+                    <td class="pr-8">@row.ProjectionName</td>
+                    <td class="pr-8">@row.HeadPosition</td>
+                    <td class="pr-8">@row.CheckpointPosition</td>
+                    <td class="pr-8">@row.PositionsBehind</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    // The projection-lag read for an operator: the head of the event stream minus each projection's
+    // checkpoint. The reader is the concrete owned leaf (no interface), composed focused so the console
+    // carries no write stack. The read runs once on initialization inside a try/catch: ReadAsync touches
+    // two databases, so a failure is a real operational state, surfaced as an operator-visible error
+    // rather than a blank page or an escaping exception. Authorization is the host fallback gate
+    // (ADR 0040), upstream of render, so the page has no denied branch.
+    private IReadOnlyList<ProjectionLag>? rows;
+    private bool error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            rows = await Reader.ReadAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            error = true;
+        }
+    }
+}
