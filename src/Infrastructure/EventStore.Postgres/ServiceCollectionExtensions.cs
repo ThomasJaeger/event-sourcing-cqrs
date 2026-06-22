@@ -112,6 +112,27 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    // The focused head-position read for hosts that compose only the projection-lag
+    // read and carry no write stack (the AdminConsole, ADR 0040). Registers the
+    // event-store data source, its connection factory, and IEventStoreHeadPosition,
+    // and nothing else: no IEventStore, serializer, type registries, outbox, or
+    // delay queue. A host that composes the full event store uses AddPostgresEventStore
+    // instead, which owns the bare NpgsqlDataSource registration, so the two do not
+    // coexist in one host.
+    public static IServiceCollection AddEventStoreHeadPosition(
+        this IServiceCollection services,
+        string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+        services.AddSingleton<IEventStoreHeadPosition, PostgresEventStoreHeadReader>();
+
+        return services;
+    }
+
     // The outbox processor is registered separately from AddPostgresEventStore so a
     // host that writes events but does not drain the outbox composes the event
     // store without it. The Api host dispatches commands over HTTP and lets the

@@ -39,6 +39,35 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddEventStoreHeadPosition_resolves_the_head_position_port()
+    {
+        var services = new ServiceCollection();
+        services.AddEventStoreHeadPosition("Host=localhost;Database=stub");
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IEventStoreHeadPosition>()
+            .Should().BeOfType<PostgresEventStoreHeadReader>();
+        provider.GetRequiredService<INpgsqlConnectionFactory>()
+            .Should().BeOfType<NpgsqlConnectionFactory>();
+    }
+
+    [Fact]
+    public void AddEventStoreHeadPosition_does_not_register_the_full_event_store()
+    {
+        var services = new ServiceCollection();
+        services.AddEventStoreHeadPosition("Host=localhost;Database=stub");
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetService<IEventStore>().Should().BeNull(
+            "the focused head-position registration composes only the head read; "
+            + "a host needing the full event store uses AddPostgresEventStore.");
+        provider.GetService<JsonSerializerOptions>().Should().BeNull(
+            "the head read needs no serializer; AddPostgresEventStore registers that.");
+    }
+
+    [Fact]
     public void AddPostgresOutboxProcessor_registers_the_dispatcher_and_hosted_service()
     {
         var services = new ServiceCollection();
