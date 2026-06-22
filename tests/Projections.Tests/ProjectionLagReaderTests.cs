@@ -12,7 +12,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 
 // Phase 12 operational reader, commit 2: the projection-lag reader. It composes the
 // head-position port (IEventStoreHeadPosition) with ICheckpointStore over the
-// registered projection roster (IEnumerable<IProjection>) and reports, per
+// registered projection roster (IProjectionRoster) and reports, per
 // projection, head minus checkpoint as positions-behind. ProjectionLagReader and
 // ProjectionLag do not exist yet; these tests drive them into being, composed
 // against the ports and exercised over a migrated Postgres database. The single
@@ -36,8 +36,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
         var eventStore = CreateEventStore(dataSource);
         await AppendProbeEventsAsync(eventStore);
 
-        var reader = CreateReader(
-            dataSource, [new StubProjection("proj-a"), new StubProjection("proj-b")]);
+        var reader = CreateReader(dataSource, Roster("proj-a", "proj-b"));
         var result = await reader.ReadAsync(CancellationToken.None);
 
         result.Select((ProjectionLag row) => row.ProjectionName)
@@ -55,7 +54,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
         var head = await HeadAsync(dataSource);
         await AdvanceAndCommitAsync(dataSource, "proj-a", head - 1);
 
-        var reader = CreateReader(dataSource, [new StubProjection("proj-a")]);
+        var reader = CreateReader(dataSource, Roster("proj-a"));
         var result = await reader.ReadAsync(CancellationToken.None);
 
         ProjectionLag row = result.Single(r => r.ProjectionName == "proj-a");
@@ -74,7 +73,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
         var head = await HeadAsync(dataSource);
         await AdvanceAndCommitAsync(dataSource, "proj-a", head);
 
-        var reader = CreateReader(dataSource, [new StubProjection("proj-a")]);
+        var reader = CreateReader(dataSource, Roster("proj-a"));
         var result = await reader.ReadAsync(CancellationToken.None);
 
         ProjectionLag row = result.Single(r => r.ProjectionName == "proj-a");
@@ -92,7 +91,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
         var head = await HeadAsync(dataSource);
 
         // proj-a never checkpoints, so no row exists for it.
-        var reader = CreateReader(dataSource, [new StubProjection("proj-a")]);
+        var reader = CreateReader(dataSource, Roster("proj-a"));
         var result = await reader.ReadAsync(CancellationToken.None);
 
         ProjectionLag row = result.Single(r => r.ProjectionName == "proj-a");
@@ -101,11 +100,11 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
     }
 
     private static ProjectionLagReader CreateReader(
-        NpgsqlDataSource dataSource, IEnumerable<IProjection> projections)
+        NpgsqlDataSource dataSource, IProjectionRoster roster)
     {
         var headReader = new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource));
         var checkpointStore = new PostgresCheckpointStore(new NpgsqlReadModelConnectionFactory(dataSource));
-        return new ProjectionLagReader(headReader, checkpointStore, projections);
+        return new ProjectionLagReader(headReader, checkpointStore, roster);
     }
 
     private static PostgresEventStore CreateEventStore(NpgsqlDataSource dataSource)
@@ -176,7 +175,9 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
             Converters = { new TenantIdJsonConverter() },
         };
 
-    private sealed record StubProjection(string Name) : IProjection;
+    private static IProjectionRoster Roster(params string[] names) => new StubRoster(names);
+
+    private sealed record StubRoster(IReadOnlyCollection<string> Names) : IProjectionRoster;
 
     private sealed record LagProbe(Guid Id) : IDomainEvent;
 }

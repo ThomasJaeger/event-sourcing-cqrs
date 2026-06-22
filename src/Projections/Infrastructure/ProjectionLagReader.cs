@@ -10,19 +10,19 @@ public sealed class ProjectionLagReader
 {
     private readonly IEventStoreHeadPosition _headPosition;
     private readonly ICheckpointStore _checkpointStore;
-    private readonly IReadOnlyList<IProjection> _projections;
+    private readonly IReadOnlyCollection<string> _projectionNames;
 
     public ProjectionLagReader(
         IEventStoreHeadPosition headPosition,
         ICheckpointStore checkpointStore,
-        IEnumerable<IProjection> projections)
+        IProjectionRoster roster)
     {
         ArgumentNullException.ThrowIfNull(headPosition);
         ArgumentNullException.ThrowIfNull(checkpointStore);
-        ArgumentNullException.ThrowIfNull(projections);
+        ArgumentNullException.ThrowIfNull(roster);
         _headPosition = headPosition;
         _checkpointStore = checkpointStore;
-        _projections = projections.ToList();
+        _projectionNames = roster.Names;
     }
 
     public async Task<IReadOnlyList<ProjectionLag>> ReadAsync(CancellationToken ct)
@@ -30,12 +30,12 @@ public sealed class ProjectionLagReader
         // The head is global and identical for every projection, so read it once.
         var head = await _headPosition.GetHeadPositionAsync(ct);
 
-        var rows = new List<ProjectionLag>(_projections.Count);
-        foreach (var projection in _projections)
+        var rows = new List<ProjectionLag>(_projectionNames.Count);
+        foreach (var name in _projectionNames)
         {
             ct.ThrowIfCancellationRequested();
-            var checkpoint = await _checkpointStore.GetPositionAsync(projection.Name, ct);
-            rows.Add(new ProjectionLag(projection.Name, head, checkpoint, head - checkpoint));
+            var checkpoint = await _checkpointStore.GetPositionAsync(name, ct);
+            rows.Add(new ProjectionLag(name, head, checkpoint, head - checkpoint));
         }
         return rows;
     }
