@@ -35,7 +35,7 @@ public sealed class OrderListProjection
       IEventHandler<ShipmentScheduled>,
       IEventHandler<ShipmentReturned>
 {
-    public string Name => "order-list";
+    public string Name => ProjectionNames.OrderList;
 
     private readonly IOrderListStore _store;
     private readonly ILogger<OrderListProjection> _logger;

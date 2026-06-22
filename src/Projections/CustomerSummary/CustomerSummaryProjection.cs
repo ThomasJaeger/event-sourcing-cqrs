@@ -19,7 +19,7 @@ public sealed class CustomerSummaryProjection
       IEventHandler<OrderPlaced>,
       IEventHandler<OrderCancelled>
 {
-    public string Name => "customer-summary";
+    public string Name => ProjectionNames.CustomerSummary;
 
     private readonly ICustomerSummaryStore _store;
     private readonly ILogger<CustomerSummaryProjection> _logger;

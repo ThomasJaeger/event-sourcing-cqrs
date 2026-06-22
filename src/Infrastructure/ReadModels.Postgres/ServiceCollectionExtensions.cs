@@ -34,6 +34,12 @@ public static class ServiceCollectionExtensions
         // current-roles store. AddReadModels adds the rest of the read-model surface on top.
         services.AddCurrentRolesReadModel(configure);
 
+        // The name-only roster, single-sourced in AddProjectionRoster: the projection
+        // identities (their checkpoint names) without the projection instances.
+        // Delegated, not registered inline, so the roster lives in one place and an
+        // operator host composes it standalone (ADR 0040) free of the read-model stores.
+        services.AddProjectionRoster();
+
         // The notification publisher the six unit-of-works stage onto inside
         // CommitAsync. One shared singleton, stateless beyond its logger; it sources
         // the envelope serializer and channel name from NotificationContract, so it

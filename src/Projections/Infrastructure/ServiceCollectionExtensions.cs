@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace EventSourcingCqrs.Projections.Infrastructure;
 
@@ -39,6 +40,18 @@ public static class ServiceCollectionExtensions
             services.AddSingleton(implemented, sp => sp.GetRequiredService<TProjection>());
         }
 
+        return services;
+    }
+
+    // The standalone name-only roster registration: registers an IProjectionRoster
+    // whose Names are the ProjectionNames constants, and nothing else. No projection
+    // singletons, no stores, no serializer, so an operator host (the AdminConsole,
+    // ADR 0040) composes the roster alone, free of the read-model registration's
+    // over-provisioning. AddReadModels delegates here so the roster is single-sourced.
+    public static IServiceCollection AddProjectionRoster(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddSingleton<IProjectionRoster, ProjectionRoster>();
         return services;
     }
 }

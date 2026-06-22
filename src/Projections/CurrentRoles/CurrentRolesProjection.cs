@@ -12,7 +12,7 @@ public sealed class CurrentRolesProjection
       IEventHandler<RoleAssigned>,
       IEventHandler<RoleRevoked>
 {
-    public string Name => "current-roles";
+    public string Name => ProjectionNames.CurrentRoles;
 
     private readonly ICurrentUserRolesStore _store;
 

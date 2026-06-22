@@ -29,7 +29,7 @@ public sealed class OrderThroughputProjection
     // span of an event's occurrence-second, pruning older buckets on each write.
     private static readonly TimeSpan RetentionWindow = TimeSpan.FromSeconds(300);
 
-    public string Name => "order-throughput";
+    public string Name => ProjectionNames.OrderThroughput;
 
     private readonly IOrderThroughputStore _store;
 

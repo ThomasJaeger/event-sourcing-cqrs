@@ -14,7 +14,7 @@ public sealed class SkuToInventoryIdProjection
     : IProjection,
       IEventHandler<InventoryCreated>
 {
-    public string Name => "sku-to-inventory-id";
+    public string Name => ProjectionNames.SkuToInventoryId;
 
     private readonly ISkuToInventoryIdStore _store;
 

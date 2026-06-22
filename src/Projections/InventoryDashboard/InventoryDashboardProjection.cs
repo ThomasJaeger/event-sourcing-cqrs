@@ -21,7 +21,7 @@ public sealed class InventoryDashboardProjection
       IEventHandler<InventoryReserved>,
       IEventHandler<InventoryReleased>
 {
-    public string Name => "inventory-dashboard";
+    public string Name => ProjectionNames.InventoryDashboard;
 
     private readonly IInventoryDashboardStore _store;
     private readonly ILogger<InventoryDashboardProjection> _logger;

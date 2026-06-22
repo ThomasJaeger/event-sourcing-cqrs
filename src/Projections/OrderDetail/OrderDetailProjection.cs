@@ -40,7 +40,7 @@ public sealed class OrderDetailProjection
       IEventHandler<PaymentRefunded>,
       IEventHandler<PaymentVoided>
 {
-    public string Name => "order-detail";
+    public string Name => ProjectionNames.OrderDetail;
 
     private readonly IOrderDetailStore _store;
     private readonly JsonSerializerOptions _jsonOptions;

@@ -16,7 +16,7 @@ public sealed class OrderIdToPaymentIdProjection
     : IProjection,
       IEventHandler<PaymentAuthorized>
 {
-    public string Name => "order-id-to-payment-id";
+    public string Name => ProjectionNames.OrderIdToPaymentId;
 
     private readonly IOrderIdToPaymentIdStore _store;
 
