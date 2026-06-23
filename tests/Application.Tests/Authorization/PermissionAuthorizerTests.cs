@@ -38,4 +38,20 @@ public class PermissionAuthorizerTests
     {
         Service().IsAuthorized(Array.Empty<Role>(), Permission.ViewOrder).Should().BeFalse();
     }
+
+    // Characterization: the RolePermissionPolicy shape pre-exists this test. Admin is computed-all
+    // from Enum.GetValues<Permission>(), and the non-Admin roles (Customer, Support, System) are
+    // explicit literals, so minting the RebuildProjection member is a no-logic enum addition. These two
+    // pin the new member's placement in that existing shape: Admin holds it, a non-Admin role does not.
+    [Fact]
+    public void Admin_is_authorized_for_RebuildProjection()
+    {
+        Service().IsAuthorized(new[] { Role.Admin }, Permission.RebuildProjection).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_non_admin_role_is_denied_RebuildProjection()
+    {
+        Service().IsAuthorized(new[] { Role.Support }, Permission.RebuildProjection).Should().BeFalse();
+    }
 }

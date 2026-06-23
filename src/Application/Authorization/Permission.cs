@@ -30,4 +30,5 @@ public enum Permission
     MarkOrderCompleted,
     ViewOrderThroughput,
     AccessAdminConsole,
+    RebuildProjection,
 }
