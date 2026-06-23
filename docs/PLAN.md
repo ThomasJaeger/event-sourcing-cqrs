@@ -44,7 +44,7 @@ Configuration switches between them with no domain-code changes.
 - CustomerSummaryProjection
 - InventoryDashboardProjection
 
-Three further projections register alongside these: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (the projection-private cross-aggregate lookups of ADR 0020) and CurrentRolesProjection (the RBAC current-roles read model), for seven registered projections in all.
+Four further projections register alongside these: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (the projection-private cross-aggregate lookups of ADR 0020), CurrentRolesProjection (the RBAC current-roles read model), and OrderThroughputProjection (the admin-metrics throughput meter from Phase 11), for eight registered projections in all.
 
 Read models live in PostgreSQL with a mix of relational tables and JSONB columns for document-shaped views.
 

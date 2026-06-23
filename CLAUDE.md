@@ -115,7 +115,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Projections are idempotent. Re-reading the same event must produce the same result.
 * Projections do not call back into the write side.
 * Each projection has its own checkpoint. Projections never share state.
-* Seven projections register in v1. Four are user-facing read models (OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection), a mix of relational and JSONB. Three support the system: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (projection-private cross-aggregate lookups, ADR 0020) and CurrentRolesProjection (the RBAC current-roles read model).
+* Eight projections register in v1. Four are user-facing read models (OrderListProjection, OrderDetailProjection, CustomerSummaryProjection, InventoryDashboardProjection), a mix of relational and JSONB. Four support the system: SkuToInventoryIdProjection and OrderIdToPaymentIdProjection (projection-private cross-aggregate lookups, ADR 0020), CurrentRolesProjection (the RBAC current-roles read model), and OrderThroughputProjection (the order-throughput meter).
 * Trigger mechanism is per event store: polling and LISTEN/NOTIFY for PostgreSQL, polling for SQL Server, native subscriptions for KurrentDB, DynamoDB Streams for DynamoDB.
 
 ### Process managers
