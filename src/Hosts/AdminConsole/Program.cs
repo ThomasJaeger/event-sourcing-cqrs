@@ -13,6 +13,16 @@ using Microsoft.AspNetCore.Authorization;
 // resolve yet; the redirect is the declared fail-closed interim.
 var builder = WebApplication.CreateBuilder(args);
 
+// Validate the DI graph on build in every environment. The default builder validates only in
+// Development; making it unconditional fails the host closed at startup on a missing or
+// over-provisioned registration rather than surfacing the defect at the first operator action, the
+// same fail-closed posture as the throw-on-missing connection-string guards below.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateOnBuild = true;
+    options.ValidateScopes = true;
+});
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
