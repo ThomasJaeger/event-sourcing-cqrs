@@ -8,6 +8,7 @@ using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderList;
+using EventSourcingCqrs.Projections.OrderThroughput;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,6 +76,49 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         ctx.TenantAccessor.Current = WellKnownTenants.Default;
         (await ctx.OrderListStore.GetAsync(ctx.OrderA, CancellationToken.None)).Should().Be(defaultABefore);
         (await ctx.OrderListStore.GetAsync(ctx.OrderB, CancellationToken.None)).Should().Be(defaultBBefore);
+        (await ctx.CheckpointStore.GetPositionAsync(ctx.ProjectionName, CancellationToken.None))
+            .Should().Be(checkpointBefore);
+    }
+
+    // Characterization (ADR 0041): the per-tenant throughput rebuild already holds end to end, so this
+    // pins it rather than driving new code. The generic PerTenantProjectionRebuilder (checkpoint-neutral
+    // RebuildModeCheckpointStore, bounded ReplayForTenantAsync) pre-existed, and the prior commit made the
+    // throughput store fit it by implementing ITenantResettable; the throughput projection drops into the
+    // Func<ICheckpointStore, IProjection> factory the same way OrderList does. Rebuilding one tenant's
+    // buckets restores that tenant's buckets, leaves the other tenant's untouched, and moves no global
+    // checkpoint (the safety property the ADR rests on).
+    [Fact]
+    public async Task Rebuilding_throughput_for_one_tenant_restores_its_buckets_and_moves_no_global_checkpoint()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var ctx = await ArrangeThroughputAsync(dataSource);
+
+        // Capture each tenant's buckets and the shared global checkpoint before the rebuild.
+        ctx.TenantAccessor.Current = OtherTenant;
+        var otherBefore = await ctx.Store.GetBucketsAsync(CancellationToken.None);
+        ctx.TenantAccessor.Current = WellKnownTenants.Default;
+        var defaultBefore = await ctx.Store.GetBucketsAsync(CancellationToken.None);
+        var checkpointBefore = await ctx.CheckpointStore.GetPositionAsync(
+            ctx.ProjectionName, CancellationToken.None);
+
+        // The live pass populated both tenants' buckets, so the equality assertions are not vacuous.
+        defaultBefore.Should().NotBeEmpty();
+        otherBefore.Should().NotBeEmpty();
+
+        var rebuilder = new PerTenantProjectionRebuilder(
+            ctx.EventStore, ctx.CheckpointStore, ctx.TenantAccessor);
+        await rebuilder.RebuildAsync(
+            ctx.ProjectionFactory, (ITenantResettable)ctx.Store, WellKnownTenants.Default,
+            CancellationToken.None);
+
+        // The default tenant's buckets rebuild to the same values; the other tenant's are untouched;
+        // the global checkpoint is unmoved. The checkpoint-unchanged assertion is the safety property
+        // the ADR rests on.
+        ctx.TenantAccessor.Current = WellKnownTenants.Default;
+        (await ctx.Store.GetBucketsAsync(CancellationToken.None)).Should().BeEquivalentTo(defaultBefore);
+        ctx.TenantAccessor.Current = OtherTenant;
+        (await ctx.Store.GetBucketsAsync(CancellationToken.None)).Should().BeEquivalentTo(otherBefore);
         (await ctx.CheckpointStore.GetPositionAsync(ctx.ProjectionName, CancellationToken.None))
             .Should().Be(checkpointBefore);
     }
@@ -279,4 +323,59 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         Guid OrderA,
         Guid OrderB,
         Guid OrderC);
+
+    // The throughput analogue of ArrangeAsync: the throughput projection over a store wired to the
+    // supplied checkpoint store (the same factory shape OrderList uses), seeded with one placed order
+    // per tenant driven live so both tenants' buckets and the shared checkpoint advance.
+    private static async Task<ThroughputRebuildContext> ArrangeThroughputAsync(NpgsqlDataSource dataSource)
+    {
+        var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
+        var eventStore = new PostgresEventStore(
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+        var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var checkpointStore = new PostgresCheckpointStore(readModelFactory);
+        var store = new PostgresOrderThroughputStore(
+            readModelFactory, checkpointStore, TestNotificationPublisher.Create(), tenantAccessor);
+        var liveProjection = new OrderThroughputProjection(store);
+
+        Func<ICheckpointStore, IProjection> projectionFactory = cp =>
+            new OrderThroughputProjection(
+                new PostgresOrderThroughputStore(
+                    readModelFactory, cp, TestNotificationPublisher.Create(), tenantAccessor));
+
+        var customer = Guid.NewGuid();
+        await AppendPlacedOrderAsync(eventStore, WellKnownTenants.Default, Guid.NewGuid(), customer);
+        await AppendPlacedOrderAsync(eventStore, OtherTenant, Guid.NewGuid(), customer);
+
+        var dispatcher = BuildThroughputDispatcher(liveProjection, tenantAccessor);
+        await foreach (var envelope in eventStore.ReadAllAsync(0, CancellationToken.None))
+        {
+            await dispatcher.DispatchAsync(ToOutboxMessage(envelope), CancellationToken.None);
+        }
+        tenantAccessor.Current = WellKnownTenants.Default;
+
+        return new ThroughputRebuildContext(
+            eventStore, checkpointStore, store, projectionFactory, liveProjection.Name, tenantAccessor);
+    }
+
+    private static InProcessMessageDispatcher BuildThroughputDispatcher(
+        OrderThroughputProjection projection, ICurrentTenantAccessor tenantAccessor)
+    {
+        var services = new ServiceCollection();
+        // The throughput projection handles every order event; the seed emits OrderDrafted,
+        // OrderLineAdded, and OrderPlaced, so all three route to it.
+        services.AddSingleton<IEventHandler<OrderDrafted>>(projection);
+        services.AddSingleton<IEventHandler<OrderLineAdded>>(projection);
+        services.AddSingleton<IEventHandler<OrderPlaced>>(projection);
+        services.AddSingleton(tenantAccessor);
+        return new InProcessMessageDispatcher(services.BuildServiceProvider());
+    }
+
+    private sealed record ThroughputRebuildContext(
+        PostgresEventStore EventStore,
+        PostgresCheckpointStore CheckpointStore,
+        PostgresOrderThroughputStore Store,
+        Func<ICheckpointStore, IProjection> ProjectionFactory,
+        string ProjectionName,
+        StubTenantAccessor TenantAccessor);
 }
