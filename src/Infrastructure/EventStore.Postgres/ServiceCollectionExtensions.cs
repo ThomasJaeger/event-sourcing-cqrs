@@ -133,6 +133,55 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    // The focused read-side event-store registration for replay: the materialization stack a per-tenant
+    // rebuild needs to read and deserialize a tenant's history, plus IEventStore, and nothing else. It
+    // registers no NpgsqlDataSource or connection factory (the host holds both from
+    // AddEventStoreHeadPosition), no write-side service (no command registry, idempotency store, or delay
+    // queue), and no IEventTypeProvider. The providers are concrete bounded contexts, so the composing
+    // host supplies them, the same idiom AddPostgresEventStore follows: the registries enumerate the
+    // host's IEventTypeProvider registrations to populate.
+    public static IServiceCollection AddEventStoreReplayReader(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton(_ => new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new TenantIdJsonConverter() },
+        });
+
+        services.TryAddSingleton<EventTypeRegistry>(sp =>
+        {
+            var registry = new EventTypeRegistry();
+            foreach (var provider in sp.GetServices<IEventTypeProvider>())
+            {
+                foreach (var eventType in provider.GetEventTypes())
+                {
+                    registry.Register(eventType);
+                }
+            }
+            return registry;
+        });
+
+        services.TryAddSingleton<ProcessManagerEventTypeRegistry>(sp =>
+        {
+            var registry = new ProcessManagerEventTypeRegistry();
+            foreach (var provider in sp.GetServices<IProcessManagerEventTypeProvider>())
+            {
+                foreach (var eventType in provider.GetEventTypes())
+                {
+                    registry.Register(eventType);
+                }
+            }
+            return registry;
+        });
+
+        services.AddSingleton<IEventStore, PostgresEventStore>();
+
+        return services;
+    }
+
     // The outbox processor is registered separately from AddPostgresEventStore so a
     // host that writes events but does not drain the outbox composes the event
     // store without it. The Api host dispatches commands over HTTP and lets the

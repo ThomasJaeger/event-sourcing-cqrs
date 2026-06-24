@@ -1,11 +1,20 @@
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Context;
+using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Access;
+using EventSourcingCqrs.Domain.Billing;
+using EventSourcingCqrs.Domain.Fulfillment;
+using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Infrastructure.SignalR;
 using EventSourcingCqrs.Projections.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 // Chapter 17: the AdminConsole operator host. A Blazor Server host that fails closed (ADR 0040): a
 // host-level fallback policy gates every route, so an unauthenticated request is challenged with a
@@ -47,6 +56,23 @@ var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_S
 builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
 builder.Services.AddProjectionRoster();
 builder.Services.AddSingleton<ProjectionLagReader>();
+
+// The Replay Tool's per-tenant rebuild (Phase 12, ADR 0041). It reads the event stream, so the host
+// adds a focused read-side event store on top of the head reader above: AddEventStoreReplayReader brings
+// the materialization stack and IEventStore with no second data source. The four event-type providers
+// register host-side (the adapter idiom); the full four-context set is required because a tenant's
+// history can span every context and ReadAllForTenantAsync throws on any unregistered type. The tenant
+// accessor and the notification publisher are the throughput store's remaining dependencies, and the
+// rebuilder composes the read, the per-tenant reset, and the checkpoint-neutral replay.
+builder.Services.AddEventStoreReplayReader();
+builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
+builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
+builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
+builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();
+builder.Services.AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>();
+builder.Services.TryAddSingleton<PostgresPgNotifyPublisher>();
+builder.Services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
+builder.Services.AddSingleton<PerTenantProjectionRebuilder>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.
