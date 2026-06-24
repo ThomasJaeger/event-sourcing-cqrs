@@ -131,8 +131,8 @@ internal static class CrossTenantQueryCases
     {
         // Throughput is a tenant-wide collection with no owning id, so isolation is the collection
         // shape: the default tenant's bucket is present and the other tenant's bucket is absent.
-        // TruncateAsync is a no-op for this store, so the case isolates by distinct unique seconds
-        // rather than truncating, and the seconds sit far from now so residual rows cannot collide.
+        // The store has no whole-table clear, so the case isolates by distinct unique seconds that
+        // sit far from now, where residual rows from other cases cannot collide.
         var defaultSecond = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         var otherSecond = new DateTime(2024, 1, 2, 3, 4, 6, DateTimeKind.Utc);
         var store = fixture.Factory.Services.GetRequiredService<IOrderThroughputStore>();

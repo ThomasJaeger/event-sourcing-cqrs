@@ -27,12 +27,6 @@ internal sealed class InMemoryOrderThroughputStore : IOrderThroughputStore
         => Task.FromResult<IReadOnlyList<OrderThroughputRow>>(
             _buckets.Select(b => new OrderThroughputRow(b.Key, b.Value)).ToList());
 
-    public Task TruncateAsync(CancellationToken ct)
-    {
-        _buckets.Clear();
-        return Task.CompletedTask;
-    }
-
     private sealed class UnitOfWork(InMemoryOrderThroughputStore store) : IOrderThroughputUnitOfWork
     {
         private NotificationEnvelope? _staged;

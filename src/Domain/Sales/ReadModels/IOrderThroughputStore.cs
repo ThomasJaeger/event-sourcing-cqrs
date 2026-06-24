@@ -14,9 +14,6 @@ public interface IOrderThroughputStore
     // Read path: every per-second bucket for the tenant the read is scoped to,
     // which the later throughput query and page read.
     Task<IReadOnlyList<OrderThroughputRow>> GetBucketsAsync(CancellationToken ct);
-
-    // Rebuild support: drop every bucket so a replay starts empty.
-    Task TruncateAsync(CancellationToken ct);
 }
 
 // One projection write: the per-second count increment and the checkpoint advance

@@ -94,11 +94,8 @@ public sealed class GetOrderThroughputTests
         public Task<IReadOnlyList<OrderThroughputRow>> GetBucketsAsync(CancellationToken ct)
             => Task.FromResult(_buckets);
 
-        // The handler reaches only the read method; the write and rebuild paths are not its contract.
+        // The handler reaches only the read method; the write path is not its contract.
         public Task<IOrderThroughputUnitOfWork> BeginAsync(CancellationToken ct)
-            => throw new NotSupportedException();
-
-        public Task TruncateAsync(CancellationToken ct)
             => throw new NotSupportedException();
     }
 }

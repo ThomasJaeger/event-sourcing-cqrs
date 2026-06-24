@@ -6,11 +6,11 @@ using NpgsqlTypes;
 
 namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 
-// PostgreSQL implementation of IOrderThroughputStore, mirroring
-// PostgresInventoryDashboardStore. RED #4 placeholder: the structural plumbing
-// (connection/transaction, checkpoint, notification, commit) is wired, but the
-// data-access methods do not yet persist or read, so the integration test fails on
-// the missing buckets. The real upsert/prune/select land in the GREEN turn.
+// PostgreSQL implementation of IOrderThroughputStore and ITenantResettable, mirroring
+// PostgresInventoryDashboardStore. Buckets are read and written per tenant against
+// read_models.order_throughput: BeginAsync opens the unit of work that increments and
+// prunes a tenant's per-second counts, GetBucketsAsync reads them back, and
+// ResetTenantAsync drops one tenant's buckets for a per-tenant rebuild.
 public sealed class PostgresOrderThroughputStore : IOrderThroughputStore, ITenantResettable
 {
     private readonly IReadModelConnectionFactory _factory;
@@ -73,9 +73,6 @@ public sealed class PostgresOrderThroughputStore : IOrderThroughputStore, ITenan
         return rows;
     }
 
-    // RED #4 placeholder: no-op. The GREEN turn truncates read_models.order_throughput.
-    public Task TruncateAsync(CancellationToken ct) => Task.CompletedTask;
-
     // Tenant-scoped reset for a per-tenant rebuild: deletes only this tenant's buckets,
     // never a TRUNCATE, never the checkpoint (ITenantResettable).
     public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
@@ -90,10 +87,11 @@ public sealed class PostgresOrderThroughputStore : IOrderThroughputStore, ITenan
     }
 }
 
-// PostgreSQL unit of work for the order-throughput read model. RED #4 placeholder:
-// the checkpoint, notification, and commit plumbing mirrors
-// PostgresInventoryDashboardUnitOfWork; the count and prune methods do not yet
-// persist, so a committed write leaves the table empty.
+// PostgreSQL unit of work for the order-throughput read model, mirroring
+// PostgresInventoryDashboardUnitOfWork. IncrementSecondAsync upserts a tenant's
+// per-second bucket and PruneBeforeAsync trims the retention window; CommitAsync makes
+// the count, the prune, the staged notification, and the checkpoint advance durable
+// together on one transaction.
 internal sealed class PostgresOrderThroughputUnitOfWork : IOrderThroughputUnitOfWork
 {
     private readonly NpgsqlConnection _connection;
