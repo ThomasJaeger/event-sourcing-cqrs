@@ -11,7 +11,7 @@ namespace EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 // (connection/transaction, checkpoint, notification, commit) is wired, but the
 // data-access methods do not yet persist or read, so the integration test fails on
 // the missing buckets. The real upsert/prune/select land in the GREEN turn.
-public sealed class PostgresOrderThroughputStore : IOrderThroughputStore
+public sealed class PostgresOrderThroughputStore : IOrderThroughputStore, ITenantResettable
 {
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
@@ -75,6 +75,19 @@ public sealed class PostgresOrderThroughputStore : IOrderThroughputStore
 
     // RED #4 placeholder: no-op. The GREEN turn truncates read_models.order_throughput.
     public Task TruncateAsync(CancellationToken ct) => Task.CompletedTask;
+
+    // Tenant-scoped reset for a per-tenant rebuild: deletes only this tenant's buckets,
+    // never a TRUNCATE, never the checkpoint (ITenantResettable).
+    public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM read_models.order_throughput WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }
 
 // PostgreSQL unit of work for the order-throughput read model. RED #4 placeholder:

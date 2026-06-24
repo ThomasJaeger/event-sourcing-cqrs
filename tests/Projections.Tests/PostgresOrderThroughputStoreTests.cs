@@ -60,4 +60,38 @@ public class PostgresOrderThroughputStoreTests : IClassFixture<PostgresFixture>
             new StubTenantAccessor { Current = TenantTwo });
         (await otherTenantStore.GetBucketsAsync(CancellationToken.None)).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Resetting_one_tenant_clears_only_that_tenants_buckets()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+
+        var tenantOneStore = new PostgresOrderThroughputStore(
+            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(),
+            new StubTenantAccessor { Current = TenantOne });
+        var tenantTwoStore = new PostgresOrderThroughputStore(
+            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(),
+            new StubTenantAccessor { Current = TenantTwo });
+
+        await using (var uow = await tenantOneStore.BeginAsync(CancellationToken.None))
+        {
+            await uow.IncrementSecondAsync(SecondNew, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+        await using (var uow = await tenantTwoStore.BeginAsync(CancellationToken.None))
+        {
+            await uow.IncrementSecondAsync(SecondNew, CancellationToken.None);
+            await uow.CommitAsync(ProjectionName, 1, CancellationToken.None);
+        }
+
+        // Reset only TenantOne through the ITenantResettable surface the store does not implement yet.
+        await ((ITenantResettable)tenantOneStore).ResetTenantAsync(TenantOne, CancellationToken.None);
+
+        // TenantOne's buckets are gone; TenantTwo's remain, so the reset is a tenant-scoped delete,
+        // not a whole-table truncate.
+        (await tenantOneStore.GetBucketsAsync(CancellationToken.None)).Should().BeEmpty();
+        (await tenantTwoStore.GetBucketsAsync(CancellationToken.None)).Should().ContainSingle();
+    }
 }
