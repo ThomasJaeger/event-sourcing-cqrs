@@ -17,12 +17,12 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.AdminConsole;
 
 // Phase 12 commit 6a: the Replay Tool page drives a per-tenant throughput rebuild from the
-// AdminConsole host. This composition test boots the real host (now DI-validated on build, commit
-// 6a-0) and resolves the rebuild graph from it. The host registers no PerTenantProjectionRebuilder,
-// no IEventStore, no ICurrentTenantAccessor, and no PostgresPgNotifyPublisher today, so the resolve
-// fails: the composition the page needs is absent. Every component is resolved from the host so the
-// test exercises the real composition, not a hand-built provider. The seed and rebuild below are the
-// GREEN-ready shape the registration will satisfy; in the RED turn the rebuilder resolve throws first.
+// AdminConsole host. This composition test boots the real host (DI-validated on build, commit 6a-0)
+// and resolves the whole rebuild graph from it: the rebuilder, the event store, the throughput store,
+// the tenant accessor, and the notification publisher, composed host-side in commit 6a. Every component
+// is resolved from the host so the test exercises the real composition, not a hand-built provider. It
+// seeds a tenant's cross-context history, rebuilds one tenant, and asserts its buckets restore, the
+// other tenant is untouched, and the global checkpoint is unmoved.
 public class AdminConsoleThroughputRebuildCompositionTests : IClassFixture<AdminConsoleAdmitFixture>
 {
     private static readonly TenantId TenantA = TenantId.From(Guid.Parse("a1a1a1a1-0000-0000-0000-000000000001"));
