@@ -8,6 +8,7 @@ using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
+using EventSourcingCqrs.Hosts.AdminConsole.Replay;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Infrastructure.SignalR;
@@ -73,6 +74,7 @@ builder.Services.AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAcc
 builder.Services.TryAddSingleton<PostgresPgNotifyPublisher>();
 builder.Services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
 builder.Services.AddSingleton<PerTenantProjectionRebuilder>();
+builder.Services.AddSingleton<IOrderThroughputRebuild, OrderThroughputRebuild>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.

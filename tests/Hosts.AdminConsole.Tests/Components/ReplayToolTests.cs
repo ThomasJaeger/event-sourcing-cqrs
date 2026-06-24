@@ -1,6 +1,9 @@
 using Bunit;
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Hosts.AdminConsole.Components.Pages;
+using EventSourcingCqrs.Hosts.AdminConsole.Replay;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace EventSourcingCqrs.Hosts.AdminConsole.Tests.Components;
@@ -15,13 +18,20 @@ public class ReplayToolTests : BunitContext
     [Fact]
     public void The_replay_tool_page_renders_the_tenant_input_and_rebuild_control()
     {
+        Services.AddSingleton<IOrderThroughputRebuild>(new NoopRebuild());
+
         var cut = Render<ReplayTool>();
 
         // The operator enters the target tenant id.
         cut.FindAll("input").Should().NotBeEmpty();
         // The page names what it rebuilds: the order-throughput read model.
         cut.Markup.Should().Contain("order-throughput");
-        // The rebuild control the confirmation-gated action (commit 6b-2) will trigger.
+        // The rebuild control the confirmation-gated action triggers.
         cut.Find("button").TextContent.Should().Contain("Rebuild");
+    }
+
+    private sealed class NoopRebuild : IOrderThroughputRebuild
+    {
+        public Task RebuildOrderThroughputAsync(TenantId tenant, CancellationToken ct) => Task.CompletedTask;
     }
 }

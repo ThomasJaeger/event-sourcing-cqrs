@@ -1,34 +1,116 @@
 @page "/replay"
+@using EventSourcingCqrs.Domain.Abstractions
+@using EventSourcingCqrs.Hosts.AdminConsole.Replay
+@inject IOrderThroughputRebuild Rebuild
 
 <PageTitle>Replay Tool</PageTitle>
 
 <h1 class="text-2xl font-bold p-6">Replay Tool</h1>
 
-<div class="px-6">
-    <p class="pb-4 text-gray-700">
-        Rebuild the order-throughput read model for one tenant by replaying that tenant's events. The
-        rebuild clears only the named tenant's buckets and leaves every other tenant and the shared
-        global checkpoint untouched.
-    </p>
+@if (succeeded)
+{
+    <p class="px-6 text-green-700">Rebuild complete. The order-throughput read model for the tenant was rebuilt.</p>
+}
+else if (failed)
+{
+    <p class="px-6 text-red-700">Rebuild failed. The order-throughput read model was not rebuilt.</p>
+}
+else if (confirming)
+{
+    <div class="px-6">
+        <p class="pb-4 text-gray-700">
+            Confirm: rebuild the order-throughput read model for tenant @target!.Value. This resets the
+            tenant's buckets and replays its events; every other tenant and the global checkpoint are left
+            untouched.
+        </p>
+        <button type="button" @onclick="OnConfirmAsync"
+                class="rounded bg-red-700 px-4 py-2 text-white">
+            Confirm rebuild
+        </button>
+        <button type="button" @onclick="OnCancel"
+                class="ml-2 rounded border border-gray-300 px-4 py-2 text-gray-700">
+            Cancel
+        </button>
+    </div>
+}
+else
+{
+    <div class="px-6">
+        <p class="pb-4 text-gray-700">
+            Rebuild the order-throughput read model for one tenant by replaying that tenant's events. The
+            rebuild clears only the named tenant's buckets and leaves every other tenant and the shared
+            global checkpoint untouched.
+        </p>
 
-    <label class="block pb-4">
-        <span class="block pb-1 text-sm font-medium text-gray-700">Tenant id</span>
-        <input @bind="tenantId"
-               class="block w-96 rounded border border-gray-300 px-2 py-1"
-               placeholder="00000000-0000-0000-0000-000000000000" />
-    </label>
+        @if (validationError is not null)
+        {
+            <p class="pb-2 text-red-700">@validationError</p>
+        }
 
-    <button type="button" disabled
-            class="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50">
-        Rebuild order-throughput
-    </button>
-</div>
+        <label class="block pb-4">
+            <span class="block pb-1 text-sm font-medium text-gray-700">Tenant id</span>
+            <input @bind="tenantId"
+                   class="block w-96 rounded border border-gray-300 px-2 py-1"
+                   placeholder="00000000-0000-0000-0000-000000000000" />
+        </label>
+
+        <button type="button" @onclick="OnRebuildClicked"
+                class="rounded bg-red-700 px-4 py-2 text-white">
+            Rebuild order-throughput
+        </button>
+    </div>
+}
 
 @code {
-    // The Replay Tool's route-and-controls half (Phase 12, ADR 0041): an operator enters a target tenant
-    // id and rebuilds the order-throughput read model for it. Authorization is the host fallback gate
-    // (ADR 0040), upstream of render, so the page has no denied branch. The rebuild action, its
-    // confirmation step, and the per-action permission gate are a later commit; here the button renders
-    // disabled and the controls are static until that action lands.
+    // The Replay Tool: an operator enters a target tenant id and rebuilds the order-throughput read model
+    // for it, gated by an explicit confirmation before the destructive rebuild runs. The page is
+    // interactive through the host's global <Routes @rendermode="InteractiveServer" /> (App.razor), so it
+    // declares no per-page render mode, which would conflict with the inherited one and throw at render.
+    //
+    // Authorization is the host fallback gate (ADR 0040), upstream of render, so the page has no denied
+    // branch. The per-action RebuildProjection check is deferred until an operator role below Admin exists
+    // (ADR 0041, Revisit when); today every console operator is an Admin, who holds every permission.
     private string tenantId = string.Empty;
+    private TenantId? target;
+    private bool confirming;
+    private string? validationError;
+    private bool succeeded;
+    private bool failed;
+
+    private void OnRebuildClicked()
+    {
+        validationError = null;
+        try
+        {
+            // TenantId.Parse rejects malformed input and the all-zeros GUID with ArgumentException, and
+            // there is no TryParse, so the guard is a try/catch around the one validating factory.
+            target = TenantId.Parse(tenantId);
+        }
+        catch (ArgumentException)
+        {
+            validationError = "Enter a valid tenant id (a GUID).";
+            return;
+        }
+        confirming = true;
+    }
+
+    private void OnCancel()
+    {
+        confirming = false;
+        target = null;
+    }
+
+    private async Task OnConfirmAsync()
+    {
+        confirming = false;
+        try
+        {
+            await Rebuild.RebuildOrderThroughputAsync(target!, CancellationToken.None);
+            succeeded = true;
+        }
+        catch (Exception)
+        {
+            failed = true;
+        }
+    }
 }
