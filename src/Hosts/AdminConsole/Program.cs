@@ -7,6 +7,7 @@ using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
+using EventSourcingCqrs.Hosts.AdminConsole.Browser;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Hosts.AdminConsole.Replay;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
@@ -75,6 +76,11 @@ builder.Services.TryAddSingleton<PostgresPgNotifyPublisher>();
 builder.Services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
 builder.Services.AddSingleton<PerTenantProjectionRebuilder>();
 builder.Services.AddSingleton<IOrderThroughputRebuild, OrderThroughputRebuild>();
+
+// The Event Store Browser's read seam (Phase 12). It reads one aggregate stream through the IEventStore
+// composed above and re-serializes payloads with the same JsonSerializerOptions, so it adds no second
+// data source and needs no registration beyond this line.
+builder.Services.AddSingleton<IStreamInspector, StreamInspector>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.
