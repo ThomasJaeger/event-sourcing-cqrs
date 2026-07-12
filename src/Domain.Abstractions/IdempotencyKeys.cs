@@ -15,7 +15,7 @@ public static class IdempotencyKeys
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentException.ThrowIfNullOrWhiteSpace(step);
-        if (!stream.Value.StartsWith("pm-", StringComparison.Ordinal))
+        if (!stream.Value.StartsWith(StreamPrefixes.ProcessManagerPrefix, StringComparison.Ordinal))
         {
             throw new ArgumentException(
                 $"ForProcessManager requires a process-manager stream id (pm- prefix); got '{stream}'.",

@@ -10,6 +10,7 @@ using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
 using EventSourcingCqrs.Hosts.AdminConsole.Browser;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Hosts.AdminConsole.Replay;
+using EventSourcingCqrs.Hosts.AdminConsole.Tracer;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Infrastructure.SignalR;
@@ -81,6 +82,14 @@ builder.Services.AddSingleton<IOrderThroughputRebuild, OrderThroughputRebuild>()
 // composed above and re-serializes payloads with the same JsonSerializerOptions, so it adds no second
 // data source and needs no registration beyond this line.
 builder.Services.AddSingleton<IStreamInspector, StreamInspector>();
+
+// The Correlation-ID Tracer's read port and seam (Phase 12, ADR 0043). The port is its own focused
+// registration on the head-position precedent: it reads the events table by correlation_id and resolves no
+// payload type, so it composes no type registry and no IEventStore, and its shared dependencies go in
+// through TryAdd beside the ones above. The seam holds the cap and hands it to the port, so the default
+// flows from its constructor with no options plumbing.
+builder.Services.AddCorrelationTraceReader(eventStoreConnectionString);
+builder.Services.AddSingleton<ICorrelationTracer, CorrelationTracer>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.

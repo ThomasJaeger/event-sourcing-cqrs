@@ -140,7 +140,7 @@ public sealed class InMemoryEventStore : IEventStore
         int fromVersion = 0,
         CancellationToken ct = default)
     {
-        if (!streamId.Value.StartsWith("pm-", StringComparison.Ordinal))
+        if (!streamId.Value.StartsWith(StreamPrefixes.ProcessManagerPrefix, StringComparison.Ordinal))
         {
             throw new ArgumentException(
                 "ReadProcessManagerStreamAsync requires a process-manager stream id " +

@@ -39,7 +39,7 @@ public sealed class StreamInspector : IStreamInspector
         // Pre-detect a process-manager stream by the pm- prefix, the same convention the event store
         // filters aggregate reads with (stream_id NOT LIKE 'pm-%'). Returning it as unsupported here keeps
         // the aggregate read from running and throwing on a PM event type the aggregate registry lacks.
-        if (streamId.Value.StartsWith("pm-", StringComparison.Ordinal))
+        if (streamId.Value.StartsWith(StreamPrefixes.ProcessManagerPrefix, StringComparison.Ordinal))
         {
             return new StreamInspectionResult(StreamInspectionOutcome.ProcessManagerUnsupported, []);
         }
