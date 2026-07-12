@@ -104,12 +104,16 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
     private static async Task SeedChainAsync(
         IHost host, Guid orderId, string scheduledByStreamId, string scheduledByStep, CancellationToken ct)
     {
-        await SeedPmAtAwaitingPaymentAsync(host, orderId, ct);
-        await SeedPlacedOrderAsync(host, orderId, ct);
+        // The order is seeded first so its OrderPlaced can stand as the causing event for the PM
+        // save, the way it does in production: the outbox dispatches OrderPlaced, the PM starts, and
+        // the PM's events are stamped from that event's context.
+        var orderPlaced = await SeedPlacedOrderAsync(host, orderId, ct);
+        await SeedPmAtAwaitingPaymentAsync(host, orderId, orderPlaced, ct);
         await SeedDueTimeoutRowAsync(host, orderId, scheduledByStreamId, scheduledByStep, ct);
     }
 
-    private static async Task SeedPmAtAwaitingPaymentAsync(IHost host, Guid orderId, CancellationToken ct)
+    private static async Task SeedPmAtAwaitingPaymentAsync(
+        IHost host, Guid orderId, EventMetadata causing, CancellationToken ct)
     {
         var pmStream = StreamId.ForProcessManager(
             StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
@@ -117,26 +121,51 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
         pm.Start(orderId, new Money(20m, Currency.USD), Guid.NewGuid());   // -> AwaitingPayment
 
         using var scope = host.Services.CreateScope();
-        var pms = scope.ServiceProvider
-            .GetRequiredService<IProcessManagerRepository<OrderFulfillmentProcessManager>>();
-        await pms.SaveAsync(pm, ct);
+        var sp = scope.ServiceProvider;
+
+        // The context the outbox dispatcher would have established for the OrderPlaced that started
+        // this PM (ADR 0042). The repository fails closed without one, and a stub would not carry the
+        // workflow's correlation the way a real dispatch does.
+        var accessor = sp.GetRequiredService<ICommandContextAccessor>();
+        var tenantAccessor = sp.GetRequiredService<ICurrentTenantAccessor>();
+        var previousContext = accessor.Current;
+        var previousTenant = tenantAccessor.Current;
+        accessor.Current = new CausedCommandContext(
+            causing, SystemActors.OrderFulfillment, TimeProvider.System);
+        tenantAccessor.Current = causing.Tenant;
+        try
+        {
+            var pms = sp.GetRequiredService<IProcessManagerRepository<OrderFulfillmentProcessManager>>();
+            await pms.SaveAsync(pm, ct);
+        }
+        finally
+        {
+            accessor.Current = previousContext;
+            tenantAccessor.Current = previousTenant;
+        }
     }
 
-    private static async Task SeedPlacedOrderAsync(IHost host, Guid orderId, CancellationToken ct)
+    // Returns the OrderPlaced envelope's metadata, the causing event for the PM the chain seeds.
+    private static async Task<EventMetadata> SeedPlacedOrderAsync(
+        IHost host, Guid orderId, CancellationToken ct)
     {
         var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
         var eventStore = host.Services.GetRequiredService<IEventStore>();
         var customerId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
         var now = DateTime.UtcNow;
+        var orderPlaced = Envelope(
+            stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), now), now);
 
         await eventStore.AppendAsync(stream, 0,
         [
             Envelope(stream, 1, new OrderDrafted(orderId, customerId, now), now),
             Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(20m, Currency.USD), now), now),
             Envelope(stream, 3, new ShippingAddressSet(orderId, new Address("1 Main St", "Smalltown", "12345", "US"), now), now),
-            Envelope(stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), now), now),
+            orderPlaced,
         ], ct);
+
+        return orderPlaced.Metadata;
     }
 
     private static async Task SeedDueTimeoutRowAsync(

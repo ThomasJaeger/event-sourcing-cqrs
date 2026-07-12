@@ -11,8 +11,31 @@ public class ProcessManagerRepositoryTests
     private static readonly StreamId Stream =
         StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
+    // The event that caused the process manager to transition. In production it is the event the
+    // outbox dispatched to the handler, or the one that scheduled a timeout the delay queue
+    // resurfaced; either way a save always has one behind it.
+    private static readonly EventMetadata Causing = new(
+        EventId: Guid.NewGuid(),
+        CorrelationId: Guid.NewGuid(),
+        CausationId: Guid.NewGuid(),
+        ActorId: Guid.NewGuid(),
+        Source: "test",
+        SchemaVersion: 1,
+        OccurredUtc: new DateTime(2026, 7, 12, 9, 0, 0, DateTimeKind.Utc),
+        Tenant: WellKnownTenants.Default);
+
+    // The context the outbox dispatcher establishes for a process-manager handler (ADR 0042). Every
+    // production save runs under one, so the repository's other behaviors are exercised under one
+    // too; SaveAsync_throws_when_no_command_context_is_in_flight covers its absence.
     private static ProcessManagerRepository<TestPm> NewRepository(IEventStore store)
-        => new(store, new AsyncLocalCommandContextAccessor(), new AsyncLocalCurrentTenantAccessor());
+        => new(
+            store,
+            new TestKit.StubCommandContextAccessor
+            {
+                Current = new CausedCommandContext(
+                    Causing, SystemActors.OrderFulfillment, TimeProvider.System)
+            },
+            new TestKit.StubTenantAccessor { Current = WellKnownTenants.Default });
 
     private static TestPm Factory(StreamId sid) => new(sid);
 
@@ -95,6 +118,27 @@ public class ProcessManagerRepositoryTests
         var act = async () => await repo.SaveAsync(second, CancellationToken.None);
 
         await act.Should().ThrowAsync<ConcurrencyException>();
+    }
+
+    // Fail-closed (ADR 0042's Revisit-when). Every production route into a PM save now carries a
+    // command context: the outbox route gets one from the dispatcher, the timeout route from the
+    // command pipeline. A save that finds none is a dispatch-wiring regression, and stamping empty
+    // correlation, causation, and actor onto the PM's events would hide it behind rows that look
+    // written. The repository throws instead, the posture the tenant guard in the same method
+    // already takes. The tenant is set here so the assertion isolates the missing command context.
+    [Fact]
+    public async Task SaveAsync_throws_when_no_command_context_is_in_flight()
+    {
+        var repo = new ProcessManagerRepository<TestPm>(
+            new InMemoryEventStore(),
+            new TestKit.StubCommandContextAccessor { Current = null },
+            new TestKit.StubTenantAccessor { Current = WellKnownTenants.Default });
+        var pm = new TestPm(Stream);
+        pm.Start("started");
+
+        var act = async () => await repo.SaveAsync(pm, CancellationToken.None);
+
+        await act.Should().ThrowAsync<MissingCommandContextException>();
     }
 
     private sealed record Started(string Note) : IProcessManagerEvent;

@@ -75,4 +75,6 @@ The epoch is this commit. A Correlation-ID Tracer querying a stream that spans i
 
 ## Trigger for revisiting
 
-The fallback in `ProcessManagerRepository.BuildFallbackMetadata` still exists and still silently stamps empty values whenever the accessor is null. With this commit, the only remaining callers reaching it are tests that construct the repository directly and seed process managers outside a dispatch. The next commit closes that hole by making a missing context fail closed rather than fall back, which is what turns this fix from "the live paths are correct" into "an incorrect path cannot compile or run". Until it lands, a future dispatch source that saves a process manager without establishing a context will reintroduce the defect silently.
+Amended in the commit that followed this one. `ProcessManagerRepository.BuildFallbackMetadata` is deleted, and a save with no command context in flight throws `MissingCommandContextException`, the posture the tenant guard in the same method already took. A future dispatch source that saves a process manager without establishing a context now fails loudly at the first save rather than writing empty identity that looks like a row.
+
+What remains open: the repository fails closed on the context, but nothing prevents a new dispatch source from establishing a context with the *wrong* actor, since the actor is whatever the caller supplies. The declared handler actor closes that for the outbox route. A third route would need the same discipline, and there is no type-level guard forcing it.

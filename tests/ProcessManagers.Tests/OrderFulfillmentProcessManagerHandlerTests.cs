@@ -341,14 +341,14 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         // The reversal of Option 1: the timeout loads the PM under the resurfaced command's tenant from
         // the accessor, finds it at the tenant-form stream, and cancels it. The normal-flow OrderPlaced
         // lands the PM at the tenant-form stream, the accessor carries the same tenant, and the
-        // compensation command's metadata carries it too.
+        // compensation command's metadata carries it too. The tenant reaches the accessor the way it
+        // does in production: off the causing event the scheduled timeout carries.
         var harness = new OrderFulfillmentTestHarness();
         var orderId = Guid.NewGuid();
         var otherTenant = TenantId.From(Guid.NewGuid());
         await harness.SeedOrder(BuildOrder(orderId, (Guid.NewGuid(), "SKU-1", 1)));
         await harness.Receive(new OrderPlaced(orderId, Guid.NewGuid(), Usd(30m), Now), MetadataForTenant(otherTenant));
 
-        harness.EnterCommandContext(otherTenant);
         await harness.DispatchTimeoutAwaitingPayment(orderId);
 
         var cancel = harness.Dispatched.Where(d => d.Command is CancelOrder).Should().ContainSingle().Which;

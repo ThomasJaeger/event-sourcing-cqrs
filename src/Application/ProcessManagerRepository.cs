@@ -68,7 +68,7 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
         int baseVersion,
         IReadOnlyList<IProcessManagerEvent> events)
     {
-        var context = _accessor.Current;
+        var context = _accessor.Current ?? throw new MissingCommandContextException();
         var envelopes = new ProcessManagerEventEnvelope[events.Count];
         EventMetadata? previous = null;
         for (int i = 0; i < events.Count; i++)
@@ -77,17 +77,14 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
             EventMetadata metadata;
             if (previous is null)
             {
-                metadata = context is null
-                    ? BuildFallbackMetadata()
-                    : EventMetadata.ForCommand(
-                        context,
-                        _tenantAccessor.Current ?? throw new MissingTenantContextException(),
-                        schemaVersion: 1);
+                metadata = EventMetadata.ForCommand(
+                    context,
+                    _tenantAccessor.Current ?? throw new MissingTenantContextException(),
+                    schemaVersion: 1);
             }
             else
             {
-                var occurredUtc = context?.UtcNow().UtcDateTime ?? DateTime.UtcNow;
-                metadata = previous.ForCausedEvent(occurredUtc, schemaVersion: 1);
+                metadata = previous.ForCausedEvent(context.UtcNow().UtcDateTime, schemaVersion: 1);
             }
             envelopes[i] = new ProcessManagerEventEnvelope(
                 StreamId: streamId,
@@ -103,15 +100,4 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
         }
         return envelopes;
     }
-
-    private EventMetadata BuildFallbackMetadata()
-        => new(
-            EventId: Guid.NewGuid(),
-            CorrelationId: Guid.Empty,
-            CausationId: Guid.Empty,
-            ActorId: Guid.Empty,
-            Source: "Workers",
-            SchemaVersion: 1,
-            OccurredUtc: DateTime.UtcNow,
-            Tenant: _tenantAccessor.Current ?? WellKnownTenants.Default);
 }

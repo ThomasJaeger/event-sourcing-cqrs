@@ -113,6 +113,12 @@ internal sealed class StubSkuToInventoryIdStore : ISkuToInventoryIdStore
 // timeouts scheduled and cancelled.
 internal sealed class OrderFulfillmentTestHarness
 {
+    // The literal values of OrderFulfillmentSteps.AwaitPaymentTimeout and AwaitDispatchTimeout, which
+    // are internal to the ProcessManagers assembly. The harness matches the scheduled timeout by
+    // content, the same way DelayQueueSelfCancelTests does.
+    private const string AwaitPaymentTimeoutStep = "await-payment-timeout";
+    private const string AwaitDispatchTimeoutStep = "await-dispatch-timeout";
+
     private readonly InMemoryEventStore _store = new();
     private readonly ICommandContextAccessor _accessor = new AsyncLocalCommandContextAccessor();
     private readonly ICurrentTenantAccessor _tenantAccessor = new AsyncLocalCurrentTenantAccessor();
@@ -141,21 +147,6 @@ internal sealed class OrderFulfillmentTestHarness
             new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor, _tenantAccessor);
     }
 
-    // Sets a command context and a tenant on the ambient accessors, simulating a caused-command
-    // dispatch arriving at a timeout handler, so the handler resolves both the metadata tenant and the
-    // PM stream-id load from this tenant.
-    public void EnterCommandContext(TenantId tenant)
-    {
-        _accessor.Current = new CommandContext
-        {
-            CorrelationId = Guid.NewGuid(),
-            CausationCommandId = Guid.NewGuid(),
-            ActorId = Guid.Empty,
-            ServiceName = "Workers"
-        };
-        _tenantAccessor.Current = tenant;
-    }
-
     public RecordingCausedCommandBus Bus { get; }
 
     public RecordingDelayQueue DelayQueue { get; }
@@ -171,16 +162,60 @@ internal sealed class OrderFulfillmentTestHarness
     public async Task Receive<TEvent>(TEvent payload, EventMetadata? metadata = null)
         where TEvent : IDomainEvent
     {
-        var context = new EventContext<TEvent>(payload, metadata ?? DefaultMetadata(), ++_position);
+        var causing = metadata ?? DefaultMetadata();
+        var context = new EventContext<TEvent>(payload, causing, ++_position);
         var handler = (IProcessManagerHandler<TEvent>)(object)_handler;
-        await handler.HandleAsync(context, CancellationToken.None);
+        await InCausedContextAsync(
+            causing, _handler.Actor, () => handler.HandleAsync(context, CancellationToken.None));
     }
 
     public Task DispatchTimeoutAwaitingPayment(Guid orderId)
-        => _paymentTimeoutHandler.HandleAsync(new TimeoutAwaitingPaymentForOrder(orderId), CancellationToken.None);
+        => DispatchTimeoutAsync(
+            AwaitPaymentTimeoutStep,
+            () => _paymentTimeoutHandler.HandleAsync(
+                new TimeoutAwaitingPaymentForOrder(orderId), CancellationToken.None));
 
     public Task DispatchTimeoutAwaitingDispatch(Guid orderId)
-        => _dispatchTimeoutHandler.HandleAsync(new TimeoutAwaitingDispatchForOrder(orderId), CancellationToken.None);
+        => DispatchTimeoutAsync(
+            AwaitDispatchTimeoutStep,
+            () => _dispatchTimeoutHandler.HandleAsync(
+                new TimeoutAwaitingDispatchForOrder(orderId), CancellationToken.None));
+
+    // Mirrors the delay queue's dispatch (ADR 0017). The due row persists the causing event's
+    // correlation, causation, actor, and tenant at schedule time, and the command pipeline
+    // establishes a context from them before the timeout handler runs. The harness recovers the same
+    // values from the timeout the process manager scheduled, so a timeout dispatched here carries
+    // what one dispatched in production carries rather than a stub.
+    private Task DispatchTimeoutAsync(string step, Func<Task> dispatch)
+    {
+        var scheduled = DelayQueue.Scheduled.LastOrDefault(s => s.Step == step)
+            ?? throw new InvalidOperationException(
+                $"No '{step}' timeout was scheduled, so the harness has no causing event to dispatch " +
+                "it under. Drive the process manager to the state that schedules it first.");
+
+        return InCausedContextAsync(scheduled.Causing, scheduled.Actor, dispatch);
+    }
+
+    // The same push-and-restore InProcessMessageDispatcher performs around each process-manager
+    // handler (ADR 0042): the tenant comes off the causing event, the command context off that event's
+    // metadata and the handler's declared actor, and both restore in a finally so one drive does not
+    // leak into the next.
+    private async Task InCausedContextAsync(EventMetadata causing, SystemActor actor, Func<Task> work)
+    {
+        var previousContext = _accessor.Current;
+        var previousTenant = _tenantAccessor.Current;
+        _accessor.Current = new CausedCommandContext(causing, actor, TimeProvider.System);
+        _tenantAccessor.Current = causing.Tenant;
+        try
+        {
+            await work();
+        }
+        finally
+        {
+            _accessor.Current = previousContext;
+            _tenantAccessor.Current = previousTenant;
+        }
+    }
 
     public Task<OrderFulfillmentProcessManager?> LoadPm(Guid orderId)
         => _pms.LoadAsync(

@@ -92,9 +92,10 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
         var orderId = Guid.NewGuid();
         var eventStore = host.Services.GetRequiredService<IEventStore>();
 
-        await SeedPmAtAwaitingPaymentAsync(host, orderId);
+        // The PM lives on OtherTenant's stream, so OtherTenant's OrderPlaced is what caused it.
         await SeedPlacedOrderAsync(eventStore, orderId, WellKnownTenants.Default);
-        await SeedPlacedOrderAsync(eventStore, orderId, OtherTenant);
+        var causing = await SeedPlacedOrderAsync(eventStore, orderId, OtherTenant);
+        await SeedPmAtAwaitingPaymentAsync(host, orderId, causing);
         await SeedDueTimeoutRowAsync(
             host, orderId, new TimeoutAwaitingPaymentForOrder(orderId), AwaitPaymentTimeoutStep, OtherTenant);
 
@@ -114,9 +115,10 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
         var paymentId = Guid.NewGuid();
         var eventStore = host.Services.GetRequiredService<IEventStore>();
 
-        await SeedPmAtAwaitingDispatchAsync(host, orderId, paymentId);
+        // The PM lives on OtherTenant's stream, so OtherTenant's OrderPlaced is what caused it.
         await SeedPlacedOrderAsync(eventStore, orderId, WellKnownTenants.Default);
-        await SeedPlacedOrderAsync(eventStore, orderId, OtherTenant);
+        var causing = await SeedPlacedOrderAsync(eventStore, orderId, OtherTenant);
+        await SeedPmAtAwaitingDispatchAsync(host, orderId, paymentId, causing);
         await SeedPaymentAuthorizedAsync(eventStore, orderId, paymentId, OtherTenant);
         await SeedDueTimeoutRowAsync(
             host, orderId, new TimeoutAwaitingDispatchForOrder(orderId), AwaitDispatchTimeoutStep, OtherTenant);
@@ -128,21 +130,22 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
         await AssertPaymentVoidedAsync(eventStore, paymentId, OtherTenant);
     }
 
-    private static async Task SeedPmAtAwaitingPaymentAsync(IHost host, Guid orderId)
+    private static async Task SeedPmAtAwaitingPaymentAsync(IHost host, Guid orderId, EventMetadata causing)
     {
         var pm = new OrderFulfillmentProcessManager(PmStream(orderId));
         pm.Start(orderId, new Money(20m, Currency.USD), Guid.NewGuid());   // -> AwaitingPayment
-        await SavePmAsync(host, pm);
+        await SavePmAsync(host, pm, causing);
     }
 
-    private static async Task SeedPmAtAwaitingDispatchAsync(IHost host, Guid orderId, Guid paymentId)
+    private static async Task SeedPmAtAwaitingDispatchAsync(
+        IHost host, Guid orderId, Guid paymentId, EventMetadata causing)
     {
         var pm = new OrderFulfillmentProcessManager(PmStream(orderId));
         pm.Start(orderId, new Money(20m, Currency.USD), paymentId);   // -> AwaitingPayment, records PaymentId
         pm.RecordPaymentAuthorized();                                 // -> AwaitingInventory
         pm.CompleteReservations();                                    // -> AwaitingShipment, no reserved lines
         pm.RequestShipmentScheduling(Guid.NewGuid());                 // -> AwaitingDispatch
-        await SavePmAsync(host, pm);
+        await SavePmAsync(host, pm, causing);
     }
 
     // The PM stream is tenant-formed: the timeout handler loads it through OrderFulfillmentStreams.For
@@ -152,27 +155,52 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
     private static StreamId PmStream(Guid orderId) =>
         StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, OtherTenant, orderId);
 
-    private static async Task SavePmAsync(IHost host, OrderFulfillmentProcessManager pm)
+    // The PM is saved under the context the outbox dispatcher would have established for the
+    // OrderPlaced that started it (ADR 0042). The repository fails closed without one, and the causing
+    // event's tenant is what puts the PM's events under the tenant the isolation case asserts on.
+    private static async Task SavePmAsync(
+        IHost host, OrderFulfillmentProcessManager pm, EventMetadata causing)
     {
         using var scope = host.Services.CreateScope();
-        var pms = scope.ServiceProvider
-            .GetRequiredService<IProcessManagerRepository<OrderFulfillmentProcessManager>>();
-        await pms.SaveAsync(pm, CancellationToken.None);
+        var sp = scope.ServiceProvider;
+        var accessor = sp.GetRequiredService<ICommandContextAccessor>();
+        var tenantAccessor = sp.GetRequiredService<ICurrentTenantAccessor>();
+        var previousContext = accessor.Current;
+        var previousTenant = tenantAccessor.Current;
+        accessor.Current = new CausedCommandContext(
+            causing, SystemActors.OrderFulfillment, TimeProvider.System);
+        tenantAccessor.Current = causing.Tenant;
+        try
+        {
+            var pms = sp.GetRequiredService<IProcessManagerRepository<OrderFulfillmentProcessManager>>();
+            await pms.SaveAsync(pm, CancellationToken.None);
+        }
+        finally
+        {
+            accessor.Current = previousContext;
+            tenantAccessor.Current = previousTenant;
+        }
     }
 
-    private static async Task SeedPlacedOrderAsync(IEventStore eventStore, Guid orderId, TenantId tenant)
+    // Returns the OrderPlaced envelope's metadata, the causing event for the PM seeded under this tenant.
+    private static async Task<EventMetadata> SeedPlacedOrderAsync(
+        IEventStore eventStore, Guid orderId, TenantId tenant)
     {
         var stream = StreamId.ForAggregate<Order>(tenant, orderId);
         var customerId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
+        var orderPlaced = Envelope(
+            stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), SeededAt), tenant);
 
         await eventStore.AppendAsync(stream, 0,
         [
             Envelope(stream, 1, new OrderDrafted(orderId, customerId, SeededAt), tenant),
             Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(20m, Currency.USD), SeededAt), tenant),
             Envelope(stream, 3, new ShippingAddressSet(orderId, new Address("1 Main St", "Smalltown", "12345", "US"), SeededAt), tenant),
-            Envelope(stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), SeededAt), tenant),
+            orderPlaced,
         ], CancellationToken.None);
+
+        return orderPlaced.Metadata;
     }
 
     private static async Task SeedPaymentAuthorizedAsync(

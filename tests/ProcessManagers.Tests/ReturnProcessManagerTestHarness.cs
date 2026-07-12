@@ -61,10 +61,27 @@ internal sealed class ReturnProcessManagerTestHarness
 
     public Task SeedShipment(Shipment shipment) => _shipments.SaveAsync(shipment, CancellationToken.None);
 
-    public Task Receive(ShipmentReturned payload, EventMetadata? metadata = null)
+    // The same push-and-restore InProcessMessageDispatcher performs around each process-manager
+    // handler (ADR 0042): the tenant comes off the causing event, the command context off that
+    // event's metadata and the handler's declared actor, and both restore in a finally.
+    public async Task Receive(ShipmentReturned payload, EventMetadata? metadata = null)
     {
-        var context = new EventContext<ShipmentReturned>(payload, metadata ?? DefaultMetadata(), ++_position);
-        return _handler.HandleAsync(context, CancellationToken.None);
+        var causing = metadata ?? DefaultMetadata();
+        var context = new EventContext<ShipmentReturned>(payload, causing, ++_position);
+
+        var previousContext = _accessor.Current;
+        var previousTenant = _tenantAccessor.Current;
+        _accessor.Current = new CausedCommandContext(causing, _handler.Actor, TimeProvider.System);
+        _tenantAccessor.Current = causing.Tenant;
+        try
+        {
+            await _handler.HandleAsync(context, CancellationToken.None);
+        }
+        finally
+        {
+            _accessor.Current = previousContext;
+            _tenantAccessor.Current = previousTenant;
+        }
     }
 
     public Task<ReturnProcessManager?> LoadPm(Guid orderId)

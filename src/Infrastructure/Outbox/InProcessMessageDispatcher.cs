@@ -73,7 +73,7 @@ public sealed class InProcessMessageDispatcher : IMessageDispatcher
             // the causing event and the handler's declared actor (ADR 0042). Without it the PM's
             // events carry an empty correlation and drop out of the workflow's trace.
             //
-            // Resolved only when a process manager is actually subscribed, so a host that dispatches
+            // Resolved only when a process manager is subscribed, so a host that dispatches
             // events to projections alone composes no command-context accessor and needs none. The
             // clock is the one CommandBus builds its contexts from, so both dispatch paths stamp
             // OccurredUtc off one clock discipline.
