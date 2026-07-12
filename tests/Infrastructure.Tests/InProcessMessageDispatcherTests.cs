@@ -78,6 +78,7 @@ public class InProcessMessageDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(handler);
         services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
+        services.AddSingleton<ICommandContextAccessor>(new TestKit.StubAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         var payload = new TestDispatchEvent("react");
@@ -97,6 +98,7 @@ public class InProcessMessageDispatcherTests
         services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(
             new RecordingPmHandler("process-manager", invocationLog));
         services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
+        services.AddSingleton<ICommandContextAccessor>(new TestKit.StubAccessor());
         var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
 
         await dispatcher.DispatchAsync(Message(new TestDispatchEvent("go")), CancellationToken.None);
@@ -114,6 +116,7 @@ public class InProcessMessageDispatcherTests
         services.AddScoped<IProcessManagerHandler<TestDispatchEvent>>(
             _ => new InstanceRecordingPmHandler(instances));
         services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
+        services.AddSingleton<ICommandContextAccessor>(new TestKit.StubAccessor());
         // validateScopes: true would throw if the dispatcher resolved the scoped
         // handler from the root provider; it passes because the dispatcher opens a
         // scope per message, and the two dispatches yield two distinct instances.
@@ -125,6 +128,50 @@ public class InProcessMessageDispatcherTests
 
         instances.Should().HaveCount(2);
         instances[0].Should().NotBeSameAs(instances[1]);
+    }
+
+    // The dispatcher establishes each process manager's caused-event context (ADR 0042). Two PMs on
+    // one event is the case the per-message alternative cannot serve: each carries its own actor.
+    [Fact]
+    public async Task DispatchAsync_gives_each_process_manager_handler_its_own_caused_event_context()
+    {
+        var accessor = new TestKit.StubAccessor();
+        var orderFulfillment = new ContextCapturingPmHandler(accessor, SystemActors.OrderFulfillment);
+        var returns = new ContextCapturingPmHandler(accessor, SystemActors.Return);
+        var services = new ServiceCollection();
+        services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(orderFulfillment);
+        services.AddSingleton<IProcessManagerHandler<TestDispatchEvent>>(returns);
+        services.AddSingleton<ICurrentTenantAccessor>(new TestKit.StubTenantAccessor());
+        services.AddSingleton<ICommandContextAccessor>(accessor);
+        var dispatcher = new InProcessMessageDispatcher(services.BuildServiceProvider());
+
+        var metadata = BuildMetadata();
+        var message = new OutboxMessage(
+            OutboxId: 1,
+            EventId: metadata.EventId,
+            EventType: nameof(TestDispatchEvent),
+            Event: new TestDispatchEvent("go"),
+            Metadata: metadata,
+            GlobalPosition: 1,
+            AttemptCount: 0);
+
+        await dispatcher.DispatchAsync(message, CancellationToken.None);
+
+        // Correlation carries the workflow forward; causation points at the event that caused the save.
+        orderFulfillment.Captured.Should().NotBeNull();
+        orderFulfillment.Captured!.CorrelationId.Should().Be(metadata.CorrelationId);
+        orderFulfillment.Captured.CausationCommandId.Should().Be(metadata.EventId);
+        orderFulfillment.Captured.AuthorizationMode.Should().Be(DispatchAuthorizationMode.SystemActor);
+        orderFulfillment.Captured.IdempotencyKey.Should().BeNull();
+
+        // Each handler writes under its own identity rather than borrowing the other's.
+        orderFulfillment.Captured.ActorId.Should().Be(SystemActors.OrderFulfillment.Id);
+        orderFulfillment.Captured.ServiceName.Should().Be(SystemActors.OrderFulfillment.ServiceName);
+        returns.Captured!.ActorId.Should().Be(SystemActors.Return.Id);
+        returns.Captured.ServiceName.Should().Be(SystemActors.Return.ServiceName);
+
+        // Restored, so the context does not leak past the dispatch.
+        accessor.Current.Should().BeNull();
     }
 
     private static OutboxMessage Message(TestDispatchEvent payload)
@@ -185,6 +232,8 @@ public class InProcessMessageDispatcherTests
             _invocationLog = invocationLog;
         }
 
+        public SystemActor Actor => SystemActors.OrderFulfillment;
+
         public EventContext<TestDispatchEvent>? LastContext { get; private set; }
 
         public Task HandleAsync(EventContext<TestDispatchEvent> context, CancellationToken ct)
@@ -201,9 +250,34 @@ public class InProcessMessageDispatcherTests
 
         public InstanceRecordingPmHandler(List<object> instances) => _instances = instances;
 
+        public SystemActor Actor => SystemActors.OrderFulfillment;
+
         public Task HandleAsync(EventContext<TestDispatchEvent> context, CancellationToken ct)
         {
             _instances.Add(this);
+            return Task.CompletedTask;
+        }
+    }
+
+    // Reads the ambient command context the dispatcher establishes, so a test can assert on what a
+    // process manager writing through ProcessManagerRepository would be stamped from.
+    public sealed class ContextCapturingPmHandler : IProcessManagerHandler<TestDispatchEvent>
+    {
+        private readonly ICommandContextAccessor _accessor;
+
+        public ContextCapturingPmHandler(ICommandContextAccessor accessor, SystemActor actor)
+        {
+            _accessor = accessor;
+            Actor = actor;
+        }
+
+        public SystemActor Actor { get; }
+
+        public ICommandContext? Captured { get; private set; }
+
+        public Task HandleAsync(EventContext<TestDispatchEvent> context, CancellationToken ct)
+        {
+            Captured = _accessor.Current;
             return Task.CompletedTask;
         }
     }

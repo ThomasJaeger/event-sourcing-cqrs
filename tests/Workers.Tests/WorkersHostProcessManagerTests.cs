@@ -114,6 +114,85 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
         }
     }
 
+    // Pins the metadata the OrderFulfillment PM writes on the outbox route. ADR 0013 promises PM
+    // rows join the aggregate trace by correlation_id; that only holds if the PM's own events carry
+    // the causing workflow's identity. OrderPlaced opens the workflow (the handler's
+    // HandleAsync(EventContext<OrderPlaced>) overload), so it is the causing event for the PM's
+    // first save, and every event the PM writes belongs to that event's correlation.
+    [Fact]
+    public async Task OrderFulfillment_PM_events_carry_the_causing_workflow_identity_on_the_outbox_route()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        await host.StartAsync(cts.Token);
+        try
+        {
+            var now = DateTime.UtcNow;
+            var orderId = Guid.NewGuid();
+            var customerId = Guid.NewGuid();
+            var lineId = Guid.NewGuid();
+            var correlationId = Guid.NewGuid();
+            var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
+
+            // The same uninventoried-SKU arc, seeded under one chosen correlation id so the PM's
+            // metadata has something to be asserted against. OrderPlaced is held so its EventId can
+            // be compared to the causation the PM's first event should carry.
+            var orderPlaced = Envelope(
+                stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), now), now, correlationId);
+
+            var eventStore = host.Services.GetRequiredService<IEventStore>();
+            await eventStore.AppendAsync(stream, 0,
+            [
+                Envelope(stream, 1, new OrderDrafted(orderId, customerId, now), now, correlationId),
+                Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 2, new Money(10m, Currency.USD), now), now, correlationId),
+                Envelope(stream, 3, new ShippingAddressSet(orderId, Address(), now), now, correlationId),
+                orderPlaced,
+            ], cts.Token);
+
+            await PollAsync(
+                () => LoadPmAsync<OrderFulfillmentProcessManager>(
+                    host, StreamPrefixes.OrderFulfillmentPm, orderId, sid => new(sid), cts.Token),
+                p => p.State == OrderFulfillmentState.Cancelled,
+                cts.Token);
+
+            // Read the PM stream through IEventStore: IProcessManagerRepository rehydrates payloads
+            // and discards the metadata this test is about.
+            var pmStream = StreamId.ForProcessManager(
+                StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
+            var pmEvents = await eventStore.ReadProcessManagerStreamAsync(pmStream, fromVersion: 0, cts.Token);
+
+            pmEvents.Should().NotBeEmpty("the PM should have written its arc through the outbox route");
+
+            var first = pmEvents[0].Metadata;
+            first.CorrelationId.Should().Be(
+                correlationId, "the PM's first event belongs to the workflow OrderPlaced started");
+            first.CausationId.Should().Be(
+                orderPlaced.EventId, "the PM's first event is caused by the OrderPlaced that triggered it");
+            first.ActorId.Should().Be(SystemActors.OrderFulfillment.Id);
+            first.Source.Should().Be(SystemActors.OrderFulfillment.ServiceName);
+
+            pmEvents.Should().AllSatisfy(e =>
+            {
+                e.Metadata.CorrelationId.Should().Be(correlationId, "the whole PM arc is one workflow");
+                e.Metadata.CausationId.Should().NotBe(Guid.Empty, "every PM event is caused by something");
+                e.Metadata.ActorId.Should().Be(SystemActors.OrderFulfillment.Id);
+                e.Metadata.Source.Should().Be(SystemActors.OrderFulfillment.ServiceName);
+            });
+
+            // Within one save batch, every event after the first is caused by the prior event's
+            // EventId (EventMetadata.ForCausedEvent). The cancellation branch emits its events in a
+            // single batch, so the PM's last event chains off its predecessor.
+            pmEvents[^1].Metadata.CausationId.Should().Be(
+                pmEvents[^2].Metadata.EventId,
+                "events after the first in one save batch chain off the prior event");
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task<TPm?> LoadPmAsync<TPm>(
         IHost host, string prefix, Guid orderId, Func<StreamId, TPm> factory, CancellationToken ct)
         where TPm : ProcessManager
@@ -140,12 +219,15 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
 
     private static Address Address() => new("1 Main St", "Smalltown", "12345", "US");
 
-    private static EventEnvelope Envelope(StreamId streamId, int version, IDomainEvent payload, DateTime now)
+    // correlationId is optional: the arc tests do not care what it is, and the metadata test
+    // supplies one so the PM's events have a workflow identity to be asserted against.
+    private static EventEnvelope Envelope(
+        StreamId streamId, int version, IDomainEvent payload, DateTime now, Guid? correlationId = null)
     {
         var eventId = Guid.NewGuid();
         var metadata = new EventMetadata(
             EventId: eventId,
-            CorrelationId: Guid.NewGuid(),
+            CorrelationId: correlationId ?? Guid.NewGuid(),
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "integration-test",

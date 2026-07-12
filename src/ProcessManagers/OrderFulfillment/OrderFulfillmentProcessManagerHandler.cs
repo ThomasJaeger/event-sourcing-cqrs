@@ -42,7 +42,10 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     private static readonly TimeSpan AwaitingPaymentTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan AwaitingDispatchTimeout = TimeSpan.FromDays(2);
 
-    private static readonly SystemActor Actor = SystemActors.OrderFulfillment;
+    // Declared on the handler contract (ADR 0042): the dispatcher reads it to build the caused-event
+    // context this PM's own writes are stamped from, and the handler passes it to the caused bus for
+    // the commands it dispatches. One identity, both uses.
+    public SystemActor Actor => SystemActors.OrderFulfillment;
 
     private readonly ICausedCommandBus _bus;
     private readonly IProcessManagerRepository<OrderFulfillmentProcessManager> _pms;

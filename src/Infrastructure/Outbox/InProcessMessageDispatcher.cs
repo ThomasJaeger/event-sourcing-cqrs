@@ -60,9 +60,45 @@ public sealed class InProcessMessageDispatcher : IMessageDispatcher
             {
                 await (Task)invoker.HandleMethod.Invoke(handler, new object[] { context, ct })!;
             }
-            foreach (var handler in sp.GetServices(invoker.ProcessManagerHandlerType))
+
+            var pmHandlers = sp.GetServices(invoker.ProcessManagerHandlerType).ToArray();
+            if (pmHandlers.Length == 0)
             {
-                await (Task)invoker.ProcessManagerHandleMethod.Invoke(handler, new object[] { context, ct })!;
+                return;
+            }
+
+            // A process manager saves its own events through ProcessManagerRepository, which stamps
+            // metadata off the ambient command context. A command dispatch gets that context from
+            // CommandBus; an event dispatch has no bus, so the dispatcher establishes it here from
+            // the causing event and the handler's declared actor (ADR 0042). Without it the PM's
+            // events carry an empty correlation and drop out of the workflow's trace.
+            //
+            // Resolved only when a process manager is actually subscribed, so a host that dispatches
+            // events to projections alone composes no command-context accessor and needs none. The
+            // clock is the one CommandBus builds its contexts from, so both dispatch paths stamp
+            // OccurredUtc off one clock discipline.
+            var commandContextAccessor = sp.GetRequiredService<ICommandContextAccessor>();
+            var timeProvider = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+
+            foreach (var handler in pmHandlers)
+            {
+                // Per handler, not per message: the actor is the handler's identity and two process
+                // managers can subscribe to one event. Same capture/set/restore-in-finally shape as
+                // the tenant above, so a nested command dispatch restores this context rather than
+                // leaking its own.
+                var actor = ((IProcessManagerHandler)handler!).Actor;
+                var previousCommandContext = commandContextAccessor.Current;
+                commandContextAccessor.Current =
+                    new CausedCommandContext(message.Metadata, actor, timeProvider);
+                try
+                {
+                    await (Task)invoker.ProcessManagerHandleMethod.Invoke(
+                        handler, new object[] { context, ct })!;
+                }
+                finally
+                {
+                    commandContextAccessor.Current = previousCommandContext;
+                }
             }
         }
         finally

@@ -19,7 +19,10 @@ namespace EventSourcingCqrs.ProcessManagers.Returns;
 // Not DI-registered here; registration and dispatcher routing land at commit 27.
 public sealed class ReturnProcessManagerHandler : IProcessManagerHandler<ShipmentReturned>
 {
-    private static readonly SystemActor Actor = SystemActors.Return;
+    // Declared on the handler contract (ADR 0042): the dispatcher reads it to build the caused-event
+    // context this PM's own writes are stamped from, and the handler passes it to the caused bus for
+    // the commands it dispatches. One identity, both uses.
+    public SystemActor Actor => SystemActors.Return;
 
     private readonly ICausedCommandBus _bus;
     private readonly IProcessManagerRepository<ReturnProcessManager> _pms;
