@@ -51,6 +51,24 @@ public class EventStoreBrowserTests : BunitContext
     }
 
     [Fact]
+    public void Inspecting_a_found_stream_renders_the_stream_version()
+    {
+        // Stream version 37, a value that collides with nothing else the row renders: not the schema
+        // version, not the global position, and not a hex guid. A match on "v37" is the version or nothing.
+        Services.AddSingleton<IStreamInspector>(new StubInspector(FoundAtStreamVersion(37)));
+
+        var cut = Render<EventStoreBrowser>();
+        cut.Find("input").Change(AnyStreamId);
+        cut.Find("button").Click();
+
+        cut.Markup.Should().Contain("v37");
+        // Razor's email-address heuristic swallows an at-sign flanked by word characters, so a version
+        // written as v@evt.StreamVersion never parses and the raw source text reaches the operator. The
+        // suite had no assertion here, which is how it shipped.
+        cut.Markup.Should().NotContain("v@evt.StreamVersion");
+    }
+
+    [Fact]
     public void Inspecting_an_empty_stream_renders_the_guidance_empty_state()
     {
         Services.AddSingleton<IStreamInspector>(new StubInspector(Outcome(StreamInspectionOutcome.Empty)));
@@ -127,6 +145,30 @@ public class EventStoreBrowserTests : BunitContext
             OccurredUtc: new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
             GlobalPosition: 42,
             PayloadJson: payloadJson,
+            Metadata: metadata);
+        return new StreamInspectionResult(StreamInspectionOutcome.Found, new[] { inspected });
+    }
+
+    // The Found helper above pins StreamVersion at 1, which the schema version and the event version also
+    // carry, so it cannot tell a rendered version from a coincidence. This one takes the version.
+    private static StreamInspectionResult FoundAtStreamVersion(int streamVersion)
+    {
+        var metadata = new EventMetadata(
+            EventId: Guid.NewGuid(),
+            CorrelationId: Guid.NewGuid(),
+            CausationId: Guid.NewGuid(),
+            ActorId: Guid.NewGuid(),
+            Source: "test",
+            SchemaVersion: 1,
+            OccurredUtc: new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
+            Tenant: TenantId.From(Guid.NewGuid()));
+        var inspected = new InspectedEvent(
+            StreamVersion: streamVersion,
+            EventType: "OrderPlaced",
+            EventVersion: 1,
+            OccurredUtc: new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
+            GlobalPosition: 42,
+            PayloadJson: "{}",
             Metadata: metadata);
         return new StreamInspectionResult(StreamInspectionOutcome.Found, new[] { inspected });
     }

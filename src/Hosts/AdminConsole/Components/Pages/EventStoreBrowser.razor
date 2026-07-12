@@ -58,7 +58,7 @@ else if (result is not null)
                 var evt = result.Events[index];
                 <div class="pb-6 mb-6 border-b border-gray-200">
                     <div class="text-sm text-gray-700">
-                        <span class="font-medium">v@evt.StreamVersion</span>
+                        <span class="font-medium">v@(evt.StreamVersion)</span>
                         <span class="pl-2 font-medium">@evt.EventType</span>
                         <span class="pl-2">schema @evt.EventVersion</span>
                         <span class="pl-2">@evt.OccurredUtc.ToString("u")</span>
