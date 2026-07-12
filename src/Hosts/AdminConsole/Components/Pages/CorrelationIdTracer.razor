@@ -1,0 +1,151 @@
+@page "/correlations"
+@using EventSourcingCqrs.Hosts.AdminConsole.Tracer
+@inject ICorrelationTracer Tracer
+
+<PageTitle>Correlation-ID Tracer</PageTitle>
+
+<h1 class="text-2xl font-bold p-6">Correlation-ID Tracer</h1>
+
+<div class="px-6">
+    <p class="pb-4 text-gray-700">
+        Trace one workflow by its correlation id. Every event carrying that id comes back in one list, across
+        every stream and every tenant, oldest first, with the process manager's own rows beside the aggregate
+        events that drove them.
+    </p>
+
+    <label class="block pb-4">
+        <span class="block pb-1 text-sm font-medium text-gray-700">Correlation id</span>
+        <input @bind="correlationId"
+               class="block w-96 rounded border border-gray-300 px-2 py-1"
+               placeholder="0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8" />
+    </label>
+
+    <button type="button" @onclick="OnTraceAsync"
+            class="rounded bg-gray-800 px-4 py-2 text-white">
+        Trace correlation
+    </button>
+</div>
+
+@if (error)
+{
+    <p class="px-6 pt-4 text-red-700">Unable to trace the correlation id.</p>
+}
+else if (view is not null)
+{
+    @if (view.Outcome == CorrelationTraceOutcome.InvalidFormat)
+    {
+        <p class="px-6 pt-4 text-red-700">
+            Enter a valid correlation id, for example 0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8.
+        </p>
+    }
+    else if (view.Outcome == CorrelationTraceOutcome.SentinelRefused)
+    {
+        <p class="px-6 pt-4 text-red-700">
+            The empty guid is a sentinel value, not a workflow identifier. The rows carrying it were written
+            before correlation propagation reached the outbox route, so they are not traceable as a chain.
+        </p>
+    }
+    else if (view.Outcome == CorrelationTraceOutcome.Empty)
+    {
+        <p class="px-6 pt-4 text-gray-700">
+            No events found for this correlation id. Verify the id, and that the workflow it belongs to ran
+            against this database.
+        </p>
+    }
+    else
+    {
+        @if (view.Truncated)
+        {
+            <p class="px-6 pt-4 text-red-700">
+                This trace was cut at the row cap. The rows below are the earliest ones; reading the
+                remainder needs a query tool.
+            </p>
+        }
+        <div class="px-6 pt-4">
+            @for (var i = 0; i < view.Events.Count; i++)
+            {
+                var index = i;
+                var evt = view.Events[index];
+                <div class="pb-6 mb-6 border-b border-gray-200">
+                    <div class="text-sm text-gray-700">
+                        <span class="font-medium">@KindLabel(evt.Kind)</span>
+                        <span class="pl-2">@evt.StreamId</span>
+                        <span class="pl-2 font-medium">v@(evt.StreamVersion)</span>
+                        <span class="pl-2 font-medium">@evt.EventType</span>
+                        <span class="pl-2">schema @evt.EventVersion</span>
+                        <span class="pl-2">@evt.OccurredUtc.ToString("u")</span>
+                        <span class="pl-2">position @evt.GlobalPosition</span>
+                        <span class="pl-2">tenant @evt.Metadata.Tenant.Value</span>
+                    </div>
+                    <pre class="mt-2 overflow-x-auto rounded bg-gray-100 p-2 text-xs">@evt.PayloadJson</pre>
+                    <button type="button" @onclick="() => ToggleMetadata(index)"
+                            class="mt-2 text-sm text-blue-700 underline">
+                        @(shownMetadata.Contains(index) ? "Hide metadata" : "Show metadata")
+                    </button>
+                    @if (shownMetadata.Contains(index))
+                    {
+                        <dl class="mt-2 text-sm text-gray-700">
+                            <div><dt class="inline font-medium">Correlation id:</dt> <dd class="inline">@evt.Metadata.CorrelationId</dd></div>
+                            <div><dt class="inline font-medium">Causation id:</dt> <dd class="inline">@evt.Metadata.CausationId</dd></div>
+                            <div><dt class="inline font-medium">Actor id:</dt> <dd class="inline">@evt.Metadata.ActorId</dd></div>
+                            <div><dt class="inline font-medium">Source:</dt> <dd class="inline">@evt.Metadata.Source</dd></div>
+                        </dl>
+                    }
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    // The Correlation-ID Tracer: an operator enters a correlation id and sees every event the workflow
+    // wrote, across streams and across tenants, oldest first. The page depends on the narrow
+    // ICorrelationTracer seam, which owns the parse guard, the sentinel guard, the row cap, and the per-row
+    // family classification; the page renders the outcome the seam returns.
+    //
+    // Each row shows its family, its stream, its scalars, and its tenant without a toggle. The tenant is
+    // deliberately always visible: a chain that crosses tenants is an isolation defect, and it is the
+    // finding this tool exists to reveal, so an operator must not have to go looking for it. Correlation,
+    // causation, actor, and source sit behind the per-row toggle, the Browser's reveal shape.
+    //
+    // The payload renders as the document the store returned. The trace resolves no CLR payload type
+    // (ADR 0043), so what an operator reads here is what the store holds rather than a re-serialization.
+    //
+    // The page is interactive through the host's global <Routes @rendermode="InteractiveServer" />
+    // (App.razor), so it declares no per-page render mode, which would conflict with the inherited one and
+    // throw at render. Authorization is the host fallback gate (ADR 0040), upstream of render, so the page
+    // has no denied branch.
+    private string correlationId = string.Empty;
+    private CorrelationTraceView? view;
+    private bool error;
+    private readonly HashSet<int> shownMetadata = [];
+
+    private async Task OnTraceAsync()
+    {
+        error = false;
+        shownMetadata.Clear();
+        try
+        {
+            view = await Tracer.TraceCorrelationAsync(correlationId, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // Every expected input class is an outcome the seam classifies, so a throw here is the port's
+            // metadata read failing (ADR 0043). It surfaces as an operator-visible error rather than an
+            // escaping exception or a blank page.
+            error = true;
+            view = null;
+        }
+    }
+
+    private void ToggleMetadata(int index)
+    {
+        if (!shownMetadata.Remove(index))
+        {
+            shownMetadata.Add(index);
+        }
+    }
+
+    private static string KindLabel(TracedEventKind kind)
+        => kind == TracedEventKind.ProcessManager ? "Process manager" : "Aggregate";
+}
