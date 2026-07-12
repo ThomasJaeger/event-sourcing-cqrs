@@ -41,6 +41,15 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
     // what the compensation cancels.
     private const string AwaitPaymentTimeoutStep = "await-payment-timeout";
 
+    // The provenance the delay queue persists at schedule time and replays at dispatch: the workflow's
+    // correlation id, and the EventId of the event that scheduled the timeout, which the resurfaced
+    // command's causation points at (ADR 0014's event-to-event rule).
+    private static readonly Guid WorkflowCorrelationId =
+        Guid.Parse("3f1c9a54-6b2e-4d18-9c07-1a5f8e2b7d43");
+
+    private static readonly Guid SchedulingEventId =
+        Guid.Parse("8e4d2b16-0f37-45a9-b1c8-7d6e3a90f52c");
+
     private readonly PostgresFixture _fixture;
 
     public DelayQueueSelfCancelTests(PostgresFixture fixture) => _fixture = fixture;
@@ -93,6 +102,51 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
         var processed = await processor.ProcessBatchAsync(cts.Token);
 
         processed.Should().Be(1);
+    }
+
+    // The timeout route's twin of the outbox pin in WorkersHostProcessManagerTests. A due timeout
+    // resurfaces through the command pipeline, which builds the context from the row's persisted
+    // provenance, so the events the process manager writes while compensating carry the workflow's
+    // correlation, point their causation at the event that scheduled the timeout, and name the process
+    // manager as the actor. The two routes stamp the same shape (ADR 0042).
+    //
+    // Green on write: the timeout route already behaved this way, because it runs inside a command
+    // pipeline. Nothing pinned it, so a regression there would have been silent.
+    [Fact]
+    public async Task A_timeout_driven_pm_transition_carries_the_due_rows_provenance()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        using var host = WorkersHostFactory.Build(connStr, connStr);
+        var processor = ResolveProcessor(host);
+        var orderId = Guid.NewGuid();
+        var pmStream = StreamId.ForProcessManager(
+            StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, orderId);
+
+        await SeedChainAsync(
+            host, orderId, pmStream.Value, AwaitPaymentTimeoutStep, CancellationToken.None);
+
+        using var cts = new CancellationTokenSource(DispatchBound);
+        await processor.ProcessBatchAsync(cts.Token);
+
+        var eventStore = host.Services.GetRequiredService<IEventStore>();
+        var pmEvents = await eventStore.ReadProcessManagerStreamAsync(pmStream, fromVersion: 0, cts.Token);
+
+        // The seeded PM's first event was written under the OrderPlaced that started it. Everything
+        // after it is what the timeout drove.
+        var written = pmEvents.Skip(1).ToArray();
+        written.Should().NotBeEmpty("the timeout should have driven the process manager to cancellation");
+
+        written[0].Metadata.CorrelationId.Should().Be(
+            WorkflowCorrelationId, "the compensating events belong to the workflow the timeout resurfaced");
+        written[0].Metadata.CausationId.Should().Be(
+            SchedulingEventId, "causation points at the event that scheduled the timeout");
+
+        written.Should().AllSatisfy(e =>
+        {
+            e.Metadata.CorrelationId.Should().Be(WorkflowCorrelationId);
+            e.Metadata.ActorId.Should().Be(SystemActors.OrderFulfillment.Id);
+            e.Metadata.Source.Should().Be(SystemActors.OrderFulfillment.ServiceName);
+        });
     }
 
     private static DelayQueueProcessor ResolveProcessor(IHost host) =>
@@ -187,8 +241,8 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
         cmd.Parameters.AddWithValue("fire_at", NpgsqlDbType.TimestampTz, DateTime.UtcNow.AddMinutes(-5));
         cmd.Parameters.AddWithValue("type", NpgsqlDbType.Text, nameof(TimeoutAwaitingPaymentForOrder));
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, payloadJson);
-        cmd.Parameters.AddWithValue("correlation", NpgsqlDbType.Uuid, Guid.NewGuid());
-        cmd.Parameters.AddWithValue("causation", NpgsqlDbType.Uuid, Guid.NewGuid());
+        cmd.Parameters.AddWithValue("correlation", NpgsqlDbType.Uuid, WorkflowCorrelationId);
+        cmd.Parameters.AddWithValue("causation", NpgsqlDbType.Uuid, SchedulingEventId);
         cmd.Parameters.AddWithValue("actor", NpgsqlDbType.Uuid, SystemActors.OrderFulfillment.Id);
         cmd.Parameters.AddWithValue("service", NpgsqlDbType.Text, SystemActors.OrderFulfillment.ServiceName);
         cmd.Parameters.AddWithValue("key", NpgsqlDbType.Text, Guid.NewGuid().ToString());

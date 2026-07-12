@@ -60,9 +60,10 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
 
     // Mirrors EventStoreRepository.BuildEnvelopes: the first event is caused by
     // the command context's CausationCommandId, each subsequent event by the
-    // prior event's EventId. Fallback to Guid.Empty / "Workers" when no command
-    // context is in flight. Propagating causation from the triggering inbound
-    // event is a PM-handler concern that lands with the handlers in a later commit.
+    // prior event's EventId. The context is required (ADR 0042): the outbox
+    // dispatcher establishes one per handler and the command pipeline establishes
+    // one for a resurfaced timeout, so a save that finds none is a dispatch-wiring
+    // regression and fails closed rather than stamping empty identity.
     private IReadOnlyList<ProcessManagerEventEnvelope> BuildEnvelopes(
         StreamId streamId,
         int baseVersion,
