@@ -133,6 +133,32 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    // The focused correlation-trace read for the AdminConsole Correlation-ID Tracer (Chapter 17).
+    // Registers the event-store data source, its connection factory, the JSON options the metadata
+    // deserialize needs, and ICorrelationTraceReader. It registers no type registry and no IEventStore:
+    // the read resolves no payload type, so it needs neither. Every shared dependency goes in through
+    // TryAdd, so this composes beside AddEventStoreHeadPosition and AddEventStoreReplayReader in one
+    // host without colliding with either, and stands alone in a host that composes only the tracer.
+    public static IServiceCollection AddCorrelationTraceReader(
+        this IServiceCollection services,
+        string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+        services.TryAddSingleton(_ => new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new TenantIdJsonConverter() },
+        });
+        services.TryAddSingleton<ICorrelationTraceReader, PostgresCorrelationTraceReader>();
+
+        return services;
+    }
+
     // The focused read-side event-store registration for replay: the materialization stack a per-tenant
     // rebuild needs to read and deserialize a tenant's history, plus IEventStore, and nothing else. It
     // registers no NpgsqlDataSource or connection factory (the host holds both from

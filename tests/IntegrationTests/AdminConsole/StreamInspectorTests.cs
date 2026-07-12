@@ -11,12 +11,13 @@ using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.AdminConsole;
 
-// Phase 12, the Event Store Browser seam (RED). IStreamInspector inspects a single aggregate stream for
-// operator display across four outcomes. These specs boot the real AdminConsole host over migrated
-// Testcontainers Postgres (the admit fixture) and resolve the seam from it, the same composition shape the
-// throughput-rebuild test uses. The seam is declared but has no implementation registered, so the resolve
-// throws here: the RED. The seed, the inspect, and the assertions below are the GREEN-ready shape the
-// seam's implementation and its host registration will satisfy.
+// Phase 12, the Event Store Browser seam. IStreamInspector inspects a single aggregate stream for operator
+// display, and these specs pin its four outcomes: Found for a seeded stream, Empty for a well-formed id
+// matching nothing, ProcessManagerUnsupported for a pm- prefixed id, and InvalidFormat for input the
+// StreamId grammar rejects. They boot the real AdminConsole host over migrated Testcontainers Postgres (the
+// admit fixture) and resolve the seam and the event store from it, the same composition shape the
+// throughput-rebuild test uses, so the host's own registration and JSON options are what the assertions run
+// against.
 public class StreamInspectorTests : IClassFixture<AdminConsoleAdmitFixture>
 {
     private static readonly DateTime SeedTime = new(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);

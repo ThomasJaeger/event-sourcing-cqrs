@@ -23,10 +23,18 @@ internal static class PostgresEventStoreTestKit
             .Register<OtherTestPayload>();
 
     public static ProcessManagerEventTypeRegistry CreatePmRegistry()
-        => new();
+        => new ProcessManagerEventTypeRegistry()
+            .Register<TestPmPayload>();
 
     public static StreamId NewStreamId()
         => StreamId.Parse($"test:{Guid.NewGuid():N}");
+
+    // A pm- prefixed stream, the form AppendProcessManagerEventsAsync requires and
+    // the aggregate feeds exclude (ADR 0013). The correlation trace reads both
+    // families out of the one events table, so its suite needs to seed both.
+    public static StreamId NewPmStreamId()
+        => StreamId.ForProcessManager(
+            StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
     public static EventEnvelope BuildEnvelope(
         StreamId streamId,
@@ -59,7 +67,43 @@ internal static class PostgresEventStoreTestKit
             OccurredUtc: when,
             GlobalPosition: 0);
     }
+
+    // The PM twin of BuildEnvelope, same knobs. PM rows land in the same events
+    // table as aggregate rows and carry the same EventMetadata, so a suite that
+    // reads the table by correlation seeds both through one shape.
+    public static ProcessManagerEventEnvelope BuildPmEnvelope(
+        StreamId streamId,
+        int streamVersion,
+        IProcessManagerEvent payload,
+        DateTime? occurredUtc = null,
+        Guid? correlationId = null,
+        Guid? eventId = null,
+        TenantId? tenant = null)
+    {
+        var when = occurredUtc ?? new DateTime(2026, 5, 12, 12, 0, 0, DateTimeKind.Utc);
+        var id = eventId ?? Guid.NewGuid();
+        var metadata = new EventMetadata(
+            EventId: id,
+            CorrelationId: correlationId ?? Guid.NewGuid(),
+            CausationId: Guid.NewGuid(),
+            ActorId: Guid.Empty,
+            Source: "test",
+            SchemaVersion: 1,
+            OccurredUtc: when,
+            Tenant: tenant ?? WellKnownTenants.Default);
+        return new ProcessManagerEventEnvelope(
+            StreamId: streamId,
+            StreamVersion: streamVersion,
+            EventId: id,
+            EventType: payload.GetType().Name,
+            EventVersion: 1,
+            Payload: payload,
+            Metadata: metadata,
+            OccurredUtc: when,
+            GlobalPosition: 0);
+    }
 }
 
 internal sealed record TestPayload(Guid OrderId, decimal Total) : IDomainEvent;
 internal sealed record OtherTestPayload(string Description) : IDomainEvent;
+internal sealed record TestPmPayload(int Step) : IProcessManagerEvent;
