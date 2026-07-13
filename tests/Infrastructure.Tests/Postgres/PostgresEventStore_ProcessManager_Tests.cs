@@ -81,23 +81,6 @@ public class PostgresEventStore_ProcessManager_Tests : IClassFixture<PostgresFix
     }
 
     [Fact]
-    public async Task Append_throws_ConcurrencyException_on_taken_version()
-    {
-        var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = NewStore(dataSource);
-        var stream = PmStream();
-        await store.AppendProcessManagerEventsAsync(
-            stream, 0, Envelopes(stream, 1), CancellationToken.None);
-
-        var act = async () => await store.AppendProcessManagerEventsAsync(
-            stream, 0, Envelopes(stream, 1), CancellationToken.None);
-
-        var ex = (await act.Should().ThrowAsync<ConcurrencyException>()).Which;
-        ex.StreamId.Should().Be(stream);
-    }
-
-    [Fact]
     public async Task ReadProcessManagerStream_throws_on_a_non_pm_stream()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();

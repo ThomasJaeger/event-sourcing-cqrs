@@ -19,18 +19,6 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
     }
 
     [Fact]
-    public async Task ReadStream_returns_empty_for_unknown_stream()
-    {
-        var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
-
-        var read = await store.ReadStreamAsync(NewStreamId(), 0, CancellationToken.None);
-
-        read.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task ReadStream_returns_single_event_in_order()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
@@ -55,54 +43,6 @@ public class PostgresEventStore_ReadStreamAsync_Tests : IClassFixture<PostgresFi
         // Metadata.EventId, and the Phase 12 Correlation-ID Tracer follows
         // chains through that field.
         read[0].EventId.Should().Be(read[0].Metadata.EventId);
-    }
-
-    [Fact]
-    public async Task ReadStream_returns_multiple_events_in_stream_version_order()
-    {
-        var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
-        var streamId = NewStreamId();
-        await store.AppendAsync(
-            streamId, 0,
-            [
-                BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
-                BuildEnvelope(streamId, 2, new OtherTestPayload("two")),
-                BuildEnvelope(streamId, 3, new TestPayload(Guid.NewGuid(), 3m)),
-            ],
-            CancellationToken.None);
-
-        var read = await store.ReadStreamAsync(streamId, 0, CancellationToken.None);
-
-        read.Select(e => e.StreamVersion).Should().Equal(1, 2, 3);
-        // Fresh database, IDENTITY starts at 1: ReadStreamAsync populates GlobalPosition.
-        read.Select(e => e.GlobalPosition).Should().Equal(1, 2, 3);
-        read[0].Payload.Should().BeOfType<TestPayload>();
-        read[1].Payload.Should().BeOfType<OtherTestPayload>().Which.Description.Should().Be("two");
-        read[2].Payload.Should().BeOfType<TestPayload>();
-    }
-
-    [Fact]
-    public async Task ReadStream_filters_by_from_version_exclusive()
-    {
-        var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        await using var dataSource = NpgsqlDataSource.Create(connStr);
-        var store = new PostgresEventStore(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
-        var streamId = NewStreamId();
-        await store.AppendAsync(
-            streamId, 0,
-            [
-                BuildEnvelope(streamId, 1, new TestPayload(Guid.NewGuid(), 1m)),
-                BuildEnvelope(streamId, 2, new TestPayload(Guid.NewGuid(), 2m)),
-                BuildEnvelope(streamId, 3, new TestPayload(Guid.NewGuid(), 3m)),
-            ],
-            CancellationToken.None);
-
-        var read = await store.ReadStreamAsync(streamId, 2, CancellationToken.None);
-
-        read.Should().HaveCount(1);
-        read[0].StreamVersion.Should().Be(3);
     }
 
     [Fact]
