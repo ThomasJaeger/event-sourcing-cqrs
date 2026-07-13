@@ -21,12 +21,15 @@ public static class ContractEnvelopes
     // The tenant rides on the metadata, not on the stream id. StreamId only composes a tenant
     // for process-manager streams, and the tenant-scoped read filters on the tenant the
     // envelope's metadata carries, so metadata is the seam a tenant fact has to drive.
+    // source is a knob because it is the one free-text field on the metadata, which makes it the
+    // only place the suite can drive non-ASCII content through the metadata column.
     public static EventEnvelope Build(
         StreamId streamId,
         int streamVersion,
         IDomainEvent payload,
         Guid? eventId = null,
-        TenantId? tenant = null)
+        TenantId? tenant = null,
+        string? source = null)
     {
         var id = eventId ?? Guid.NewGuid();
         return new EventEnvelope(
@@ -36,7 +39,7 @@ public static class ContractEnvelopes
             EventType: payload.GetType().Name,
             EventVersion: 1,
             Payload: payload,
-            Metadata: BuildMetadata(id, tenant),
+            Metadata: BuildMetadata(id, tenant, source),
             OccurredUtc: FrozenOccurredUtc,
             GlobalPosition: 0);
     }
@@ -56,18 +59,18 @@ public static class ContractEnvelopes
             EventType: payload.GetType().Name,
             EventVersion: 1,
             Payload: payload,
-            Metadata: BuildMetadata(id, tenant),
+            Metadata: BuildMetadata(id, tenant, source: null),
             OccurredUtc: FrozenOccurredUtc,
             GlobalPosition: 0);
     }
 
-    private static EventMetadata BuildMetadata(Guid eventId, TenantId? tenant)
+    private static EventMetadata BuildMetadata(Guid eventId, TenantId? tenant, string? source)
         => new(
             EventId: eventId,
             CorrelationId: Guid.NewGuid(),
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
-            Source: "contract-suite",
+            Source: source ?? "contract-suite",
             SchemaVersion: 1,
             OccurredUtc: FrozenOccurredUtc,
             Tenant: tenant ?? WellKnownTenants.Default);

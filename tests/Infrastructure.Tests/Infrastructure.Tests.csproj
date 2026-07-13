@@ -8,7 +8,9 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.MsSql" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
@@ -20,6 +22,7 @@
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.InMemory\EventStore.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\SignalR\SignalR.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />
     <ProjectReference Include="..\EventStore.ContractTests\EventStore.ContractTests.csproj" />

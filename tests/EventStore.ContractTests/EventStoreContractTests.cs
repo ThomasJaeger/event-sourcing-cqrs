@@ -224,6 +224,36 @@ public abstract class EventStoreContractTests
     }
 
     [Fact]
+    public async Task Non_ascii_payload_and_metadata_round_trip_with_exact_string_equality()
+    {
+        await using var backend = await CreateBackendAsync();
+        var stream = ContractEnvelopes.NewStreamId();
+
+        // Accented Latin, CJK, and an emoji (a surrogate pair in UTF-16). An engine that
+        // narrows the payload to a single-byte codepage on the way in loses the last two and
+        // mangles the first, and it does so silently: no error, no warning, a shorter string.
+        //
+        // This fact is a tripwire, not a formality. On SQL Server the intuitive parameter type
+        // for a VARCHAR column is the one that corrupts the value client-side before it ever
+        // reaches the database, so the obvious adapter code fails here and the correct code
+        // looks wrong. The suite is where that gets caught, once, for every engine.
+        const string NonAscii = "café / 日本語 / \U0001F680 / Ωμέγα";
+        var payload = new ContractOrderNoted(NonAscii);
+
+        // Payload and metadata are separate columns, so both are driven. Source is the metadata's
+        // one free-text field and therefore the only way to put non-ASCII through that column.
+        await backend.Store.AppendAsync(stream, 0,
+            [ContractEnvelopes.Build(stream, 1, payload, source: NonAscii)],
+            CancellationToken.None);
+
+        var read = await backend.Store.ReadStreamAsync(stream, 0, CancellationToken.None);
+
+        read.Should().HaveCount(1);
+        read[0].Payload.Should().BeOfType<ContractOrderNoted>().Which.Note.Should().Be(NonAscii);
+        read[0].Metadata.Source.Should().Be(NonAscii);
+    }
+
+    [Fact]
     public async Task Reading_a_process_manager_stream_with_a_non_pm_stream_id_fails_loudly()
     {
         await using var backend = await CreateBackendAsync();
