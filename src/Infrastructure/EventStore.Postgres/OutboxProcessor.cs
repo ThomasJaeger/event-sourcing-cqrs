@@ -76,11 +76,19 @@ public sealed class OutboxProcessor : BackgroundService
 
     public override async Task StartAsync(CancellationToken ct)
     {
-        _listenerCts = new CancellationTokenSource();
+        var listenerCts = new CancellationTokenSource();
+        var listenerToken = listenerCts.Token;
+        _listenerCts = listenerCts;
         await OpenListenerAsync(ct);
         // Long-running task: never awaited here. StopAsync cancels the
         // listener cts and awaits the task to drain.
-        _listenerTask = Task.Run(() => ListenAsync(_listenerCts.Token));
+        //
+        // The token is read off the local, not the field. StopAsync claims _listenerCts the
+        // moment it is entered, and this lambda does not run until the thread pool picks it
+        // up, so a shutdown that lands in that gap would leave the lambda reading a field
+        // that is already null. Capturing the token here means the listener starts from the
+        // source that StartAsync created, whatever shutdown does to the field behind it.
+        _listenerTask = Task.Run(() => ListenAsync(listenerToken));
         await base.StartAsync(ct);
     }
 
