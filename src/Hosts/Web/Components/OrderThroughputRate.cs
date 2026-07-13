@@ -9,6 +9,15 @@ public sealed record ThroughputReading(long WindowedCount, TimeSpan Window, Date
 
 public static class OrderThroughputRate
 {
+    // The meter's window: the most recent 60 seconds of buckets. It sits inside the projection's
+    // 300-second retention (OrderThroughputProjection.RetentionWindow), so the reader always has the
+    // buckets this window folds. A TimeSpan cannot be a const, so it is a static readonly.
+    //
+    // Born here at its second consumer: the page folds it to render the meter, and the Phase 12
+    // exit-condition test folds the same window over the same buckets to check the meter against the
+    // event store. Sharing the constant is what keeps the two from drifting apart.
+    public static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(60);
+
     // Folds the per-second buckets into a windowed count, measured back from the newest bucket
     // second rather than a wall clock, and reports that newest second as the as-of. Returns null
     // when there are no buckets so the page can render its empty state. Pattern from Chapter 13:

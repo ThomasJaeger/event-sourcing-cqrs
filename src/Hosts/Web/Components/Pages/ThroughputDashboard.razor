@@ -22,7 +22,8 @@
 }
 else
 {
-    var reading = OrderThroughputRate.Compute(rows ?? Array.Empty<OrderThroughputRow>(), RateWindow);
+    var reading = OrderThroughputRate.Compute(
+        rows ?? Array.Empty<OrderThroughputRow>(), OrderThroughputRate.RateWindow);
 
     if (reading is null)
     {
@@ -30,7 +31,7 @@ else
     }
     else
     {
-        var ratePerMinute = reading.WindowedCount * 60.0 / RateWindow.TotalSeconds;
+        var ratePerMinute = reading.WindowedCount * 60.0 / OrderThroughputRate.RateWindow.TotalSeconds;
         var ageSeconds = (int)(TimeProvider.GetUtcNow().UtcDateTime - reading.AsOfUtc).TotalSeconds;
 
         <p class="text-3xl font-semibold">@(ratePerMinute.ToString("0.#")) orders/min</p>
@@ -40,11 +41,8 @@ else
 }
 
 @code {
-    // A per-minute meter over the most recent 60 seconds of buckets. Inside the projection's
-    // 300-second retention (OrderThroughputProjection.RetentionWindow), so the reader always has
-    // the buckets this window folds. The rate is reported per minute against this window explicitly.
-    private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(60);
-
+    // The rate is reported per minute against OrderThroughputRate.RateWindow explicitly, so the
+    // window the page folds and the window the exit-condition test folds are the one constant.
     private IReadOnlyList<OrderThroughputRow>? rows;
     private bool denied;
 
