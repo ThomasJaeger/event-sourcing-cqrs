@@ -229,14 +229,21 @@ public abstract class EventStoreContractTests
         await using var backend = await CreateBackendAsync();
         var stream = ContractEnvelopes.NewStreamId();
 
-        // Accented Latin, CJK, and an emoji (a surrogate pair in UTF-16). An engine that
-        // narrows the payload to a single-byte codepage on the way in loses the last two and
-        // mangles the first, and it does so silently: no error, no warning, a shorter string.
+        // Accented Latin, CJK, and an emoji (a surrogate pair in UTF-16). The contract is that
+        // what goes in comes back out, whatever the engine does to store it.
         //
-        // This fact is a tripwire, not a formality. On SQL Server the intuitive parameter type
-        // for a VARCHAR column is the one that corrupts the value client-side before it ever
-        // reaches the database, so the obvious adapter code fails here and the correct code
-        // looks wrong. The suite is where that gets caught, once, for every engine.
+        // What this fact does NOT catch, written down so nobody trusts it for more than it is
+        // worth. System.Text.Json escapes non-ASCII to \uXXXX by default, so the JSON handed to
+        // a driver is already pure ASCII and survives even a parameter binding that narrows to a
+        // single-byte codepage. That is measured, not assumed: the SQL Server adapter passes
+        // this fact with the corrupting binding deliberately put back in. Catching that bug
+        // needs a byte-level assertion on the stored column, which is engine-specific and cannot
+        // live in an engine-agnostic suite. The guard that does work is the adapter's own
+        // parameter types.
+        //
+        // The fact still earns its keep. It pins the round-trip for any engine whose serializer
+        // does not escape, and it goes red the day someone sets a relaxed JSON encoder and the
+        // raw bytes start reaching the driver.
         const string NonAscii = "café / 日本語 / \U0001F680 / Ωμέγα";
         var payload = new ContractOrderNoted(NonAscii);
 
