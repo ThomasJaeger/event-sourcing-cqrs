@@ -90,17 +90,24 @@ public sealed class OutboxProcessor : BackgroundService
         // drains ExecuteAsync. Both sides tolerate either ordering, but
         // shutting the listener first means the notification handler stops
         // firing before the processor loop exits.
-        if (_listenerCts is not null)
+        //
+        // Claim the listener state before the first await, because shutdown is re-entrant:
+        // the host's disposal path enters StopAsync more than once. Reading the fields, then
+        // awaiting, then writing them back leaves a window where a second entry walks past a
+        // null check the first entry has not yet acted on, and the loser dereferences a field
+        // the winner already nulled. Exchanging both fields to null up front makes exactly one
+        // entry the owner of the teardown; every other entry sees null and no-ops.
+        var listenerCts = Interlocked.Exchange(ref _listenerCts, null);
+        var listenerTask = Interlocked.Exchange(ref _listenerTask, null);
+        if (listenerCts is not null)
         {
-            await _listenerCts.CancelAsync();
-            if (_listenerTask is not null)
+            await listenerCts.CancelAsync();
+            if (listenerTask is not null)
             {
-                try { await _listenerTask; }
+                try { await listenerTask; }
                 catch (OperationCanceledException) { }
             }
-            _listenerCts.Dispose();
-            _listenerCts = null;
-            _listenerTask = null;
+            listenerCts.Dispose();
         }
         await DisposeListenerConnectionAsync();
         await base.StopAsync(ct);
