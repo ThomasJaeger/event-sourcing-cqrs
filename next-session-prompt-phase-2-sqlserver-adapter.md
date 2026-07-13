@@ -14,6 +14,20 @@ The short of it: no SQL Server adapter exists on disk in any form, Phase 2 has b
 
 `next-session-prompt-phase-13-kurrent-adapter.md` is superseded, not deleted. Phase 13 opens after this arc closes, re-grounded then.
 
+## The version floor
+
+Ruled in the orchestrator loop and binding on this session: **the minimum supported SQL Server version is 2019, and the primary target is 2022.**
+
+The reasoning, each point checkable:
+
+- SQL Server 2016 leaves extended support on 2026-07-14. A floor there would ship an adapter whose minimum is unsupported the day it lands.
+- Official Linux container images start at 2017. The repo's test strategy is Testcontainers, and CI runs on ubuntu-latest, so any floor below 2017 cannot be proven in CI at all. A version the suite cannot exercise is a claim rather than a floor.
+- 2017 runs out of extended support in October 2027 and has no UTF-8 collation support, which puts a real constraint on how JSON payloads are stored.
+- 2019 introduces UTF-8 collations and carries extended support to January 2030. It is the oldest version that both survives the book's shelf life and can be proven in CI.
+- 2022 is where new deployments land, so it is the primary target rather than the floor.
+
+The floor is one named version, and it is named so that CI proves it rather than the docs asserting it. An adapter that claims to support a version no test runs against is exactly the kind of untested claim this phase exists to retire.
+
 ## Ordering note
 
 Book-repo work waits on a complete reference implementation. The flag-ledger pass and the Phase 17 manuscript reconciliation sit behind code completion. The deferral is recorded here so Phase 17 opens knowing the ledger work is owed first.
@@ -58,6 +72,7 @@ Produce one pasteable executor block that:
   - **The outbox and its notification mechanics.** What `OutboxProcessor` does, how LISTEN/NOTIFY wakes it, and what the migration-level trigger contributes. Then report PLAN.md:245 verbatim, which scopes SQL Server's projection trigger as polling in v1 and defers the engine-native alternatives (Service Broker, Change Tracking). The loop rules the SQL Server outbox shape with that coupling visible.
   - **Migrations.** How `migrations/` is laid out, how the runner discovers and applies them, and how the migration-tail assertions in PostgresMigrationRunnerTests are pinned. Report how a second engine's schema would fit that layout, since T-SQL and PostgreSQL DDL cannot share a file.
   - **The compose stack and Testcontainers packaging.** What services `docker/docker-compose.yml` defines and what Testcontainers packages `Directory.Packages.props` pins, against Phase 1's done-when at PLAN.md:209 and :225 that four services come up healthy.
+  - **The SQL Server image and package, grounded rather than assumed.** The Testcontainers MsSql package, and which `mcr.microsoft.com/mssql/server` tags for 2019 and 2022 the environment can pull. Report what the environment proves it can reach, so the image pin the session commits to is a fact rather than a guess. The version floor above is ruled; the tags that satisfy it are a disk question.
   - **The configuration switch.** How the event store is selected today. Report the host call sites verbatim. CLAUDE.md:105 promises that switching is a configuration change rather than a code change; report what disk does today, because that promise is what this phase's done-when at PLAN.md:253 has to make true.
 
 Report file:line first, verbatim where structure matters, and flag any drift from how a surface is named here. No edits, no staging, no commits.
@@ -70,7 +85,15 @@ The pre-flight leads. These are the forks that are visible from here, named so t
 - **The contract suite's sharing mechanism.** TDD_RULES.md §5 requires one identical suite across four adapters, and disk appears to have none. Extracting it is the honest reading of the rule and it is also the thing that makes the four-peer claim checkable. How it is parameterized, where it lives, and what it demands of a backend are open.
 - **The outbox shape for SQL Server.** Polling in v1 per PLAN.md:245, with the engine-native triggers deferred. The Postgres processor is built around a LISTEN/NOTIFY wake with an idle-poll fallback, so the question is what the SQL Server processor keeps, what it drops, and whether the shared behavior is a contract the suite pins or a coincidence of two implementations.
 - **Concurrency semantics mapping.** PLAN.md:235 names the engine-specific unique-violation codes, SQLState 23505 for PostgreSQL and error 2627 for SQL Server, each translated inside its own adapter into the one store-agnostic `ConcurrencyException`. The suite pins the contract; the adapters own the translation.
+- **The payload and metadata column type.** The version floor opens this one. PLAN.md:236 states NVARCHAR(MAX). A 2019 floor makes VARCHAR(MAX) under a UTF-8 collation available, which roughly halves storage for the ASCII-dominant JSON this system writes, at the cost of diverging from the shape PLAN.md states and with non-ASCII payload behavior to weigh. Either way the PLAN divergence is flagged: keeping NVARCHAR(MAX) leaves the storage cost on the table, and taking VARCHAR(MAX) makes PLAN.md:236 stale. Ruled in the loop, pre-decided here neither way.
+- **The CI matrix.** Whether the contract suite runs against the 2019 image alone, which is the floor and the thing most at risk of breaking, or against both 2019 and 2022. Decided against measured suite runtime once the suite exists, rather than in advance. A second engine in the matrix is real CI wall-clock, and the number is knowable rather than guessable.
 - **What a leak looks like.** Both PLAN.md:579 and CLAUDE.md:260 instruct that awkwardness in this adapter is a signal about the abstraction rather than about the adapter. If `IEventStore` does not fit the second engine cleanly, that is the finding the phase exists to produce, and it surfaces to the loop rather than being worked around in the adapter.
+
+Three candidate shapes travel with those forks as session inputs. Each is a starting point the loop rules on, not a decision, and the executor reconciles each against what the live engine does rather than against this list.
+
+- Optimistic concurrency: a unique index on (stream_id, version), with errors 2627 and 2601 both translated to `ConcurrencyException`. The Postgres adapter translates one SQLSTATE; SQL Server can raise either number for a uniqueness violation depending on the constraint's shape, so the translation covers both.
+- The correlation, causation, and tenant columns the Postgres schema derives with generated columns: persisted computed columns over `JSON_VALUE` are the SQL Server analogue, and whether they are indexed follows the read paths that exist.
+- The polling claim, standing in for `FOR UPDATE SKIP LOCKED`: an UPDATE with READPAST, UPDLOCK, and ROWLOCK, using OUTPUT to return the claimed rows in the same statement.
 
 ## Residual ledger
 
@@ -99,6 +122,8 @@ Seven flags stand, all for the doc-normalization commit and Phase 17. Code is ca
 - PLAN.md's Projection Status Dashboard text asserting the seconds-and-last-error substrate the ledger records as unbuilt.
 - PLAN.md:423 describing the Correlation-ID Tracer's output as the chain of command, events, projection updates, and follow-on commands. The shipped tool is an event-row trace; projection updates are not in the event store at all.
 - PLAN.md's done-when wording at :387, carried at :415, :417, and :437, predating ADR 0039 and reading as like-for-like metric parity between the Web dashboard and the AdminConsole tools. It normalizes to the substrate-consistency reading recorded in the db73dcc commit body and the OrderThroughputConsistencyTests header.
+
+One candidate flag is expected to join the family at this session's close, and the close doc records it. The version floor is a code decision, and whether the manuscript states a minimum SQL Server version in print, or states the constraint by capability instead (JSON functions, UTF-8 collation), is a manuscript question this session cannot settle from the code side. It belongs to Phase 17 with the rest of the family.
 
 ## Working-pattern rules (hold all)
 
