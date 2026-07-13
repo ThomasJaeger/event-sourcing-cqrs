@@ -10,9 +10,10 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 // adapter and self-contained per ADR 0004: it shares no code with it, because every mechanic it
 // depends on is engine-specific.
 //
-// The outbox row does not exist yet. Slice 3 adds its INSERT to AppendAsync's transaction, which
-// is where Phase 2's atomic-write done-when is met. The append is written so that arrival does
-// not change its shape.
+// AppendAsync writes the event row and its matching outbox row inside a single transaction:
+// either both land or neither does, which is Phase 2's atomic-write done-when (PLAN.md:238). The
+// outbox table is an implementation detail of this adapter; the public IEventStore surface does
+// not mention it. AppendProcessManagerEventsAsync writes no outbox row (ADR 0013).
 public sealed class SqlServerEventStore : IEventStore
 {
     // sp_getapplock resource serializing global_position assignment against commit (ADR 0044).
@@ -97,12 +98,33 @@ public sealed class SqlServerEventStore : IEventStore
                 AddDateTimeOffset(insertEvent, "occurred_utc", envelope.OccurredUtc);
 
                 // OUTPUT hands back the IDENTITY-assigned global_position, the counterpart of
-                // PostgreSQL's RETURNING. Slice 3's outbox row carries it so the OutboxProcessor
-                // never joins back. It is read now, and discarded, because OUTPUT without INTO
-                // fails on a table carrying any trigger: the no-trigger rule on events and this
-                // readback are one decision, and the append shape must not change when the
-                // outbox arrives.
-                _ = (long)(await insertEvent.ExecuteScalarAsync(ct))!;
+                // PostgreSQL's RETURNING, so the matching outbox row can carry it without a
+                // later read-back. OUTPUT without INTO fails on a table carrying any trigger:
+                // the no-trigger rule on events and this readback are one decision.
+                var globalPosition = (long)(await insertEvent.ExecuteScalarAsync(ct))!;
+
+                // The outbox row, in the SAME transaction as the event row. Either both land or
+                // neither does, which is Phase 2's atomic-write done-when (PLAN.md:238). The row
+                // is self-describing: it copies the event's type, payload, metadata, and time,
+                // and carries the position threaded out of the INSERT above, so the processor
+                // never joins back into event_store.events to assemble a dispatch.
+                //
+                // sent_utc, next_attempt_at, last_error, and destination default to NULL;
+                // attempt_count defaults to 0. Only the NOT NULL columns appear here.
+                await using var insertOutbox = new SqlCommand(
+                    "INSERT INTO event_store.outbox " +
+                    "(event_id, event_type, payload, metadata, occurred_utc, global_position) " +
+                    "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, " +
+                    "@global_position)",
+                    connection,
+                    transaction);
+                AddUuid(insertOutbox, "event_id", envelope.EventId);
+                AddIdentifier(insertOutbox, "event_type", eventTypeName);
+                AddJson(insertOutbox, "payload", payloadJson);
+                AddJson(insertOutbox, "metadata", metadataJson);
+                AddDateTimeOffset(insertOutbox, "occurred_utc", envelope.OccurredUtc);
+                AddBigInt(insertOutbox, "global_position", globalPosition);
+                await insertOutbox.ExecuteNonQueryAsync(ct);
             }
 
             await transaction.CommitAsync(ct);

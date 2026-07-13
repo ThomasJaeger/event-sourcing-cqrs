@@ -27,7 +27,11 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
     }
 
     [Fact]
-    public async Task Runner_applies_0001_and_records_it_in_the_tracking_table()
+    // Pins the migration set by version and name, the SQL Server twin of
+    // PostgresMigrationRunnerTests. Adding a migration to migrations/sqlserver/ is meant to break
+    // this fact: the set is a fact about the schema, not an implementation detail, and a new file
+    // that lands without anyone updating this list is a file nobody reviewed.
+    public async Task Runner_applies_every_migration_and_records_them_in_the_tracking_table()
     {
         var connStr = await _fixture.CreateDatabaseAsync();
         var log = new List<string>();
@@ -39,13 +43,17 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
         _output.WriteLine($"Container start-to-ready: {_fixture.ContainerStartupTime.TotalSeconds:F1}s");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
-        log.Should().Contain("Applied 1 migration(s).");
+        log.Should().Contain("Applying 0002 add_outbox.");
+        log.Should().Contain("Applied 2 migration(s).");
 
         var rows = await ReadTrackingTableAsync(connStr);
-        rows.Should().HaveCount(1);
+        rows.Should().HaveCount(2);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[1].Version.Should().Be(2);
+        rows[1].Name.Should().Be("add_outbox");
+        rows[1].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
     }
 
     [Fact]
@@ -59,7 +67,30 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
             CancellationToken.None);
 
         log.Should().Contain("No pending migrations.");
-        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(1);
+        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task The_outbox_and_quarantine_tables_carry_their_named_constraints()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+
+        var outboxConstraints = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.key_constraints " +
+            "WHERE parent_object_id = OBJECT_ID('event_store.outbox')");
+        outboxConstraints.Should().BeEquivalentTo("pk_outbox", "uq_outbox_event_id");
+
+        // The filtered index is the counterpart of PostgreSQL's partial index: the processor scans
+        // pending rows in FIFO order without indexing a column that is always NULL in the filter.
+        var filtered = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.indexes " +
+            "WHERE object_id = OBJECT_ID('event_store.outbox') AND has_filter = 1");
+        filtered.Should().BeEquivalentTo("ix_outbox_pending");
+
+        var quarantineConstraints = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.key_constraints " +
+            "WHERE parent_object_id = OBJECT_ID('event_store.outbox_quarantine')");
+        quarantineConstraints.Should().BeEquivalentTo("pk_outbox_quarantine");
     }
 
     [Fact]

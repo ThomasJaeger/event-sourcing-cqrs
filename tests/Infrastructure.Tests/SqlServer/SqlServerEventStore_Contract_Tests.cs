@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
@@ -78,6 +79,7 @@ internal sealed class SqlServerContractBackend : IEventStoreContractBackend
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
             Converters = { new TenantIdJsonConverter() },
+            Encoder = JavaScriptEncoder.Default,
         };
 
     public async Task<IHeldWriter> StartHeldWriterAsync(StreamId streamId)
