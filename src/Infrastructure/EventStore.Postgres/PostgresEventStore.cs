@@ -18,6 +18,15 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 // unique violations, NVARCHAR(MAX) for JSON, filtered indexes).
 public sealed class PostgresEventStore : IEventStore
 {
+    // pg_advisory_xact_lock(bigint) key serializing global_position assignment against
+    // commit. IDENTITY hands out a position mid-transaction, so without this two appends
+    // can commit out of position order and a reader tailing the log skips the one that
+    // commits late. Both append transactions take this lock before drawing a position, and
+    // the commit-visibility test's held writer takes the same key. The eight bytes spell
+    // ASCII "ESRCQ_AP" (event-sourcing reference implementation, append); distinct from
+    // MigrationRunner.MigrationAdvisoryLockKey, which shares the instance's lock space.
+    public const long AppendAdvisoryLockKey = 0x4553_5243_515F_4150L;
+
     private readonly INpgsqlConnectionFactory _factory;
     private readonly EventTypeRegistry _registry;
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
@@ -56,6 +65,8 @@ public sealed class PostgresEventStore : IEventStore
 
         try
         {
+            await SerializePositionAssignmentAsync(connection, transaction, ct);
+
             foreach (var envelope in events)
             {
                 var eventTypeName = _registry.NameFor(envelope.Payload.GetType());
@@ -197,6 +208,8 @@ public sealed class PostgresEventStore : IEventStore
 
         try
         {
+            await SerializePositionAssignmentAsync(connection, transaction, ct);
+
             foreach (var envelope in events)
             {
                 var eventTypeName = _pmRegistry.NameFor(envelope.Payload.GetType());
@@ -433,6 +446,19 @@ public sealed class PostgresEventStore : IEventStore
                 OccurredUtc: occurredUtc,
                 GlobalPosition: globalPosition);
         }
+    }
+
+    // Event rows become visible in global_position order (AppendAdvisoryLockKey).
+    private static async Task SerializePositionAssignmentAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken ct)
+    {
+        await using var takeLock = connection.CreateCommand();
+        takeLock.Transaction = transaction;
+        takeLock.CommandText = "SELECT pg_advisory_xact_lock(@key)";
+        AddBigInt(takeLock, "key", AppendAdvisoryLockKey);
+        await takeLock.ExecuteNonQueryAsync(ct);
     }
 
     private static void AddUuid(NpgsqlCommand cmd, string name, Guid value)
