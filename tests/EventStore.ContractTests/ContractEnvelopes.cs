@@ -18,8 +18,15 @@ public static class ContractEnvelopes
         => StreamId.ForProcessManager(
             StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
 
+    // The tenant rides on the metadata, not on the stream id. StreamId only composes a tenant
+    // for process-manager streams, and the tenant-scoped read filters on the tenant the
+    // envelope's metadata carries, so metadata is the seam a tenant fact has to drive.
     public static EventEnvelope Build(
-        StreamId streamId, int streamVersion, IDomainEvent payload, Guid? eventId = null)
+        StreamId streamId,
+        int streamVersion,
+        IDomainEvent payload,
+        Guid? eventId = null,
+        TenantId? tenant = null)
     {
         var id = eventId ?? Guid.NewGuid();
         return new EventEnvelope(
@@ -29,13 +36,17 @@ public static class ContractEnvelopes
             EventType: payload.GetType().Name,
             EventVersion: 1,
             Payload: payload,
-            Metadata: BuildMetadata(id),
+            Metadata: BuildMetadata(id, tenant),
             OccurredUtc: FrozenOccurredUtc,
             GlobalPosition: 0);
     }
 
     public static ProcessManagerEventEnvelope BuildProcessManager(
-        StreamId streamId, int streamVersion, IProcessManagerEvent payload, Guid? eventId = null)
+        StreamId streamId,
+        int streamVersion,
+        IProcessManagerEvent payload,
+        Guid? eventId = null,
+        TenantId? tenant = null)
     {
         var id = eventId ?? Guid.NewGuid();
         return new ProcessManagerEventEnvelope(
@@ -45,12 +56,12 @@ public static class ContractEnvelopes
             EventType: payload.GetType().Name,
             EventVersion: 1,
             Payload: payload,
-            Metadata: BuildMetadata(id),
+            Metadata: BuildMetadata(id, tenant),
             OccurredUtc: FrozenOccurredUtc,
             GlobalPosition: 0);
     }
 
-    private static EventMetadata BuildMetadata(Guid eventId)
+    private static EventMetadata BuildMetadata(Guid eventId, TenantId? tenant)
         => new(
             EventId: eventId,
             CorrelationId: Guid.NewGuid(),
@@ -59,5 +70,5 @@ public static class ContractEnvelopes
             Source: "contract-suite",
             SchemaVersion: 1,
             OccurredUtc: FrozenOccurredUtc,
-            Tenant: WellKnownTenants.Default);
+            Tenant: tenant ?? WellKnownTenants.Default);
 }

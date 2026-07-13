@@ -21,6 +21,12 @@ namespace EventSourcingCqrs.EventStore.ContractTests;
 //
 // The suite never asserts on a timestamp and never orders by one. Global position is the only
 // ordering the contract has.
+//
+// ReadAllForTenantAsync inherits ADR 0044's commit-order visibility exactly as ReadAllAsync
+// does: it is the same feed with a tenant predicate and a ceiling, so an observed gap in its
+// window is permanent and a high-water mark over its committed reads is safe. The pre-flight
+// left that reader's safety classification split; the ADR settles it, and the facts below pin
+// its bounds and its filter rather than leaving them to be inferred from the Postgres adapter.
 public abstract class EventStoreContractTests
 {
     // Long enough for an unserialized append to finish against a local backend. No fact asserts
@@ -217,6 +223,137 @@ public abstract class EventStoreContractTests
         read.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Reading_a_process_manager_stream_with_a_non_pm_stream_id_fails_loudly()
+    {
+        await using var backend = await CreateBackendAsync();
+        var aggregateStream = ContractEnvelopes.NewStreamId();
+        await backend.Store.AppendAsync(aggregateStream, 0,
+            [ContractEnvelopes.Build(
+                aggregateStream, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m))],
+            CancellationToken.None);
+
+        // The guard is on the shape of the stream id, not on whether the stream exists, so an
+        // aggregate stream carrying real events must still be refused rather than handed back
+        // through the PM read. PM payloads resolve through a separate registry (ADR 0013) and a
+        // caller reaching for one with an aggregate id has a bug (ADR 0011).
+        //
+        // The suite pins the loudness and not the type. IEventStore's stated contract says
+        // "failing loudly" and names no exception, so holding every engine to one type would be
+        // the suite inventing a contract the port never made. Both shipped stores happen to
+        // raise ArgumentException.
+        var act = async () => await backend.Store.ReadProcessManagerStreamAsync(
+            aggregateStream, 0, CancellationToken.None);
+
+        await act.Should().ThrowAsync<Exception>();
+    }
+
+    [Fact]
+    public async Task Reading_all_excludes_process_manager_streams()
+    {
+        await using var backend = await CreateBackendAsync();
+        var aggregateStream = ContractEnvelopes.NewStreamId();
+        await backend.Store.AppendAsync(aggregateStream, 0,
+            [ContractEnvelopes.Build(
+                aggregateStream, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m))],
+            CancellationToken.None);
+
+        var pmStream = ContractEnvelopes.NewProcessManagerStreamId();
+        await backend.Store.AppendProcessManagerEventsAsync(pmStream, 0,
+            [ContractEnvelopes.BuildProcessManager(pmStream, 1, new ContractStepRecorded(1))],
+            CancellationToken.None);
+
+        var feed = await ReadFeedAsync(backend.Store);
+
+        // Projections derive workflow state from aggregate events and never from PM streams
+        // (ADR 0013), so the feed they drive off must not carry them. The second assertion is
+        // what makes the first mean something: both rows really landed, and both drew a
+        // position, so the feed is filtering rather than the PM append having quietly failed.
+        feed.Select(e => e.StreamId).Should().Equal(aggregateStream);
+        (await backend.ReadCommittedPositionsAsync()).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Reading_a_tenant_window_filters_by_tenant_and_honors_its_bounds()
+    {
+        await using var backend = await CreateBackendAsync();
+        var otherTenant = TenantId.From(Guid.NewGuid());
+
+        // Four appends, alternating tenants, each on its own stream so each draws its own
+        // position. Positions are read back rather than assumed: the contract promises
+        // ascending, never contiguous (ADR 0044).
+        var first = await AppendOneAsync(backend.Store, WellKnownTenants.Default);
+        var second = await AppendOneAsync(backend.Store, otherTenant);
+        var third = await AppendOneAsync(backend.Store, WellKnownTenants.Default);
+        var fourth = await AppendOneAsync(backend.Store, otherTenant);
+
+        var defaultTenantFeed = await ReadTenantFeedAsync(
+            backend.Store, WellKnownTenants.Default, fromPosition: 0, toPositionInclusive: fourth);
+        var otherTenantFeed = await ReadTenantFeedAsync(
+            backend.Store, otherTenant, fromPosition: 0, toPositionInclusive: fourth);
+
+        // The filter: neither tenant ever sees the other's events, over the same window.
+        defaultTenantFeed.Select(e => e.GlobalPosition)
+            .Should().Equal(first, third).And.BeInAscendingOrder();
+        otherTenantFeed.Select(e => e.GlobalPosition)
+            .Should().Equal(second, fourth).And.BeInAscendingOrder();
+
+        // Both bounds, pinned in one read. fromPosition is exclusive, so the event sitting
+        // exactly on it drops out. toPositionInclusive is inclusive, so the event sitting
+        // exactly on the ceiling stays in.
+        var window = await ReadTenantFeedAsync(
+            backend.Store, WellKnownTenants.Default, fromPosition: first, toPositionInclusive: third);
+
+        window.Select(e => e.GlobalPosition).Should().Equal(third);
+    }
+
+    [Fact]
+    public async Task Appending_process_manager_events_at_a_stale_expected_version_raises_the_concurrency_contract()
+    {
+        await using var backend = await CreateBackendAsync();
+        var stream = ContractEnvelopes.NewProcessManagerStreamId();
+        await backend.Store.AppendProcessManagerEventsAsync(stream, 0,
+            [ContractEnvelopes.BuildProcessManager(stream, 1, new ContractStepRecorded(1))],
+            CancellationToken.None);
+
+        // The PM append path owes the same concurrency contract as the aggregate path: same
+        // (stream, version) uniqueness, same let-the-write-fail detection, same store-agnostic
+        // exception carrying the same payload.
+        var stale = ContractEnvelopes.BuildProcessManager(stream, 1, new ContractStepRecorded(2));
+        var act = async () => await backend.Store.AppendProcessManagerEventsAsync(
+            stream, 0, [stale], CancellationToken.None);
+
+        var ex = (await act.Should().ThrowAsync<ConcurrencyException>()).Which;
+        ex.StreamId.Should().Be(stream);
+        ex.ExpectedVersion.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Reading_all_resumes_from_a_non_zero_position_exclusively()
+    {
+        await using var backend = await CreateBackendAsync();
+        var stream = ContractEnvelopes.NewStreamId();
+        await backend.Store.AppendAsync(stream, 0,
+            [
+                ContractEnvelopes.Build(stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m)),
+                ContractEnvelopes.Build(stream, 2, new ContractOrderNoted("second")),
+                ContractEnvelopes.Build(stream, 3, new ContractOrderNoted("third")),
+            ],
+            CancellationToken.None);
+
+        var feed = await ReadFeedAsync(backend.Store);
+        var resumeFrom = feed[0].GlobalPosition;
+
+        var tail = await ReadFeedAsync(backend.Store, resumeFrom);
+
+        // fromPosition is the resume checkpoint and it is exclusive: the event sitting exactly
+        // on it is not replayed. A projection resuming at its checkpoint must not reprocess the
+        // event it already checkpointed.
+        tail.Select(e => e.StreamVersion).Should().Equal(2, 3);
+        tail.Select(e => e.GlobalPosition)
+            .Should().Equal(feed[1].GlobalPosition, feed[2].GlobalPosition);
+    }
+
     // The commit-ordering invariant, and nothing else: every position that surfaces once the
     // held writer commits must sit above everything an earlier committed read already observed.
     // A position landing at or below that mark is one a checkpointing reader has already read
@@ -243,11 +380,45 @@ public abstract class EventStoreContractTests
 
     private static async Task<IReadOnlyList<long>> ReadFeedPositionsAsync(IEventStore store)
     {
-        var positions = new List<long>();
-        await foreach (var envelope in store.ReadAllAsync(0, CancellationToken.None))
+        var feed = await ReadFeedAsync(store);
+        return feed.Select(e => e.GlobalPosition).ToArray();
+    }
+
+    private static async Task<IReadOnlyList<EventEnvelope>> ReadFeedAsync(
+        IEventStore store, long fromPosition = 0)
+    {
+        var feed = new List<EventEnvelope>();
+        await foreach (var envelope in store.ReadAllAsync(fromPosition, CancellationToken.None))
         {
-            positions.Add(envelope.GlobalPosition);
+            feed.Add(envelope);
         }
-        return positions;
+        return feed;
+    }
+
+    private static async Task<IReadOnlyList<EventEnvelope>> ReadTenantFeedAsync(
+        IEventStore store, TenantId tenant, long fromPosition, long toPositionInclusive)
+    {
+        var feed = new List<EventEnvelope>();
+        await foreach (var envelope in store.ReadAllForTenantAsync(
+            tenant, fromPosition, toPositionInclusive, CancellationToken.None))
+        {
+            feed.Add(envelope);
+        }
+        return feed;
+    }
+
+    // One event on its own stream for the given tenant, returning the position it drew. The
+    // position is read back from the store rather than assumed, because the contract does not
+    // promise contiguity.
+    private static async Task<long> AppendOneAsync(IEventStore store, TenantId tenant)
+    {
+        var stream = ContractEnvelopes.NewStreamId();
+        await store.AppendAsync(stream, 0,
+            [ContractEnvelopes.Build(
+                stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m), tenant: tenant)],
+            CancellationToken.None);
+
+        var read = await store.ReadStreamAsync(stream, 0, CancellationToken.None);
+        return read.Single().GlobalPosition;
     }
 }
