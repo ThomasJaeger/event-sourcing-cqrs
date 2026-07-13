@@ -1,0 +1,63 @@
+using EventSourcingCqrs.Domain.Abstractions;
+
+namespace EventSourcingCqrs.EventStore.ContractTests;
+
+// Envelope construction for the suite, and for the backends that have to write a row by hand
+// to park a held writer. OccurredUtc is a frozen literal and no fact ever asserts on it: the
+// contract orders by global position and never by time, so an engine's clock is not the
+// suite's business.
+public static class ContractEnvelopes
+{
+    private static readonly DateTime FrozenOccurredUtc =
+        new(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc);
+
+    public static StreamId NewStreamId()
+        => StreamId.Parse($"contract:{Guid.NewGuid():N}");
+
+    public static StreamId NewProcessManagerStreamId()
+        => StreamId.ForProcessManager(
+            StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
+
+    public static EventEnvelope Build(
+        StreamId streamId, int streamVersion, IDomainEvent payload, Guid? eventId = null)
+    {
+        var id = eventId ?? Guid.NewGuid();
+        return new EventEnvelope(
+            StreamId: streamId,
+            StreamVersion: streamVersion,
+            EventId: id,
+            EventType: payload.GetType().Name,
+            EventVersion: 1,
+            Payload: payload,
+            Metadata: BuildMetadata(id),
+            OccurredUtc: FrozenOccurredUtc,
+            GlobalPosition: 0);
+    }
+
+    public static ProcessManagerEventEnvelope BuildProcessManager(
+        StreamId streamId, int streamVersion, IProcessManagerEvent payload, Guid? eventId = null)
+    {
+        var id = eventId ?? Guid.NewGuid();
+        return new ProcessManagerEventEnvelope(
+            StreamId: streamId,
+            StreamVersion: streamVersion,
+            EventId: id,
+            EventType: payload.GetType().Name,
+            EventVersion: 1,
+            Payload: payload,
+            Metadata: BuildMetadata(id),
+            OccurredUtc: FrozenOccurredUtc,
+            GlobalPosition: 0);
+    }
+
+    private static EventMetadata BuildMetadata(Guid eventId)
+        => new(
+            EventId: eventId,
+            CorrelationId: Guid.NewGuid(),
+            CausationId: Guid.NewGuid(),
+            ActorId: Guid.Empty,
+            Source: "contract-suite",
+            SchemaVersion: 1,
+            OccurredUtc: FrozenOccurredUtc,
+            Tenant: WellKnownTenants.Default);
+}

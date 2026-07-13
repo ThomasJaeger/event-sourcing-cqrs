@@ -20,6 +20,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Application.Tests/Application.Tests.csproj" />
     <Project Path="tests/Domain.Tests/Domain.Tests.csproj" />
+    <Project Path="tests/EventStore.ContractTests/EventStore.ContractTests.csproj" />
     <Project Path="tests/Infrastructure.Tests/Infrastructure.Tests.csproj" />
     <Project Path="tests/Projections.Tests/Projections.Tests.csproj" />
     <Project Path="tests/ProcessManagers.Tests/ProcessManagers.Tests.csproj" />
