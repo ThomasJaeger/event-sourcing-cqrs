@@ -117,7 +117,8 @@ Behaviors the suite pins down:
 - Appending with a stale expected version raises the concurrency-conflict contract, a
   single store-agnostic exception type; adapters translate native errors into it.
 - Idempotent append by event id / dedup key where the design promises it.
-- Global ordering by `global_position` is monotonic and gap-tolerant as specified.
+- Global ordering by `global_position` is monotonic in commit order and gap-tolerant:
+  gaps come only from rolled-back appends and are permanent, never transient (ADR 0044).
 - Reading a non-existent stream behaves per contract (empty vs. throws: pick one, pin it).
 
 An adapter's internals may be spiked first; **"done" = green against this suite on the real

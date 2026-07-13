@@ -37,6 +37,10 @@ public interface IEventStore
     // Projections and the replayer drive off this; fromPosition is the resume
     // checkpoint. PM-prefixed streams are excluded (ADR 0013): projections
     // derive workflow state from aggregate events, never from PM streams.
+    // Rows become visible in global_position commit order (ADR 0044), so a gap
+    // this read observes is permanent (a rolled-back append burns its positions)
+    // and never fills in later. Tracking a high-water mark over committed reads
+    // is safe: nothing surfaces below one.
     IAsyncEnumerable<EventEnvelope> ReadAllAsync(
         long fromPosition,
         CancellationToken ct = default);
@@ -46,6 +50,9 @@ public interface IEventStore
     // with a tenant predicate and an inclusive ceiling. A per-tenant rebuild replays one
     // tenant's events up to a captured checkpoint and no further, so the rebuild never
     // reaches events the projection has not globally processed.
+    // Same commit-order visibility as ReadAllAsync (ADR 0044): rows surface in
+    // global_position commit order, an observed gap is permanent (a rolled-back
+    // append), and a high-water mark over committed reads is safe.
     IAsyncEnumerable<EventEnvelope> ReadAllForTenantAsync(
         TenantId tenant,
         long fromPosition,
