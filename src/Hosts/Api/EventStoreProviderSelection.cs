@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 
@@ -51,14 +52,15 @@ internal static class EventStoreProviderSelection
     {
         try
         {
-            if (provider == EventStoreProvider.SqlServer)
+            _ = provider switch
             {
-                _ = new SqlConnectionStringBuilder(connectionString);
-            }
-            else
-            {
-                _ = new NpgsqlConnectionStringBuilder(connectionString);
-            }
+                EventStoreProvider.SqlServer =>
+                    (DbConnectionStringBuilder)new SqlConnectionStringBuilder(connectionString),
+                EventStoreProvider.Postgres =>
+                    new NpgsqlConnectionStringBuilder(connectionString),
+                _ => throw new InvalidOperationException(
+                    $"Unhandled event store provider: {provider}."),
+            };
         }
         catch (ArgumentException ex)
         {

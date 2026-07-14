@@ -46,9 +46,9 @@ try
     // Migration is per database, not per host. The event-store database gets the selected provider's
     // runner and never the other engine's. It runs first because migration 0005's pg_notify trigger
     // must be in place before the PostgreSQL host's listener starts.
-    if (eventStoreProvider == EventStoreProvider.SqlServer)
+    await (eventStoreProvider switch
     {
-        await new SqlServerMigrationRunner(
+        EventStoreProvider.SqlServer => new SqlServerMigrationRunner(
                 EventStoreSqlServerMigrations.Assembly,
                 EventStoreSqlServerMigrations.ResourcePrefix)
             .RunPendingAsync(
@@ -57,11 +57,8 @@ try
                     ConnectionString = eventStoreConnectionString,
                     Log = Console.WriteLine,
                 },
-                cts.Token);
-    }
-    else
-    {
-        await new MigrationRunner(
+                cts.Token),
+        EventStoreProvider.Postgres => new MigrationRunner(
                 EventStorePostgresMigrations.Assembly,
                 EventStorePostgresMigrations.ResourcePrefix)
             .RunPendingAsync(
@@ -70,8 +67,10 @@ try
                     ConnectionString = eventStoreConnectionString,
                     Log = Console.WriteLine,
                 },
-                cts.Token);
-    }
+                cts.Token),
+        _ => throw new InvalidOperationException(
+            $"Unhandled event store provider: {eventStoreProvider}."),
+    });
 
     // The read-model database is PostgreSQL on either provider, and the read_models schema exists
     // only in the PostgreSQL migration set, so this run is unconditional: on the SqlServer provider

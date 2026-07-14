@@ -64,16 +64,15 @@ builder.Services.AddSingleton<ICommandTypeProvider, BillingCommandTypeProvider>(
 // process-manager updates. Both adapters bundle the same companion ports, the
 // idempotency store and the delay queue, so either arm leaves this host's command
 // pipeline fully composed.
-if (eventStoreProvider == EventStoreProvider.SqlServer)
+_ = eventStoreProvider switch
 {
-    builder.Services.AddSqlServerEventStore(opts =>
-        opts.ConnectionString = eventStoreConnectionString);
-}
-else
-{
-    builder.Services.AddPostgresEventStore(opts =>
-        opts.ConnectionString = eventStoreConnectionString);
-}
+    EventStoreProvider.SqlServer => builder.Services.AddSqlServerEventStore(opts =>
+        opts.ConnectionString = eventStoreConnectionString),
+    EventStoreProvider.Postgres => builder.Services.AddPostgresEventStore(opts =>
+        opts.ConnectionString = eventStoreConnectionString),
+    _ => throw new InvalidOperationException(
+        $"Unhandled event store provider: {eventStoreProvider}."),
+};
 builder.Services.AddApplication();
 builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);

@@ -48,39 +48,36 @@ public static class WorkersHostFactory
         // The provider the caller selected picks the engine for all three write-side registrations
         // below. They are the only engine-specific ones: everything else in this composition is a
         // port, and the read models stay PostgreSQL under their own connection string.
-        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        _ = eventStoreProvider switch
         {
-            builder.Services.AddSqlServerEventStore(opts =>
-                opts.ConnectionString = eventStoreConnectionString);
-        }
-        else
-        {
-            builder.Services.AddPostgresEventStore(opts =>
-                opts.ConnectionString = eventStoreConnectionString);
-        }
+            EventStoreProvider.SqlServer => builder.Services.AddSqlServerEventStore(opts =>
+                opts.ConnectionString = eventStoreConnectionString),
+            EventStoreProvider.Postgres => builder.Services.AddPostgresEventStore(opts =>
+                opts.ConnectionString = eventStoreConnectionString),
+            _ => throw new InvalidOperationException(
+                $"Unhandled event store provider: {eventStoreProvider}."),
+        };
         // The outbox processor drains events to the in-process dispatcher and needs
         // no command bus, so it composes right after the event store (the
         // delay-queue processor below needs AddApplication first; the outbox does
         // not). Neither event-store registration bundles it.
-        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        _ = eventStoreProvider switch
         {
-            builder.Services.AddSqlServerOutboxProcessor();
-        }
-        else
-        {
-            builder.Services.AddPostgresOutboxProcessor();
-        }
+            EventStoreProvider.SqlServer => builder.Services.AddSqlServerOutboxProcessor(),
+            EventStoreProvider.Postgres => builder.Services.AddPostgresOutboxProcessor(),
+            _ => throw new InvalidOperationException(
+                $"Unhandled event store provider: {eventStoreProvider}."),
+        };
         builder.Services.AddApplication();
         // After AddApplication so the delay-queue processor's ICausedCommandBus
         // dependency is resolvable (ADR 0017).
-        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        _ = eventStoreProvider switch
         {
-            builder.Services.AddSqlServerDelayQueueProcessor();
-        }
-        else
-        {
-            builder.Services.AddPostgresDelayQueueProcessor();
-        }
+            EventStoreProvider.SqlServer => builder.Services.AddSqlServerDelayQueueProcessor(),
+            EventStoreProvider.Postgres => builder.Services.AddPostgresDelayQueueProcessor(),
+            _ => throw new InvalidOperationException(
+                $"Unhandled event store provider: {eventStoreProvider}."),
+        };
         builder.Services.AddReadModels(opts =>
             opts.ConnectionString = readModelConnectionString);
 
