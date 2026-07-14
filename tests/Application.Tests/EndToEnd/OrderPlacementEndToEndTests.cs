@@ -34,7 +34,7 @@ public class OrderPlacementEndToEndTests : IClassFixture<PostgresFixture>
     public async Task PlaceOrder_workflow_dispatches_through_the_bus_and_appears_in_ListOrders()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         await host.StartAsync(cts.Token);

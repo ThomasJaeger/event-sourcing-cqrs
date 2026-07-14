@@ -56,6 +56,22 @@ builder.Services.AddCurrentRolesReadModel(options => options.ConnectionString = 
 // connection, the same guard the read-model connection uses.
 var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
     ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
+
+// The console is PostgreSQL-bound and says so at startup. Its three read-side event-store ports (head
+// position, replay reader, correlation trace) have no SQL Server implementation, yet it reads the
+// same EVENT_STORE_CONNECTION_STRING the Api and Workers hosts now select an engine for. Without this
+// guard, a SqlServer deployment boots the console green, because the data source is built lazily, and
+// then fails at the operator's first click with a driver error rather than a configuration one. The
+// deferral of the SQL Server read side is honest only if the host refuses to pretend.
+var eventStoreProvider = builder.Configuration["EVENT_STORE_PROVIDER"];
+if (!string.IsNullOrWhiteSpace(eventStoreProvider)
+    && !string.Equals(eventStoreProvider, "Postgres", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        $"EVENT_STORE_PROVIDER is '{eventStoreProvider}'. The AdminConsole composes PostgreSQL-only "
+        + "read-side event-store ports and cannot serve another engine.");
+}
+
 builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
 builder.Services.AddProjectionRoster();
 builder.Services.AddSingleton<ProjectionLagReader>();

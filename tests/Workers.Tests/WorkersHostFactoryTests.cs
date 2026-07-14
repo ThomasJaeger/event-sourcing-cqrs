@@ -26,6 +26,7 @@ public class WorkersHostFactoryTests
         // NpgsqlDataSource.Create, PostgresEventStore's ctor, and the read-model
         // factories all defer connecting until first use.
         using var host = WorkersHostFactory.Build(
+            eventStoreProvider: EventStoreProvider.Postgres,
             eventStoreConnectionString: "Host=localhost;Database=stub",
             readModelConnectionString: "Host=localhost;Database=stub");
 

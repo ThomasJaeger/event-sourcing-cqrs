@@ -58,7 +58,7 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
     public async Task Non_self_cancelling_timeout_dispatches_within_bound()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         var processor = ResolveProcessor(host);
         var orderId = Guid.NewGuid();
 
@@ -81,7 +81,7 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
     public async Task Self_cancelling_timeout_dispatches_without_deadlock()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         var processor = ResolveProcessor(host);
         var orderId = Guid.NewGuid();
 
@@ -116,7 +116,7 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
     public async Task A_timeout_driven_pm_transition_carries_the_due_rows_provenance()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         var processor = ResolveProcessor(host);
         var orderId = Guid.NewGuid();
         var pmStream = StreamId.ForProcessManager(

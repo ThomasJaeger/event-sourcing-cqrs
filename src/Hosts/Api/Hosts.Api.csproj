@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
   </ItemGroup>
 </Project>

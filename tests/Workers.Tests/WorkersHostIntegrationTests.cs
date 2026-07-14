@@ -38,7 +38,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
     public async Task OrderPlaced_propagates_to_order_list_via_listen_notify()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // StartAsync runs ProjectionStartupCatchUpService.StartingAsync (no-op
@@ -85,7 +85,7 @@ public class WorkersHostIntegrationTests : IClassFixture<PostgresFixture>
     public async Task Host_startup_catch_up_tolerates_a_duplicate_sku_stream()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Two InventoryCreated events share a SKU under different InventoryIds, on

@@ -13,6 +13,7 @@ using EventSourcingCqrs.Hosts.Api;
 using EventSourcingCqrs.Hosts.Api.Authentication;
 using EventSourcingCqrs.Hosts.Api.Endpoints;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using Microsoft.AspNetCore.Authentication;
 
@@ -28,6 +29,13 @@ var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_S
     ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
 var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STRING"]
     ?? throw new InvalidOperationException("READ_MODEL_CONNECTION_STRING is not set.");
+
+// Which engine holds the events is a configuration choice, not a code change (PLAN.md:253). The
+// provider is read once, here, and governs the single event-store registration below. The read-model
+// database stays PostgreSQL under its own key on either provider.
+var eventStoreProvider = EventStoreProviderSelection.Read(
+    builder.Configuration["EVENT_STORE_PROVIDER"]);
+EventStoreProviderSelection.ValidateConnectionString(eventStoreProvider, eventStoreConnectionString);
 
 // Aggregate event types so the event store serializes them on append and resolves
 // them when the command handlers this host dispatches rehydrate aggregates. The
@@ -50,12 +58,22 @@ builder.Services.AddSingleton<ICommandTypeProvider, SalesCommandTypeProvider>();
 builder.Services.AddSingleton<ICommandTypeProvider, FulfillmentCommandTypeProvider>();
 builder.Services.AddSingleton<ICommandTypeProvider, BillingCommandTypeProvider>();
 
-// AddPostgresEventStore without AddPostgresOutboxProcessor (Commit 8's split): the
-// Api host writes events but does not drain the outbox. The Workers host owns the
-// outbox processor; an Api-host processor would race it and drop projection and
-// process-manager updates.
-builder.Services.AddPostgresEventStore(opts =>
-    opts.ConnectionString = eventStoreConnectionString);
+// The event store without its outbox processor (Commit 8's split): the Api host
+// writes events but does not drain the outbox. The Workers host owns the outbox
+// processor; an Api-host processor would race it and drop projection and
+// process-manager updates. Both adapters bundle the same companion ports, the
+// idempotency store and the delay queue, so either arm leaves this host's command
+// pipeline fully composed.
+if (eventStoreProvider == EventStoreProvider.SqlServer)
+{
+    builder.Services.AddSqlServerEventStore(opts =>
+        opts.ConnectionString = eventStoreConnectionString);
+}
+else
+{
+    builder.Services.AddPostgresEventStore(opts =>
+        opts.ConnectionString = eventStoreConnectionString);
+}
 builder.Services.AddApplication();
 builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);

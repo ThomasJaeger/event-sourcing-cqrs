@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.ProcessManagers;
 using EventSourcingCqrs.ProcessManagers.OrderFulfillment;
@@ -25,6 +26,7 @@ namespace EventSourcingCqrs.Hosts.Workers;
 public static class WorkersHostFactory
 {
     public static IHost Build(
+        EventStoreProvider eventStoreProvider,
         string eventStoreConnectionString,
         string readModelConnectionString)
     {
@@ -37,23 +39,48 @@ public static class WorkersHostFactory
         builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();
         // Process-manager event types resolve through the separate PM registry
-        // (ADR 0013); AddPostgresEventStore walks every IProcessManagerEventTypeProvider.
+        // (ADR 0013); the event-store registration walks every IProcessManagerEventTypeProvider.
         builder.Services.AddSingleton<IProcessManagerEventTypeProvider, OrderFulfillmentEventTypeProvider>();
         builder.Services.AddSingleton<IProcessManagerEventTypeProvider, ReturnEventTypeProvider>();
         // The OrderFulfillment timeout commands round-trip through the delay queue,
         // so their types register in CommandTypeRegistry (ADR 0017).
         builder.Services.AddSingleton<ICommandTypeProvider, OrderFulfillmentCommandTypeProvider>();
-        builder.Services.AddPostgresEventStore(opts =>
-            opts.ConnectionString = eventStoreConnectionString);
+        // The provider the caller selected picks the engine for all three write-side registrations
+        // below. They are the only engine-specific ones: everything else in this composition is a
+        // port, and the read models stay PostgreSQL under their own connection string.
+        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        {
+            builder.Services.AddSqlServerEventStore(opts =>
+                opts.ConnectionString = eventStoreConnectionString);
+        }
+        else
+        {
+            builder.Services.AddPostgresEventStore(opts =>
+                opts.ConnectionString = eventStoreConnectionString);
+        }
         // The outbox processor drains events to the in-process dispatcher and needs
         // no command bus, so it composes right after the event store (the
         // delay-queue processor below needs AddApplication first; the outbox does
-        // not). AddPostgresEventStore no longer bundles it.
-        builder.Services.AddPostgresOutboxProcessor();
+        // not). Neither event-store registration bundles it.
+        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        {
+            builder.Services.AddSqlServerOutboxProcessor();
+        }
+        else
+        {
+            builder.Services.AddPostgresOutboxProcessor();
+        }
         builder.Services.AddApplication();
         // After AddApplication so the delay-queue processor's ICausedCommandBus
         // dependency is resolvable (ADR 0017).
-        builder.Services.AddPostgresDelayQueueProcessor();
+        if (eventStoreProvider == EventStoreProvider.SqlServer)
+        {
+            builder.Services.AddSqlServerDelayQueueProcessor();
+        }
+        else
+        {
+            builder.Services.AddPostgresDelayQueueProcessor();
+        }
         builder.Services.AddReadModels(opts =>
             opts.ConnectionString = readModelConnectionString);
 

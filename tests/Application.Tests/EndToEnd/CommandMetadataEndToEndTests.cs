@@ -29,7 +29,7 @@ public class CommandMetadataEndToEndTests : IClassFixture<PostgresFixture>
     public async Task DraftOrder_persists_with_real_metadata_from_the_command_context()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         await host.StartAsync(cts.Token);

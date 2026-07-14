@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Hosts.Workers;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 using Microsoft.Extensions.Hosting;
 
@@ -16,6 +17,23 @@ if (string.IsNullOrEmpty(readModelConnectionString))
     return 78;
 }
 
+// The provider is read once for the process. This one value governs both the migration branch below
+// and the composition branch inside WorkersHostFactory, so the two cannot disagree. A bad value is
+// a configuration failure, which this host reports the way it reports a missing one.
+EventStoreProvider eventStoreProvider;
+try
+{
+    eventStoreProvider = EventStoreProviderSelection.Read(
+        Environment.GetEnvironmentVariable("EVENT_STORE_PROVIDER"));
+    EventStoreProviderSelection.ValidateConnectionString(
+        eventStoreProvider, eventStoreConnectionString);
+}
+catch (InvalidOperationException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 78; // EX_CONFIG
+}
+
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -25,32 +43,53 @@ Console.CancelKeyPress += (_, e) =>
 
 try
 {
-    // Event-store migrations first: migration 0005's pg_notify trigger must be
-    // in place before the host's listener starts. If the read-model connection
-    // string differs (split-database deployment), run again against it; only
-    // the read_models schema migrations land there. Ordinal compare so a
-    // trailing-semicolon or whitespace difference does not skip the second
-    // run when the operator intends a separate database.
-    var runner = new MigrationRunner(
-        EventStorePostgresMigrations.Assembly,
-        EventStorePostgresMigrations.ResourcePrefix);
-    await runner.RunPendingAsync(
-        new MigrationRunnerOptions
-        {
-            ConnectionString = eventStoreConnectionString,
-            Log = Console.WriteLine,
-        },
-        cts.Token);
-    if (!string.Equals(eventStoreConnectionString, readModelConnectionString, StringComparison.Ordinal))
+    // Migration is per database, not per host. The event-store database gets the selected provider's
+    // runner and never the other engine's. It runs first because migration 0005's pg_notify trigger
+    // must be in place before the PostgreSQL host's listener starts.
+    if (eventStoreProvider == EventStoreProvider.SqlServer)
     {
-        await runner.RunPendingAsync(
+        await new SqlServerMigrationRunner(
+                EventStoreSqlServerMigrations.Assembly,
+                EventStoreSqlServerMigrations.ResourcePrefix)
+            .RunPendingAsync(
+                new SqlServerMigrationRunnerOptions
+                {
+                    ConnectionString = eventStoreConnectionString,
+                    Log = Console.WriteLine,
+                },
+                cts.Token);
+    }
+    else
+    {
+        await new MigrationRunner(
+                EventStorePostgresMigrations.Assembly,
+                EventStorePostgresMigrations.ResourcePrefix)
+            .RunPendingAsync(
+                new MigrationRunnerOptions
+                {
+                    ConnectionString = eventStoreConnectionString,
+                    Log = Console.WriteLine,
+                },
+                cts.Token);
+    }
+
+    // The read-model database is PostgreSQL on either provider, and the read_models schema exists
+    // only in the PostgreSQL migration set, so this run is unconditional: on the SqlServer provider
+    // nothing else would create it. The set is not split by schema, so the run also creates an
+    // event_store schema in the read-model database. Those tables stay empty, because the write side
+    // lives in the event-store database on whichever engine, and when both keys name one database
+    // the second pass applies nothing at all: the runner tracks what it has applied. The inert
+    // schema is the accepted cost of one undivided migration set.
+    await new MigrationRunner(
+            EventStorePostgresMigrations.Assembly,
+            EventStorePostgresMigrations.ResourcePrefix)
+        .RunPendingAsync(
             new MigrationRunnerOptions
             {
                 ConnectionString = readModelConnectionString,
                 Log = Console.WriteLine,
             },
             cts.Token);
-    }
 }
 catch (Exception ex)
 {
@@ -65,7 +104,8 @@ try
     // disposes IAsyncDisposable-only singletons (NpgsqlReadModelConnectionFactory)
     // correctly. The bare ServiceProvider.Dispose path would throw on that
     // singleton; the Host wrapper closes the gap.
-    using var host = WorkersHostFactory.Build(eventStoreConnectionString, readModelConnectionString);
+    using var host = WorkersHostFactory.Build(
+        eventStoreProvider, eventStoreConnectionString, readModelConnectionString);
     await host.RunAsync(cts.Token);
     return 0;
 }

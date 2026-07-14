@@ -36,7 +36,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
     public async Task OrderFulfillment_PM_compensates_an_uninventoried_order_to_cancelled()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         await host.StartAsync(cts.Token);
         try
@@ -78,7 +78,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
     public async Task Return_PM_goes_stuck_when_a_returned_sku_has_no_inventory_mapping()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         await host.StartAsync(cts.Token);
         try
@@ -123,7 +123,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
     public async Task OrderFulfillment_PM_events_carry_the_causing_workflow_identity_on_the_outbox_route()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connStr, connStr);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connStr, connStr);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         await host.StartAsync(cts.Token);
         try

@@ -59,7 +59,7 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
     public async Task Every_registered_command_type_has_cross_tenant_coverage()
     {
         var connectionString = await _fixture.CreateMigratedDatabaseAsync();
-        using var host = WorkersHostFactory.Build(connectionString, connectionString);
+        using var host = WorkersHostFactory.Build(EventStoreProvider.Postgres, connectionString, connectionString);
         var registered = host.Services
             .GetRequiredService<CommandTypeRegistry>()
             .EnumerateCommands();

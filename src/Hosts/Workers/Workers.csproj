@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\ProcessManagers\ProcessManagers.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Migrations.Postgres\Migrations.Postgres.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\Projections\Projections.csproj" />

@@ -9,9 +9,12 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Testcontainers.MsSql" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Hosts\Api\Hosts.Api.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Hosts\Web\Hosts.Web.csproj">
       <Aliases>WebHost</Aliases>
     </ProjectReference>
