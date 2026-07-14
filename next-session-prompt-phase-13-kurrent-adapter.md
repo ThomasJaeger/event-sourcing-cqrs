@@ -126,6 +126,15 @@ to completion under the equality gate. Flake ledger per 0049 and 0050; a contain
 failure is a finding, never an assumed flake. Session-meta md-only commits may share
 one solution-wide gate run, with the sharing named in the report.
 
+Manifest baseline contract: the baseline handed to scripts/manifest.sh is the commit
+the planning workspace was last synced to, which is the previous session's close-doc
+landing commit, reconciled from git log with diff-filter=A on that close doc's path.
+It is never the closing session's own close commit: diffing from the just-landed
+close treats the session's docs as already synced and produces an empty, wrong
+manifest. When any directed baseline conflicts with the script's own usage text, the
+script's contract wins; run both forms, report both, and surface the conflict rather
+than picking silently.
+
 Voice grep, exact pipeline:
 
 git diff --cached -U0 | grep -nE '^\+' | grep -vE '^[0-9]+:\+\+\+' | grep -nE "—|--|specifically|essentially|particularly|actually|honestly|genuinely|basically"
