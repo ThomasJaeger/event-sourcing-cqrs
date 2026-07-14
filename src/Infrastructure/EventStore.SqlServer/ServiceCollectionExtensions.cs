@@ -62,7 +62,45 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
+        // Command types resolve through CommandTypeRegistry for the delay queue (ADR 0017): a
+        // scheduled command is stored by type name and resolved back on dispatch.
+        services.TryAddSingleton<CommandTypeRegistry>(sp =>
+        {
+            var registry = new CommandTypeRegistry();
+            foreach (var provider in sp.GetServices<ICommandTypeProvider>())
+            {
+                foreach (var commandType in provider.GetCommandTypes())
+                {
+                    registry.Register(commandType);
+                }
+            }
+            return registry;
+        });
+
         services.AddSingleton<IEventStore, SqlServerEventStore>();
+
+        // The companion ports, bundled exactly as AddPostgresEventStore bundles theirs. They are
+        // not IEventStore members: IIdempotencyStore and IDelayQueue are Application-layer
+        // dependencies that every complete host composition must supply, and they are database
+        // concerns rather than event-store-port concerns. Bundling them here is what lets a host
+        // pick a provider and get a complete composition, which is the whole point of the switch
+        // that follows.
+        services.AddSingleton<IIdempotencyStore, SqlServerIdempotencyStore>();
+        services.AddSingleton<IDelayQueue, SqlServerDelayQueue>();
+
+        return services;
+    }
+
+    // Split from AddSqlServerEventStore for the same reason the outbox processor is split: a host
+    // that composes the store to append or read does not necessarily run the timeout dispatcher,
+    // and registering the hosted service unconditionally would start one in every process.
+    public static IServiceCollection AddSqlServerDelayQueueProcessor(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<SqlServerDelayQueueProcessorOptions>();
+        services.TryAddSingleton<SqlServerDelayQueueRetryPolicy>();
+        services.AddHostedService<SqlServerDelayQueueProcessor>();
 
         return services;
     }

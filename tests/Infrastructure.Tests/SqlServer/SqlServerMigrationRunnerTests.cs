@@ -44,16 +44,17 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox.");
-        log.Should().Contain("Applied 2 migration(s).");
+        log.Should().Contain("Applying 0003 add_command_idempotency.");
+        log.Should().Contain("Applying 0004 add_delayed_commands.");
+        log.Should().Contain("Applied 4 migration(s).");
 
         var rows = await ReadTrackingTableAsync(connStr);
-        rows.Should().HaveCount(2);
-        rows[0].Version.Should().Be(1);
-        rows[0].Name.Should().Be("initial_event_store");
-        rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
-        rows[1].Version.Should().Be(2);
-        rows[1].Name.Should().Be("add_outbox");
-        rows[1].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows.Should().HaveCount(4);
+        rows.Select(r => r.Version).Should().Equal(1, 2, 3, 4);
+        rows.Select(r => r.Name).Should().Equal(
+            "initial_event_store", "add_outbox", "add_command_idempotency", "add_delayed_commands");
+        rows.Should().OnlyContain(r => System.Text.RegularExpressions.Regex.IsMatch(
+            r.Checksum, "^[0-9a-f]{64}$"));
     }
 
     [Fact]
@@ -67,7 +68,35 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
             CancellationToken.None);
 
         log.Should().Contain("No pending migrations.");
-        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(2);
+        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task The_companion_tables_carry_their_named_constraints_and_filtered_indexes()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+
+        var idempotencyKeys = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.key_constraints " +
+            "WHERE parent_object_id = OBJECT_ID('event_store.command_idempotency')");
+        idempotencyKeys.Should().BeEquivalentTo("pk_command_idempotency");
+
+        var delayedKeys = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.key_constraints " +
+            "WHERE parent_object_id = OBJECT_ID('event_store.delayed_commands')");
+        delayedKeys.Should().BeEquivalentTo("pk_delayed_commands");
+
+        // The two filtered indexes are the counterparts of PostgreSQL's partial indexes on the
+        // active set, so both stay proportional to pending work rather than to total history.
+        var filtered = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.indexes " +
+            "WHERE object_id = OBJECT_ID('event_store.delayed_commands') AND has_filter = 1");
+        filtered.Should().BeEquivalentTo("ix_delayed_commands_due", "ix_delayed_commands_by_stream");
+
+        var quarantineKeys = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.key_constraints " +
+            "WHERE parent_object_id = OBJECT_ID('event_store.delayed_commands_quarantine')");
+        quarantineKeys.Should().BeEquivalentTo("pk_delayed_commands_quarantine");
     }
 
     [Fact]
