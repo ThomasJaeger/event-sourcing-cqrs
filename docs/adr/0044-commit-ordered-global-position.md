@@ -102,3 +102,21 @@ row.
 A measured throughput need the serialized append path cannot meet reopens the
 design toward a visibility-watermark read side, weighed then against the machinery
 cost this ADR rejected at current scale.
+
+## Amendment (July 2026)
+
+The SQL Server adapter holds the invariant with sp_getapplock, exclusive, at
+transaction scope, as the first statement of both append transactions. On this
+engine the hazard is configuration-dependent: latent under default lock-based
+READ COMMITTED, where a tailing reader blocks on the writer's lock, and active
+under READ_COMMITTED_SNAPSHOT, where the reader skips the uncommitted row
+exactly as PostgreSQL's MVCC does. The test fixtures enable RCSI on every SQL
+Server test database, so the commit-visibility probe exercises the skip hazard
+rather than the blocking behavior. ADR 0045 carries the full engine mapping.
+
+Three forward references above are discharged: the contract suite landed at
+6baaa2f and pins the invariant with its concurrent-append visibility probe; the
+exact-contiguity assertion in PostgresEventStore_ReadAllAsync_Tests, named in the
+consequences, relaxed to this specification at 7b57366; and
+PostgresEventStore_CommitVisibility_Tests, named in the decision, was retired
+into the suite in that same commit.
