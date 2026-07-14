@@ -10,11 +10,15 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 
 public static class ServiceCollectionExtensions
 {
-    // Mirrors AddPostgresEventStore for what the SQL Server adapter has so far: the store, its
-    // two type registries, the options, and the connection factory. The idempotency store and
-    // the delay queue are not here, and no host calls this yet. Slice 4 rules how a host chooses
-    // between the two adapters; until then this extension exists so the composition it will need
-    // is already written and testable.
+    // Mirrors AddPostgresEventStore: the store, its three type registries, the options, the
+    // connection factory, and the companion ports (the idempotency store and the delay queue,
+    // both registered below). A host that calls this gets a composition complete enough to serve
+    // commands, which is the point: the idempotency behavior runs for every command, so an
+    // adapter that left IIdempotencyStore unregistered would fail a host at its first one.
+    //
+    // No host calls this yet. The provider selection that lets one choose between the two
+    // adapters lands with slice 6; this extension exists so the composition it will select is
+    // already written and testable.
     public static IServiceCollection AddSqlServerEventStore(
         this IServiceCollection services,
         Action<SqlServerEventStoreOptions> configure)
@@ -99,7 +103,11 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions<SqlServerDelayQueueProcessorOptions>();
-        services.TryAddSingleton<SqlServerDelayQueueRetryPolicy>();
+        services.AddSingleton<SqlServerDelayQueueRetryPolicy>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<SqlServerDelayQueueProcessorOptions>>().Value;
+            return new SqlServerDelayQueueRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
+        });
         services.AddHostedService<SqlServerDelayQueueProcessor>();
 
         return services;
@@ -114,7 +122,16 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions<SqlServerOutboxProcessorOptions>();
-        services.TryAddSingleton<SqlServerOutboxRetryPolicy>();
+        // Built from the options, not resolved bare. A bare registration compiles and resolves,
+        // because the container fills the policy's constructor from its default parameter values,
+        // which are the same 1 and 300 the options default to. So it yields a working policy on
+        // the default curve while BaseSeconds and CapSeconds do nothing, and no test that leaves
+        // them at their defaults can tell the difference. Mirrors AddPostgresOutboxProcessor.
+        services.AddSingleton<SqlServerOutboxRetryPolicy>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<SqlServerOutboxProcessorOptions>>().Value;
+            return new SqlServerOutboxRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
+        });
         services.TryAddSingleton<IMessageDispatcher, InProcessMessageDispatcher>();
         services.AddHostedService<SqlServerOutboxProcessor>();
 

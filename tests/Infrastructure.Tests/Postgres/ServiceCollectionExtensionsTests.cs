@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Xunit;
 
@@ -14,6 +15,13 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
 
 public class ServiceCollectionExtensionsTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 7, 13, 0, 0, 0, TimeSpan.Zero);
+
+    // Non-default on both axes, and off the default curve at both observation points: the default
+    // first retry is 1 second and the default cap is 300.
+    private const int ConfiguredBaseSeconds = 7;
+    private const int ConfiguredCapSeconds = 11;
+
     [Fact]
     public void AddPostgresEventStore_resolves_registered_services()
     {
@@ -83,6 +91,58 @@ public class ServiceCollectionExtensionsTests
             .Should().BeOfType<InProcessMessageDispatcher>();
         provider.GetServices<IHostedService>().OfType<OutboxProcessor>()
             .Should().ContainSingle();
+    }
+
+    // The two facts below are the control for the SQL Server twins in
+    // SqlServer/ServiceCollectionExtensionsTests. The wiring they pin is correct on disk and has
+    // been since it was written, but nothing pinned it, and the same registration on the SQL
+    // Server side reads no options at all. The defect class is engine-general: both processor
+    // options types carry BaseSeconds and CapSeconds whose defaults equal the policy's own
+    // constructor defaults, and the container honors constructor default parameter values, so a
+    // registration that forgets the options still hands back a policy on the default curve.
+    // Declared as characterization: green on write, and asserting behavior that already held.
+    [Fact]
+    public void AddPostgresOutboxProcessor_builds_the_retry_policy_from_the_configured_options()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresOutboxProcessor();
+        services.AddSingleton<IOptions<OutboxProcessorOptions>>(
+            Options.Create(new OutboxProcessorOptions
+            {
+                BaseSeconds = ConfiguredBaseSeconds,
+                CapSeconds = ConfiguredCapSeconds,
+            }));
+
+        using var provider = services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<OutboxRetryPolicy>();
+
+        // Observed through the curve, the policy's whole public surface. Jitter pinned to 1.0: the
+        // first retry lands exactly BaseSeconds out, a high attempt count saturates at CapSeconds.
+        policy.ComputeNextAttempt(attemptCount: 1, Now, jitter: 1.0)
+            .Should().Be(Now.AddSeconds(ConfiguredBaseSeconds));
+        policy.ComputeNextAttempt(attemptCount: 15, Now, jitter: 1.0)
+            .Should().Be(Now.AddSeconds(ConfiguredCapSeconds));
+    }
+
+    [Fact]
+    public void AddPostgresDelayQueueProcessor_builds_the_retry_policy_from_the_configured_options()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresDelayQueueProcessor();
+        services.AddSingleton<IOptions<DelayQueueProcessorOptions>>(
+            Options.Create(new DelayQueueProcessorOptions
+            {
+                BaseSeconds = ConfiguredBaseSeconds,
+                CapSeconds = ConfiguredCapSeconds,
+            }));
+
+        using var provider = services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<DelayQueueRetryPolicy>();
+
+        policy.ComputeNextAttempt(attemptCount: 1, Now, jitter: 1.0)
+            .Should().Be(Now.AddSeconds(ConfiguredBaseSeconds));
+        policy.ComputeNextAttempt(attemptCount: 15, Now, jitter: 1.0)
+            .Should().Be(Now.AddSeconds(ConfiguredCapSeconds));
     }
 
     [Fact]
