@@ -405,9 +405,14 @@ public sealed class OutboxProcessor : BackgroundService
 
     // Atomic CTE move. DELETE...RETURNING structurally carries attempt_count
     // and last_error out of the live outbox row rather than reading-then-
-    // rebinding them in C#. event_id UNIQUE on outbox_quarantine surfaces
-    // a re-queue-then-fail-again as a unique violation, which is the right
-    // signal for an operator.
+    // rebinding them in C#.
+    //
+    // outbox_quarantine carries pk_outbox_quarantine and nothing else: no unique
+    // constraint on event_id, and no foreign key back to the live outbox, because
+    // the live row is deleted on the move and an FK would block pruning. Nothing
+    // re-queues a quarantined row today; a re-queue path is an operator tool this
+    // repository has not built, and whatever builds it decides then whether a
+    // second quarantine of the same event should collide or accumulate.
     private static async Task QuarantineAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,

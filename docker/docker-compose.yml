@@ -2,8 +2,9 @@
 #
 # The credentials below are dev-only defaults baked into this compose file.
 # Do not reuse this configuration for any other environment. There is no
-# authentication on KurrentDB (insecure mode) and the PostgreSQL credentials
-# are well-known. Production deployment is out of scope for this repository.
+# authentication on KurrentDB (insecure mode), and the PostgreSQL and SQL Server
+# credentials are well-known. Production deployment is out of scope for this
+# repository.
 #
 # /health/live for KurrentDB returns 204 on KurrentDB 26.0.2 and is the
 # liveness probe documented for this image.
@@ -24,6 +25,27 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: esrcq-sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Esrcq_Dev_Password1"
+      MSSQL_PID: Developer
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      # sqlcmd moved to /opt/mssql-tools18 on this image and the 18 client verifies
+      # the server certificate by default, so -C trusts the self-signed dev cert. The
+      # glob keeps the probe working if the tools directory is renamed again.
+      test: ["CMD-SHELL", "/opt/mssql-tools*/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   kurrentdb:
     image: kurrentplatform/kurrentdb:26.0.2
@@ -61,5 +83,6 @@ services:
 
 volumes:
   postgres-data:
+  sqlserver-data:
   kurrentdb-data:
   localstack-data:
