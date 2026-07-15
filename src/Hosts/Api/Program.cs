@@ -12,6 +12,7 @@ using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Hosts.Api;
 using EventSourcingCqrs.Hosts.Api.Authentication;
 using EventSourcingCqrs.Hosts.Api.Endpoints;
+using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
@@ -32,7 +33,7 @@ var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STR
 
 // Which engine holds the events is a configuration choice, not a code change (PLAN.md:253). The
 // provider is read once, here, and governs the single event-store registration below. The read-model
-// database stays PostgreSQL under its own key on either provider.
+// database stays PostgreSQL under its own key regardless of the provider.
 var eventStoreProvider = EventStoreProviderSelection.Read(
     builder.Configuration["EVENT_STORE_PROVIDER"]);
 EventStoreProviderSelection.ValidateConnectionString(eventStoreProvider, eventStoreConnectionString);
@@ -61,8 +62,8 @@ builder.Services.AddSingleton<ICommandTypeProvider, BillingCommandTypeProvider>(
 // The event store without its outbox processor (Commit 8's split): the Api host
 // writes events but does not drain the outbox. The Workers host owns the outbox
 // processor; an Api-host processor would race it and drop projection and
-// process-manager updates. Both adapters bundle the same companion ports, the
-// idempotency store and the delay queue, so either arm leaves this host's command
+// process-manager updates. The relational adapters bundle the same companion ports,
+// the idempotency store and the delay queue, so their arms leave this host's command
 // pipeline fully composed.
 _ = eventStoreProvider switch
 {
@@ -70,9 +71,22 @@ _ = eventStoreProvider switch
         opts.ConnectionString = eventStoreConnectionString),
     EventStoreProvider.Postgres => builder.Services.AddPostgresEventStore(opts =>
         opts.ConnectionString = eventStoreConnectionString),
+    EventStoreProvider.Kurrent => builder.Services.AddKurrentEventStore(opts =>
+        opts.ConnectionString = eventStoreConnectionString),
     _ => throw new InvalidOperationException(
         $"Unhandled event store provider: {eventStoreProvider}."),
 };
+
+// KurrentDB holds only events; the Kurrent adapter bundles no relational companion ports. The
+// command pipeline still needs the idempotency store, so it composes on the read-model PostgreSQL
+// database, where the command-idempotency table lives (migrations 0007 and 0019). The delay queue
+// stays absent: no Api registration demands it. Its sole consumer is the OrderFulfillment
+// process-manager handler, which lives in the ProcessManagers assembly AddApplication does not scan,
+// so this host never registers it.
+if (eventStoreProvider is EventStoreProvider.Kurrent)
+{
+    builder.Services.AddPostgresIdempotencyStore(readModelConnectionString);
+}
 builder.Services.AddApplication();
 builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);

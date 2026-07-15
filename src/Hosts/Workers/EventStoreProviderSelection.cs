@@ -1,4 +1,4 @@
-using System.Data.Common;
+using KurrentDB.Client;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 
@@ -18,6 +18,7 @@ public enum EventStoreProvider
 {
     Postgres,
     SqlServer,
+    Kurrent,
 }
 
 public static class EventStoreProviderSelection
@@ -39,8 +40,13 @@ public static class EventStoreProviderSelection
             return EventStoreProvider.SqlServer;
         }
 
+        if (string.Equals(configuredValue, "Kurrent", StringComparison.OrdinalIgnoreCase))
+        {
+            return EventStoreProvider.Kurrent;
+        }
+
         throw new InvalidOperationException(
-            $"EVENT_STORE_PROVIDER is '{configuredValue}'. Recognized values are Postgres and SqlServer.");
+            $"EVENT_STORE_PROVIDER is '{configuredValue}'. Recognized values are Postgres, SqlServer, and Kurrent.");
     }
 
     // Parses the connection string with the selected engine's builder, so a provider and connection
@@ -52,17 +58,25 @@ public static class EventStoreProviderSelection
     {
         try
         {
-            _ = provider switch
+            switch (provider)
             {
-                EventStoreProvider.SqlServer =>
-                    (DbConnectionStringBuilder)new SqlConnectionStringBuilder(connectionString),
-                EventStoreProvider.Postgres =>
-                    new NpgsqlConnectionStringBuilder(connectionString),
-                _ => throw new InvalidOperationException(
-                    $"Unhandled event store provider: {provider}."),
-            };
+                case EventStoreProvider.SqlServer:
+                    _ = new SqlConnectionStringBuilder(connectionString);
+                    break;
+                case EventStoreProvider.Postgres:
+                    _ = new NpgsqlConnectionStringBuilder(connectionString);
+                    break;
+                case EventStoreProvider.Kurrent:
+                    // KurrentDB has no ADO.NET builder; its client parses the esdb:// string, and a
+                    // malformed one raises ConnectionStringParseException.
+                    _ = KurrentDBClientSettings.Create(connectionString);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unhandled event store provider: {provider}.");
+            }
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or ConnectionStringParseException)
         {
             // The message names the key, never the value: a connection string carries a password.
             throw new InvalidOperationException(

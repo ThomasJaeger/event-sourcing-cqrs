@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <ProjectReference Include="..\..\Application\Application.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />

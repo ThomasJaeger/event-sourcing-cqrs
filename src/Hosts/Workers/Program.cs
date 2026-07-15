@@ -68,13 +68,16 @@ try
                     Log = Console.WriteLine,
                 },
                 cts.Token),
+        // KurrentDB manages its own storage; there is no event-store schema to migrate. The
+        // read-model PostgreSQL run below stays untouched and unconditional.
+        EventStoreProvider.Kurrent => Task.CompletedTask,
         _ => throw new InvalidOperationException(
             $"Unhandled event store provider: {eventStoreProvider}."),
     });
 
-    // The read-model database is PostgreSQL on either provider, and the read_models schema exists
-    // only in the PostgreSQL migration set, so this run is unconditional: on the SqlServer provider
-    // nothing else would create it. The set is not split by schema, so the run also creates an
+    // The read-model database is PostgreSQL regardless of the provider, and the read_models schema
+    // exists only in the PostgreSQL migration set, so this run is unconditional: on the SqlServer or
+    // Kurrent provider nothing else would create it. The set is not split by schema, so the run also creates an
     // event_store schema in the read-model database. Those tables stay empty, because the write side
     // lives in the event-store database on whichever engine, and when both keys name one database
     // the second pass applies nothing at all: the runner tracks what it has applied. The inert

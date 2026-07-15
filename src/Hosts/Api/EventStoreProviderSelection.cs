@@ -1,4 +1,4 @@
-using System.Data.Common;
+using KurrentDB.Client;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 
@@ -17,6 +17,7 @@ internal enum EventStoreProvider
 {
     Postgres,
     SqlServer,
+    Kurrent,
 }
 
 internal static class EventStoreProviderSelection
@@ -38,31 +39,44 @@ internal static class EventStoreProviderSelection
             return EventStoreProvider.SqlServer;
         }
 
+        if (string.Equals(configuredValue, "Kurrent", StringComparison.OrdinalIgnoreCase))
+        {
+            return EventStoreProvider.Kurrent;
+        }
+
         throw new InvalidOperationException(
-            $"EVENT_STORE_PROVIDER is '{configuredValue}'. Recognized values are Postgres and SqlServer.");
+            $"EVENT_STORE_PROVIDER is '{configuredValue}'. Recognized values are Postgres, SqlServer, and Kurrent.");
     }
 
     // Parses the connection string with the selected engine's builder, so a provider and connection
-    // mismatch fails at composition. Both adapters build their data source lazily, so without this
-    // the first command is where an operator finds out, and it surfaces as an opaque 500. The guard
-    // is loud only where the driver lets it be: SqlClient rejects a PostgreSQL-shaped string at
-    // parse, while Npgsql accepts several SQL Server keywords, so a SQL Server string selected as
-    // Postgres can still reach the first connect before it fails.
+    // mismatch fails at composition. The relational adapters build their data source lazily, so
+    // without this the first command is where an operator finds out, and it surfaces as an opaque
+    // 500. The guard is loud only where the driver lets it be: SqlClient rejects a PostgreSQL-shaped
+    // string at parse, while Npgsql accepts several SQL Server keywords, so a SQL Server string
+    // selected as Postgres can still reach the first connect before it fails.
     public static void ValidateConnectionString(EventStoreProvider provider, string connectionString)
     {
         try
         {
-            _ = provider switch
+            switch (provider)
             {
-                EventStoreProvider.SqlServer =>
-                    (DbConnectionStringBuilder)new SqlConnectionStringBuilder(connectionString),
-                EventStoreProvider.Postgres =>
-                    new NpgsqlConnectionStringBuilder(connectionString),
-                _ => throw new InvalidOperationException(
-                    $"Unhandled event store provider: {provider}."),
-            };
+                case EventStoreProvider.SqlServer:
+                    _ = new SqlConnectionStringBuilder(connectionString);
+                    break;
+                case EventStoreProvider.Postgres:
+                    _ = new NpgsqlConnectionStringBuilder(connectionString);
+                    break;
+                case EventStoreProvider.Kurrent:
+                    // KurrentDB has no ADO.NET builder; its client parses the esdb:// string, and a
+                    // malformed one raises ConnectionStringParseException.
+                    _ = KurrentDBClientSettings.Create(connectionString);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unhandled event store provider: {provider}.");
+            }
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or ConnectionStringParseException)
         {
             // The message names the key, never the value: a connection string carries a password.
             throw new InvalidOperationException(

@@ -11,6 +11,8 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="KurrentDB.Client" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Hosts\Api\Hosts.Api.csproj" />

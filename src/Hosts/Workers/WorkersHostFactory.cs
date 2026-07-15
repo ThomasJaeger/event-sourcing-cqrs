@@ -33,6 +33,15 @@ public static class WorkersHostFactory
         ArgumentException.ThrowIfNullOrEmpty(eventStoreConnectionString);
         ArgumentException.ThrowIfNullOrEmpty(readModelConnectionString);
 
+        // The Workers host does not compose the Kurrent event store provider yet: draining KurrentDB
+        // to the projections and process managers needs a subscription dispatch service that ships in
+        // the next slice (Phase 13 slice 4). Until it lands, the three engine-specific arms below
+        // refuse Kurrent loudly rather than compose a host wired to write events it never reads back.
+        // The Api host already composes Kurrent for the write side; only this host's read side waits.
+        const string kurrentNotComposable =
+            "The Workers host cannot compose the Kurrent event store provider until its KurrentDB "
+            + "subscription dispatch service ships.";
+
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
         builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
@@ -54,6 +63,7 @@ public static class WorkersHostFactory
                 opts.ConnectionString = eventStoreConnectionString),
             EventStoreProvider.Postgres => builder.Services.AddPostgresEventStore(opts =>
                 opts.ConnectionString = eventStoreConnectionString),
+            EventStoreProvider.Kurrent => throw new InvalidOperationException(kurrentNotComposable),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };
@@ -65,6 +75,7 @@ public static class WorkersHostFactory
         {
             EventStoreProvider.SqlServer => builder.Services.AddSqlServerOutboxProcessor(),
             EventStoreProvider.Postgres => builder.Services.AddPostgresOutboxProcessor(),
+            EventStoreProvider.Kurrent => throw new InvalidOperationException(kurrentNotComposable),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };
@@ -75,6 +86,7 @@ public static class WorkersHostFactory
         {
             EventStoreProvider.SqlServer => builder.Services.AddSqlServerDelayQueueProcessor(),
             EventStoreProvider.Postgres => builder.Services.AddPostgresDelayQueueProcessor(),
+            EventStoreProvider.Kurrent => throw new InvalidOperationException(kurrentNotComposable),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };
