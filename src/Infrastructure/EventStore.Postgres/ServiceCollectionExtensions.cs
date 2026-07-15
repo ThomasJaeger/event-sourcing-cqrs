@@ -242,6 +242,75 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers the PostgreSQL idempotency store against an arbitrary connection string, for a host
+    /// that does not call AddPostgresEventStore. A KurrentDB host composes it on its read-model
+    /// PostgreSQL database, where the command-idempotency table already lives (migrations 0007 and
+    /// 0019). Every dependency registers with TryAdd so the call is safe alongside another Postgres
+    /// registration; the store gets its own connection path rather than sharing the event store's.
+    /// </summary>
+    public static IServiceCollection AddPostgresIdempotencyStore(
+        this IServiceCollection services, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        // Container-owned data source, on the AddCorrelationTraceReader template: registered through
+        // TryAdd so the container disposes it and so a second companion call against the same string
+        // reuses it. The idempotency store takes only the connection factory, no serializer.
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+        services.TryAddSingleton<IIdempotencyStore, PostgresIdempotencyStore>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the PostgreSQL delay queue against an arbitrary connection string, for a host that
+    /// does not call AddPostgresEventStore. The delayed-commands table lives in the read-model
+    /// database (migrations 0008 and 0020). Every dependency registers with TryAdd, and the JSON
+    /// serializer options are captured from this adapter's own shape rather than resolved as a bare
+    /// container JsonSerializerOptions: a KurrentDB host registers its own bare options, and a
+    /// scheduled command must round-trip through the Postgres schema's shape, not that one.
+    /// </summary>
+    public static IServiceCollection AddPostgresDelayQueue(
+        this IServiceCollection services, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        // Same container-owned connection seam as AddPostgresIdempotencyStore, all-TryAdd.
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+
+        // CommandTypeRegistry stays a shared container type (ADR 0026), populated by the same
+        // provider walk the event-store registration uses.
+        services.TryAddSingleton<CommandTypeRegistry>(sp =>
+        {
+            var registry = new CommandTypeRegistry();
+            foreach (var provider in sp.GetServices<ICommandTypeProvider>())
+            {
+                foreach (var commandType in provider.GetCommandTypes())
+                {
+                    registry.Register(commandType);
+                }
+            }
+            return registry;
+        });
+
+        // The serializer options are captured from this adapter's shape and handed straight to the
+        // store, never registered in or resolved from the container. A non-relational host has its
+        // own bare JsonSerializerOptions, and a scheduled command must serialize through the Postgres
+        // schema's shape, not that one. The capture-the-shape guard fact pins this.
+        var jsonOptions = CreateJsonOptions();
+        services.TryAddSingleton<IDelayQueue>(sp => new PostgresDelayQueue(
+            sp.GetRequiredService<INpgsqlConnectionFactory>(),
+            sp.GetRequiredService<CommandTypeRegistry>(),
+            jsonOptions));
+
+        return services;
+    }
+
     // One factory, three registration paths. They were three identical copies, which is how an
     // options pin gets applied to two of them and missed on the third.
     //
