@@ -30,6 +30,14 @@ public class CorrelationIdTracerTests : BunitContext
     private static readonly Guid AnyCorrelationId = Guid.Parse("0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8");
     private static readonly DateTime AnyTime = new(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
 
+    // The page injects the correlation-tracer capability, available on the relational read side these
+    // specs render against. Seeding the default here is the slice-5 ripple: the page gained a required
+    // injection, and these tests register it with no assertion change.
+    public CorrelationIdTracerTests()
+    {
+        Services.AddSingleton(CorrelationTracerAvailability.Available);
+    }
+
     [Fact]
     public void The_page_renders_the_correlation_id_input_and_a_trace_control_and_nothing_below()
     {

@@ -16,6 +16,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Hosts\Api\Hosts.Api.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Hosts\Web\Hosts.Web.csproj">
       <Aliases>WebHost</Aliases>

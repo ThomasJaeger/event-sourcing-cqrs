@@ -109,4 +109,17 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    // Registers the KurrentDB head-position reader for the AdminConsole's projection-lag read, the
+    // engine-specific counterpart to AddEventStoreHeadPosition on the relational side. It reads $all
+    // backwards from its end, so it needs only the client the AddKurrentEventStore registration provides;
+    // a host composes both. TryAdd so it composes beside that registration without racing it.
+    public static IServiceCollection AddKurrentEventStoreHeadPosition(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IEventStoreHeadPosition, KurrentEventStoreHeadReader>();
+
+        return services;
+    }
 }

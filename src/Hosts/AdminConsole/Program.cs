@@ -6,11 +6,13 @@ using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
+using EventSourcingCqrs.Hosts.AdminConsole;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
 using EventSourcingCqrs.Hosts.AdminConsole.Browser;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Hosts.AdminConsole.Replay;
 using EventSourcingCqrs.Hosts.AdminConsole.Tracer;
+using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Infrastructure.SignalR;
@@ -57,33 +59,59 @@ builder.Services.AddCurrentRolesReadModel(options => options.ConnectionString = 
 var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
     ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
 
-// The console is PostgreSQL-bound and says so at startup. Its three read-side event-store ports (head
-// position, replay reader, correlation trace) have no SQL Server implementation, yet it reads the
-// same EVENT_STORE_CONNECTION_STRING the Api and Workers hosts now select an engine for. Without this
-// guard, a SqlServer deployment boots the console green, because the data source is built lazily, and
-// then fails at the operator's first click with a driver error rather than a configuration one. The
-// deferral of the SQL Server read side is honest only if the host refuses to pretend.
-var eventStoreProvider = builder.Configuration["EVENT_STORE_PROVIDER"];
-if (!string.IsNullOrWhiteSpace(eventStoreProvider)
-    && !string.Equals(eventStoreProvider, "Postgres", StringComparison.OrdinalIgnoreCase))
+// Which engine holds the events is a configuration choice (PLAN.md:253). The console reads it through
+// the same twin the Api and Workers hosts use, retiring the earlier PostgreSQL-only inline guard, and
+// composes its three read-side event-store ports (head position, replay/browse IEventStore, correlation
+// trace) plus the correlation-tracer capability per arm. The read-model side below stays PostgreSQL
+// regardless of the provider, and every read-side collaborator below reaches the arm's ports through
+// their abstractions.
+var eventStoreProvider = EventStoreProviderSelection.Read(builder.Configuration["EVENT_STORE_PROVIDER"]);
+switch (eventStoreProvider)
 {
-    throw new InvalidOperationException(
-        $"EVENT_STORE_PROVIDER is '{eventStoreProvider}'. The AdminConsole composes PostgreSQL-only "
-        + "read-side event-store ports and cannot serve another engine.");
+    case EventStoreProvider.Postgres:
+        EventStoreProviderSelection.ValidateConnectionString(
+            eventStoreProvider, eventStoreConnectionString);
+        builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
+        builder.Services.AddEventStoreReplayReader();
+        builder.Services.AddCorrelationTraceReader(eventStoreConnectionString);
+        builder.Services.AddSingleton(CorrelationTracerAvailability.Available);
+        break;
+    case EventStoreProvider.Kurrent:
+        EventStoreProviderSelection.ValidateConnectionString(
+            eventStoreProvider, eventStoreConnectionString);
+        builder.Services.AddKurrentEventStore(opts => opts.ConnectionString = eventStoreConnectionString);
+        builder.Services.AddKurrentEventStoreHeadPosition();
+        // KurrentDB carries no cross-stream correlation-id index, so the Correlation-ID Tracer is
+        // unavailable and the /correlations page renders a notice instead of the trace surface. The
+        // reader is the defense-in-depth throwing one, registered so the port resolves and the tracer
+        // seam composes; the capability keeps the page from ever reaching it in normal operation.
+        builder.Services.AddSingleton<ICorrelationTraceReader, KurrentCorrelationTraceReader>();
+        builder.Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
+            "The KurrentDB event store has no cross-stream correlation-id index; a correlation trace "
+            + "would need a dedicated user projection, which is deferred."));
+        break;
+    case EventStoreProvider.SqlServer:
+        // The AdminConsole has no SQL Server read side: its three ports are hand-rolled PostgreSQL. It
+        // refuses to compose rather than boot green on a lazy data source and fail at the first click.
+        throw new InvalidOperationException(
+            $"EVENT_STORE_PROVIDER is '{eventStoreProvider}'. The AdminConsole composes PostgreSQL-only "
+            + "read-side event-store ports and cannot serve another engine.");
+    default:
+        throw new InvalidOperationException(
+            $"Unhandled event store provider: {eventStoreProvider}.");
 }
 
-builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
+// The Projection Status Dashboard reads projection lag in process (ADR 0040): the head of the event
+// stream minus each projection's checkpoint. AddProjectionRoster adds the name-only projection set; the
+// checkpoint store comes from AddCurrentRolesReadModel above, and the head reader from the arm above.
 builder.Services.AddProjectionRoster();
 builder.Services.AddSingleton<ProjectionLagReader>();
 
-// The Replay Tool's per-tenant rebuild (Phase 12, ADR 0041). It reads the event stream, so the host
-// adds a focused read-side event store on top of the head reader above: AddEventStoreReplayReader brings
-// the materialization stack and IEventStore with no second data source. The four event-type providers
+// The Replay Tool's per-tenant rebuild (Phase 12, ADR 0041) and the Event Store Browser (Phase 12) both
+// read the event stream through the IEventStore the arm above composed. The four event-type providers
 // register host-side (the adapter idiom); the full four-context set is required because a tenant's
 // history can span every context and ReadAllForTenantAsync throws on any unregistered type. The tenant
-// accessor and the notification publisher are the throughput store's remaining dependencies, and the
-// rebuilder composes the read, the per-tenant reset, and the checkpoint-neutral replay.
-builder.Services.AddEventStoreReplayReader();
+// accessor and the notification publisher are the throughput store's remaining dependencies.
 builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
@@ -93,18 +121,11 @@ builder.Services.TryAddSingleton<PostgresPgNotifyPublisher>();
 builder.Services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
 builder.Services.AddSingleton<PerTenantProjectionRebuilder>();
 builder.Services.AddSingleton<IOrderThroughputRebuild, OrderThroughputRebuild>();
-
-// The Event Store Browser's read seam (Phase 12). It reads one aggregate stream through the IEventStore
-// composed above and re-serializes payloads with the same JsonSerializerOptions, so it adds no second
-// data source and needs no registration beyond this line.
 builder.Services.AddSingleton<IStreamInspector, StreamInspector>();
 
-// The Correlation-ID Tracer's read port and seam (Phase 12, ADR 0043). The port is its own focused
-// registration on the head-position precedent: it reads the events table by correlation_id and resolves no
-// payload type, so it composes no type registry and no IEventStore, and its shared dependencies go in
-// through TryAdd beside the ones above. The seam holds the cap and hands it to the port, so the default
-// flows from its constructor with no options plumbing.
-builder.Services.AddCorrelationTraceReader(eventStoreConnectionString);
+// The Correlation-ID Tracer's seam (Phase 12, ADR 0043). It holds the row cap and hands it to the
+// ICorrelationTraceReader the arm above composed. On KurrentDB that reader is the throwing one and the
+// capability gates the page, so the seam composes but is never driven.
 builder.Services.AddSingleton<ICorrelationTracer, CorrelationTracer>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
