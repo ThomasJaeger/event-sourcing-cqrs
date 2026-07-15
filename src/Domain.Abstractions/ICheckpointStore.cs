@@ -25,4 +25,14 @@ public interface ICheckpointStore
         long position,
         DbTransaction transaction,
         CancellationToken ct);
+
+    // Advances the checkpoint with no surrounding transaction, for a writer that has no read-model
+    // write to move it atomically with: the KurrentDB subscription dispatch service is the first, which
+    // advances its own $all position after a dispatch and across filtered stretches, outside any
+    // projection's unit of work. The store opens its own connection; the same GREATEST upsert keeps it
+    // idempotent, so an at-least-once redelivery carrying an already-persisted position is a no-op.
+    Task AdvanceAsync(
+        string projectionName,
+        long position,
+        CancellationToken ct);
 }

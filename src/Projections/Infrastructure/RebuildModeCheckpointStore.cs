@@ -25,4 +25,9 @@ public sealed class RebuildModeCheckpointStore : ICheckpointStore
     public Task AdvanceAsync(
         string projectionName, long position, DbTransaction transaction, CancellationToken ct)
         => Task.CompletedTask;
+
+    // Same no-op as the transactional advance: a rebuild never moves the shared checkpoint, so the
+    // non-transactional overload a dispatch writer would call is inert here too.
+    public Task AdvanceAsync(string projectionName, long position, CancellationToken ct)
+        => Task.CompletedTask;
 }

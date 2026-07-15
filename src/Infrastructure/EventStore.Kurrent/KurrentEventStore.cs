@@ -19,8 +19,9 @@ public sealed class KurrentEventStore : IEventStore
 {
     // Excludes KurrentDB system streams (the '$' sigil) and PM streams (ADR 0013) from the $all
     // feed server-side, the engine's counterpart to the relational "stream_id NOT LIKE 'pm-%'"
-    // literal. The negative-lookahead form is what the engine's server-side filter accepts.
-    private const string AggregateFeedStreamFilter = @"^(?!\$)(?!pm-)";
+    // literal. The negative-lookahead form is what the engine's server-side filter accepts. Internal
+    // so the subscription dispatch service filters its $all subscription with the same expression.
+    internal const string AggregateFeedStreamFilter = @"^(?!\$)(?!pm-)";
 
     private readonly KurrentDBClient _client;
     private readonly EventTypeRegistry _registry;
@@ -256,83 +257,9 @@ public sealed class KurrentEventStore : IEventStore
     }
 
     private EventEnvelope HydrateEvent(ResolvedEvent resolved, StreamId streamId)
-    {
-        var record = resolved.Event;
-        var stored = ReadStoredMetadata(record.Metadata);
-        return new EventEnvelope(
-            StreamId: streamId,
-            StreamVersion: checked((int)(record.EventNumber.ToUInt64() + 1)),
-            EventId: record.EventId.ToGuid(),
-            EventType: record.EventType,
-            EventVersion: stored.EventVersion,
-            Payload: DeserializeDomainEvent(record.EventType, record.Data, streamId),
-            Metadata: stored.Metadata,
-            OccurredUtc: stored.OccurredUtc,
-            GlobalPosition: checked((long)record.Position.CommitPosition));
-    }
+        => KurrentEventHydration.ToEventEnvelope(resolved, streamId, _registry, _jsonOptions);
 
     private ProcessManagerEventEnvelope HydrateProcessManagerEvent(
         ResolvedEvent resolved, StreamId streamId)
-    {
-        var record = resolved.Event;
-        var stored = ReadStoredMetadata(record.Metadata);
-        return new ProcessManagerEventEnvelope(
-            StreamId: streamId,
-            StreamVersion: checked((int)(record.EventNumber.ToUInt64() + 1)),
-            EventId: record.EventId.ToGuid(),
-            EventType: record.EventType,
-            EventVersion: stored.EventVersion,
-            Payload: DeserializeProcessManagerEvent(record.EventType, record.Data, streamId),
-            Metadata: stored.Metadata,
-            OccurredUtc: stored.OccurredUtc,
-            GlobalPosition: checked((long)record.Position.CommitPosition));
-    }
-
-    private IDomainEvent DeserializeDomainEvent(string eventType, ReadOnlyMemory<byte> json, StreamId streamId)
-    {
-        Type clrType;
-        try
-        {
-            clrType = _registry.TypeFor(eventType);
-        }
-        catch (UnknownEventTypeException ex)
-        {
-            throw new UnknownEventTypeException(eventType, streamId, ex);
-        }
-        return (IDomainEvent)JsonSerializer.Deserialize(json.Span, clrType, _jsonOptions)!;
-    }
-
-    private IProcessManagerEvent DeserializeProcessManagerEvent(
-        string eventType, ReadOnlyMemory<byte> json, StreamId streamId)
-    {
-        Type clrType;
-        try
-        {
-            clrType = _pmRegistry.TypeFor(eventType);
-        }
-        catch (UnknownEventTypeException ex)
-        {
-            throw new UnknownEventTypeException(eventType, streamId, ex);
-        }
-        return (IProcessManagerEvent)JsonSerializer.Deserialize(json.Span, clrType, _jsonOptions)!;
-    }
-
-    // Mirrors EventMetadataReader's tenant coalesce: STJ leaves the non-nullable Tenant null for a
-    // metadata shape that carries no tenant, and the default tenant is the absence of one.
-    private StoredEventMetadata ReadStoredMetadata(ReadOnlyMemory<byte> json)
-    {
-        var stored = JsonSerializer.Deserialize<StoredEventMetadata>(json.Span, _jsonOptions)
-            ?? throw new InvalidOperationException("Event metadata deserialized to null.");
-
-        TenantId? tenant = stored.Metadata.Tenant;
-        return tenant is null
-            ? stored with { Metadata = stored.Metadata with { Tenant = WellKnownTenants.Default } }
-            : stored;
-    }
-
-    // The KurrentDB metadata slot: the envelope fields KurrentDB does not carry natively (the schema
-    // version and the occurred time) plus the domain metadata. Serialized with the adapter's JSON
-    // options so the nested tenant scalar and non-ASCII survive the round trip.
-    private sealed record StoredEventMetadata(
-        int EventVersion, DateTime OccurredUtc, EventMetadata Metadata);
+        => KurrentEventHydration.ToProcessManagerEnvelope(resolved, streamId, _pmRegistry, _jsonOptions);
 }

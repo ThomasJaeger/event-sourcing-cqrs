@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Outbox;
 using KurrentDB.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -86,6 +87,25 @@ public static class ServiceCollectionExtensions
         });
 
         services.TryAddSingleton<IEventStore, KurrentEventStore>();
+
+        return services;
+    }
+
+    // Registers the KurrentDB subscription dispatch service, the native read-side mechanism the Workers
+    // host composes in place of an outbox processor. KurrentDB pushes committed events to a catch-up
+    // subscription, so this drain has no processor to poll and no outbox table to read.
+    public static IServiceCollection AddKurrentSubscriptionService(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<KurrentSubscriptionOptions>();
+
+        // The in-process dispatcher the subscription plays events into, resolving projections and
+        // process-manager handlers per event through the same class the relational outbox processors
+        // use (ADR 0004 covers the engine-specific mechanics, not this consumer-side resolver). TryAdd
+        // so a host that also composed a relational path keeps its single dispatcher.
+        services.TryAddSingleton<IMessageDispatcher, InProcessMessageDispatcher>();
+        services.AddHostedService<KurrentSubscriptionService>();
 
         return services;
     }

@@ -4,6 +4,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.Outbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -238,6 +239,67 @@ public static class ServiceCollectionExtensions
             return new DelayQueueRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
         });
         services.AddHostedService<DelayQueueProcessor>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the delay-queue processor against an arbitrary connection string, for a host that
+    /// does not call AddPostgresEventStore. A KurrentDB host composes it on its read-model PostgreSQL
+    /// database, where the delayed-commands table lives, so its process-manager timeouts still drain
+    /// while the event store runs on KurrentDB. It shares the container-owned connection seam the
+    /// AddPostgresIdempotencyStore and AddPostgresDelayQueue overloads register.
+    /// </summary>
+    public static IServiceCollection AddPostgresDelayQueueProcessor(
+        this IServiceCollection services, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        // Container-owned connection seam against the read-model database, the same all-TryAdd seam
+        // AddPostgresDelayQueue registers, so the processor and the queue it drains share one data
+        // source and connection factory.
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+
+        // CommandTypeRegistry stays a shared container type (ADR 0026), populated by the same provider
+        // walk the event-store and delay-queue registrations use.
+        services.TryAddSingleton<CommandTypeRegistry>(sp =>
+        {
+            var registry = new CommandTypeRegistry();
+            foreach (var provider in sp.GetServices<ICommandTypeProvider>())
+            {
+                foreach (var commandType in provider.GetCommandTypes())
+                {
+                    registry.Register(commandType);
+                }
+            }
+            return registry;
+        });
+
+        // The retry policy and options are the same as the parameterless overload; the difference is
+        // only where the connection points and how the serializer shape is supplied.
+        services.AddOptions<DelayQueueProcessorOptions>();
+        services.AddSingleton<DelayQueueRetryPolicy>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<DelayQueueProcessorOptions>>().Value;
+            return new DelayQueueRetryPolicy(opts.BaseSeconds, opts.CapSeconds);
+        });
+
+        // The serializer options are captured from this adapter's shape and handed straight to the
+        // processor, never resolved from the container: a KurrentDB host registers its own bare
+        // JsonSerializerOptions, and a scheduled command must round-trip through the Postgres schema's
+        // shape, not that one. Same capture-the-shape discipline as AddPostgresDelayQueue, which is why
+        // the processor is built through a factory rather than resolved whole.
+        var jsonOptions = CreateJsonOptions();
+        services.AddHostedService(sp => new DelayQueueProcessor(
+            sp.GetRequiredService<INpgsqlConnectionFactory>(),
+            sp.GetRequiredService<CommandTypeRegistry>(),
+            jsonOptions,
+            sp.GetRequiredService<ICausedCommandBus>(),
+            sp.GetRequiredService<DelayQueueRetryPolicy>(),
+            sp.GetRequiredService<IOptions<DelayQueueProcessorOptions>>(),
+            sp.GetRequiredService<ILogger<DelayQueueProcessor>>()));
 
         return services;
     }

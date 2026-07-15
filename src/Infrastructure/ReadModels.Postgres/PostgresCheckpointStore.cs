@@ -88,4 +88,24 @@ public sealed class PostgresCheckpointStore : ICheckpointStore
         cmd.Parameters.AddWithValue("position", NpgsqlDbType.Bigint, position);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    public async Task AdvanceAsync(string projectionName, long position, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(projectionName);
+
+        // No caller transaction to join, so this opens its own connection for the same
+        // upsert-with-GREATEST the transactional overload runs. The advance is atomic on its own row;
+        // a dispatch writer that has already dispatched the event calls this to move its position.
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            "INSERT INTO read_models.projection_checkpoints AS pc " +
+            "(projection_name, position) " +
+            "VALUES (@projection_name, @position) " +
+            "ON CONFLICT (projection_name) DO UPDATE " +
+            "SET position = GREATEST(pc.position, EXCLUDED.position)";
+        cmd.Parameters.AddWithValue("projection_name", NpgsqlDbType.Text, projectionName);
+        cmd.Parameters.AddWithValue("position", NpgsqlDbType.Bigint, position);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

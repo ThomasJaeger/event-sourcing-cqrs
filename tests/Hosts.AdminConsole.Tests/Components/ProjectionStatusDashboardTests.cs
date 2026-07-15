@@ -73,6 +73,9 @@ public class ProjectionStatusDashboardTests : BunitContext
         public Task AdvanceAsync(
             string projectionName, long position, DbTransaction transaction, CancellationToken ct) =>
             throw new NotSupportedException();
+
+        public Task AdvanceAsync(string projectionName, long position, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     private sealed class StubRoster(params string[] names) : IProjectionRoster

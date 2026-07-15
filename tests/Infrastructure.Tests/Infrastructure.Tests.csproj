@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\SignalR\SignalR.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />
     <ProjectReference Include="..\EventStore.ContractTests\EventStore.ContractTests.csproj" />

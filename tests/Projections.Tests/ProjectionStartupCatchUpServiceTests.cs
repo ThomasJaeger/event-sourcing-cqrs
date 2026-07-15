@@ -210,5 +210,12 @@ public class ProjectionStartupCatchUpServiceTests
                 _positions.GetValueOrDefault(projectionName), position);
             return Task.CompletedTask;
         }
+
+        public Task AdvanceAsync(string projectionName, long position, CancellationToken ct)
+        {
+            _positions[projectionName] = Math.Max(
+                _positions.GetValueOrDefault(projectionName), position);
+            return Task.CompletedTask;
+        }
     }
 }
