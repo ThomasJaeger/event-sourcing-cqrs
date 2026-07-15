@@ -28,8 +28,7 @@ public sealed class KurrentEventStoreHeadReader : IEventStoreHeadPosition
         // The filter excludes PM streams as well as system streams, so the head is aggregate-only and
         // lands in the projection checkpoints' space. The Postgres reader's MAX(global_position) spans the
         // aggregate and PM rows the shared events table holds, so a PM-tailed log reports a different head
-        // across the two engines. TODO(slice 6): record this aggregate-filtered head divergence on the
-        // engine-mappings ADR.
+        // across the two engines. This aggregate-filtered head divergence is recorded in ADR 0047.
         var read = _client.ReadAllAsync(
             Direction.Backwards,
             Position.End,

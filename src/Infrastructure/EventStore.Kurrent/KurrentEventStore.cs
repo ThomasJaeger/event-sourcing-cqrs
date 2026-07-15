@@ -153,8 +153,8 @@ public sealed class KurrentEventStore : IEventStore
     // are assigned at commit by KurrentDB's single-writer log, so commit order is the total order
     // with no added lock: the relational adapters take an append lock to give an IDENTITY the same
     // property, but the log has it intrinsically, and gaps come only from the log's own structure
-    // rather than from rolled-back position draws (ADR 0044). TODO(slice 6): record the KurrentDB
-    // posture on the ADR 0044 invariant in the engine-mappings ADR.
+    // rather than from rolled-back position draws (ADR 0044). The KurrentDB posture on the ADR 0044
+    // invariant is recorded in ADR 0047.
     //
     // fromPosition is the resume checkpoint and it is exclusive. A forwards read from a Position is
     // inclusive of the event sitting on it, so exclusivity is a client-side skip on the commit

@@ -108,7 +108,7 @@ public sealed class KurrentSubscriptionService : BackgroundService
         // event, below KurrentDB's catch-up checkpoint batch) it lags at the last dispatched position by
         // design: resume correctness holds because the server-side filter replays the tail as skips on
         // reconnect, and a lag metric reading this checkpoint shows honest staleness through a filtered
-        // quiet period rather than a false zero. TODO(slice 6): record this on the engine-mappings ADR.
+        // quiet period rather than a false zero. This tail-lag characteristic is recorded in ADR 0047.
         await foreach (var message in _client
             .SubscribeToAll(start, filterOptions: filter, cancellationToken: ct)
             .Messages
