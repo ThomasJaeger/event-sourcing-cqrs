@@ -28,10 +28,44 @@ public class PostgresEventStore_Contract_Tests
         => await PostgresContractBackend.CreateAsync(_fixture);
 }
 
+// The held-writer capability suite on PostgreSQL. Same fixture, same backend: the relational store
+// exposes an interactive, held-open append, so PostgresContractBackend implements
+// IHeldWriterContractBackend and these facts run. Each fact gets its own migrated database, so the
+// sibling classes are parallel-safe with the core suite above.
+public class PostgresEventStore_HeldWriter_Contract_Tests
+    : HeldWriterEventStoreContractTests, IClassFixture<PostgresFixture>
+{
+    private readonly PostgresFixture _fixture;
+
+    public PostgresEventStore_HeldWriter_Contract_Tests(PostgresFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    protected override async Task<IHeldWriterContractBackend> CreateBackendAsync()
+        => await PostgresContractBackend.CreateAsync(_fixture);
+}
+
+// The duplicate-id rejection capability suite on PostgreSQL: the relational store raises on a
+// reused event id through the uq_events_event_id unique constraint, so it owes the stronger fact.
+public class PostgresEventStore_DuplicateEventId_Contract_Tests
+    : DuplicateEventIdRejectionContractTests, IClassFixture<PostgresFixture>
+{
+    private readonly PostgresFixture _fixture;
+
+    public PostgresEventStore_DuplicateEventId_Contract_Tests(PostgresFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    protected override async Task<IEventStoreContractBackend> CreateBackendAsync()
+        => await PostgresContractBackend.CreateAsync(_fixture);
+}
+
 // One instance per fact: its own migrated database, its own data source, torn down with the
 // fact. The suite's event types register into the adapter's registries here, which is the whole
 // job of a backend; the suite itself knows nothing about EventTypeRegistry.
-internal sealed class PostgresContractBackend : IEventStoreContractBackend
+internal sealed class PostgresContractBackend : IHeldWriterContractBackend
 {
     private readonly string _connectionString;
     private readonly NpgsqlDataSource _dataSource;
