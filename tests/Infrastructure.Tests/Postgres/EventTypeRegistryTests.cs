@@ -1,5 +1,5 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Xunit;
 

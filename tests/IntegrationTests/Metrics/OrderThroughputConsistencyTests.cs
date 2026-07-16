@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.IntegrationTests.Commands.Sales;
 using EventSourcingCqrs.Projections.OrderThroughput;
 using FluentAssertions;

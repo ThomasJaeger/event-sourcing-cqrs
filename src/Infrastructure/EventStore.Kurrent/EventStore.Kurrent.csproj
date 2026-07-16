@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\Outbox\Outbox.csproj" />
+    <ProjectReference Include="..\Versioning\Versioning.csproj" />
   </ItemGroup>
 </Project>

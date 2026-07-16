@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using Xunit;

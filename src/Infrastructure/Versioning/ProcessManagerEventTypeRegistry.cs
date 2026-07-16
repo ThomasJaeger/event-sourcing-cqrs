@@ -1,13 +1,17 @@
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+namespace EventSourcingCqrs.Infrastructure.Versioning;
 
 // Maps storage-side PM event type names to CLR types and back, parallel to
 // EventTypeRegistry but constrained to IProcessManagerEvent. PM events persist
 // to the same events table as aggregate events (ADR 0013) and resolve through
 // this separate registry, selected by the typed read method rather than by
-// per-row inspection. The provider interface and per-PM-type discovery wire in
-// the next foundational commit; this commit registers PM event types directly.
+// per-row inspection.
+//
+// Consolidated here from the three adapters per ADR 0048; each carried a
+// byte-identical copy. Kept separate from EventTypeRegistry rather than merged:
+// the two registries answer different questions and ADR 0013's type hierarchy
+// keeps aggregate and PM events apart at the type level.
 public sealed class ProcessManagerEventTypeRegistry
 {
     private readonly Dictionary<string, Type> _byName = new(StringComparer.Ordinal);

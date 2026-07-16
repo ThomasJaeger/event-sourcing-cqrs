@@ -2,6 +2,7 @@ using System.Data;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using Microsoft.Data.SqlClient;
 
 namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;

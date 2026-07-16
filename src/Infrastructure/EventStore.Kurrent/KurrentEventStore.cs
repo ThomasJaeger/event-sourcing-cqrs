@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using KurrentDB.Client;
 
 namespace EventSourcingCqrs.Infrastructure.EventStore.Kurrent;

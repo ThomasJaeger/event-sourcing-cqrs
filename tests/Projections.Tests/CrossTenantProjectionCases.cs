@@ -10,6 +10,7 @@ using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.CurrentRoles;
 using EventSourcingCqrs.Projections.CustomerSummary;

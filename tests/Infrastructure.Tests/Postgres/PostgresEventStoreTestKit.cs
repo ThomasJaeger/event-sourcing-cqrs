@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 
 namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
 

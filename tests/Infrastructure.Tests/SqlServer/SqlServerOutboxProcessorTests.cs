@@ -2,6 +2,7 @@ using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging.Abstractions;

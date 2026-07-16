@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.InventoryDashboard;

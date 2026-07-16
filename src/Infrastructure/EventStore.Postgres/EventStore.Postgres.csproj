@@ -3,10 +3,6 @@
     <EmbeddedResource Include="..\..\..\migrations\*.sql" LogicalName="EventStore.Postgres.Migrations.%(FileName)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Infrastructure.Tests" />
-    <InternalsVisibleTo Include="Projections.Tests" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
@@ -17,5 +13,6 @@
     <ProjectReference Include="..\..\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\Migrations.Postgres\Migrations.Postgres.csproj" />
     <ProjectReference Include="..\Outbox\Outbox.csproj" />
+    <ProjectReference Include="..\Versioning\Versioning.csproj" />
   </ItemGroup>
 </Project>

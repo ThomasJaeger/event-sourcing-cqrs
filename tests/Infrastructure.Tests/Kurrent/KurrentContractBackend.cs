@@ -2,6 +2,7 @@ using DotNet.Testcontainers.Containers;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using KurrentDB.Client;
 using Microsoft.Extensions.DependencyInjection;
 

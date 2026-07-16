@@ -6,6 +6,7 @@ using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;

@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.Outbox;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using KurrentDB.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -29,7 +30,7 @@ public static class ServiceCollectionExtensions
 
         services.Configure(configure);
 
-        services.TryAddSingleton(_ => KurrentEventStoreJsonOptions.Create());
+        services.TryAddSingleton(_ => EventStoreJsonOptions.Create());
 
         services.TryAddSingleton<KurrentDBClientSettings>(sp =>
         {

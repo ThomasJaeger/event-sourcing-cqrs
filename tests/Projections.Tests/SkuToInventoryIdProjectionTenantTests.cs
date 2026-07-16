@@ -1,8 +1,8 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
-using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.SkuToInventoryId;

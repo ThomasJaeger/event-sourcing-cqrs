@@ -1,14 +1,21 @@
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
+namespace EventSourcingCqrs.Infrastructure.Versioning;
 
-// Maps storage-side event type names to CLR types and back. Duplicated from the relational
-// adapters rather than shared, per ADR 0004: adapters are self-contained and no cross-adapter
-// layer exists for them to sit in. This is now the third copy, which trips ADR 0004's own
-// three-adapter reconsideration trigger; the slice-6 ADR records that and the Phase 15 collapse.
+// Maps storage-side event type names to CLR types and back. Two ordinal
+// dictionaries because the storage name is an identifier, not natural
+// language. Duplicate registration throws at the registration site so a
+// composition-root misconfiguration surfaces at startup rather than as a
+// silent overwrite at first use. Unknown lookups throw rather than return
+// null so callers do not pass a null Type to a JSON deserializer.
 //
-// Pattern from Chapter 11. Slated to move to Infrastructure/Versioning when that project is
-// created in Phase 15, at which point the copies collapse into one.
+// Pattern from Chapter 11. Consolidated here from the PostgreSQL, SQL Server,
+// and KurrentDB adapters, which each carried a byte-identical copy until the
+// third one fired ADR 0004's three-adapter revisit trigger (ADR 0048). The name
+// a type is stored under is a versioning decision, not an engine decision: every
+// engine has to agree on it or a payload written on one cannot be read on
+// another. Phase 15's upcaster pipeline lands in this project beside it, reading
+// the same storage names.
 public sealed class EventTypeRegistry
 {
     private readonly Dictionary<string, Type> _byName = new(StringComparer.Ordinal);
@@ -31,6 +38,10 @@ public sealed class EventTypeRegistry
         ArgumentNullException.ThrowIfNull(eventType);
         ArgumentException.ThrowIfNullOrEmpty(typeName);
 
+        // The generic overloads enforce IDomainEvent at compile time; the
+        // non-generic path that IEventTypeProvider walks needs the same
+        // guarantee at runtime, otherwise a typo in a provider would land
+        // a non-event type in the registry and surface much later.
         if (!typeof(IDomainEvent).IsAssignableFrom(eventType))
         {
             throw new ArgumentException(

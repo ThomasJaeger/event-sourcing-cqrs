@@ -1,9 +1,13 @@
 using EventSourcingCqrs.Domain.Abstractions;
 
-namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
+namespace EventSourcingCqrs.Infrastructure.Versioning;
 
-// Duplicated from the PostgreSQL adapter per ADR 0004. Same name, different namespace: the two
-// adapters raise their own type, and neither references the other.
+// Raised when a storage-side event type name has no registered CLR type, or a CLR type has
+// no registered name. One type across every engine now, consolidated from the three adapters
+// per ADR 0048. Before the consolidation each adapter raised its own same-named type from its
+// own namespace, so a caller catching one engine's exception silently missed another's. The
+// failure it reports is a registry gap, which is a versioning fault and identical on every
+// engine.
 public sealed class UnknownEventTypeException : Exception
 {
     public string TypeName { get; }

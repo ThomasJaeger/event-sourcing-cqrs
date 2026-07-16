@@ -158,12 +158,15 @@ Attribution grep, exact pipeline:
 
 git diff --cached -U0 | grep -nE '^\+' | grep -vE '^[0-9]+:\+\+\+' | grep -niE "Co-Authored-By|Generated with|Claude|Anthropic"
 
-Five voice-gate false-positive classes: T-SQL double-hyphen comment tokens;
+Six voice-gate false-positive classes: T-SQL double-hyphen comment tokens;
 case-insensitive working-pattern filename references in the attribution grep; verbatim
 quotations of the gate pipelines themselves; XML comment delimiters in project files
-(delimiters only, never the prose between them); and non-prose CLI flag string
+(delimiters only, never the prose between them); non-prose CLI flag string
 literals in command arrays, such as a container builder's insecure and mem-db flag
-arguments (the flag literal only, never surrounding prose).
+arguments (the flag literal only, never surrounding prose); and Markdown table
+delimiter rows, lines consisting solely of pipes, hyphens, colons, and whitespace
+(the delimiter row only, never cell prose). The sixth class was ruled during Phase 14
+slice 0, when ADR 0048's measured-figures table tripped the double-hyphen pattern.
 
 ## After the phase
 

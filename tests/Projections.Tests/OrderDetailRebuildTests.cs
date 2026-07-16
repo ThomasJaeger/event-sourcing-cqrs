@@ -11,6 +11,7 @@ using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Outbox;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Projections.Infrastructure;
 using EventSourcingCqrs.Projections.OrderDetail;

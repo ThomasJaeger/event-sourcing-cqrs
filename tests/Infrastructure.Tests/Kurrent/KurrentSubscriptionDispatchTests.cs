@@ -3,6 +3,7 @@ using DotNet.Testcontainers.Containers;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;

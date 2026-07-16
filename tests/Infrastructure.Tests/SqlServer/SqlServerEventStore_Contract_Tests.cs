@@ -4,6 +4,7 @@ using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using Microsoft.Data.SqlClient;
 using Xunit;
 

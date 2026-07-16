@@ -1,7 +1,7 @@
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.Outbox;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -373,28 +373,9 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    // One factory, three registration paths. They were three identical copies, which is how an
-    // options pin gets applied to two of them and missed on the third.
-    //
-    // snake_case_lower so payload and metadata round-trip through the schema's STORED generated
-    // columns. The options freeze on first use, so a host wanting different ones pre-registers.
-    //
-    // Encoder is pinned rather than inherited. JavaScriptEncoder.Default escapes every non-ASCII
-    // character to \uXXXX, so a serialized payload is pure ASCII on the wire and in the column.
-    // That is already the framework default; naming it makes it a decision the next person has to
-    // argue with rather than a default they can flip without noticing.
-    //
-    // What the pin protects: relaxing to UnsafeRelaxedJsonEscaping sends raw UTF-8 bytes to the
-    // driver, and from that moment every adapter's parameter binding has to be byte-correct or it
-    // corrupts data silently. The SQL Server adapter is byte-correct and has a test that proves it
-    // on the raw stored bytes. This pin keeps the escaping a deliberate choice on both engines
-    // rather than the thing that was quietly holding the roof up.
+    // The serialization seam is EventStoreJsonOptions.Create() in Infrastructure/Versioning, shared
+    // with the other adapters (ADR 0048). This adapter's three registration paths route through this
+    // one call, and the shape and the reasoning behind it live with the factory.
     private static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-            Encoder = JavaScriptEncoder.Default,
-        };
+        => EventStoreJsonOptions.Create();
 }

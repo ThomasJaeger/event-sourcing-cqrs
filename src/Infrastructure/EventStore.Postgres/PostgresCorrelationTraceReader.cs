@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using Npgsql;
 using NpgsqlTypes;
 
