@@ -13,6 +13,7 @@
     <PackageReference Include="Testcontainers.MsSql" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="KurrentDB.Client" />
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
@@ -26,6 +27,7 @@
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.DynamoDb\EventStore.DynamoDb.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\SignalR\SignalR.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Outbox\Outbox.csproj" />

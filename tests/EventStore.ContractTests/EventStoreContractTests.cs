@@ -191,12 +191,22 @@ public abstract class EventStoreContractTests
         //
         // The suite pins the loudness and not the type. IEventStore's stated contract says
         // "failing loudly" and names no exception, so holding every engine to one type would be
-        // the suite inventing a contract the port never made. Both shipped stores happen to
-        // raise ArgumentException.
+        // the suite inventing a contract the port never made. The shipped stores happen to raise
+        // ArgumentException.
+        //
+        // NotImplementedException is excluded, and that exclusion is the fact's teeth. Staying
+        // type-agnostic means an unimplemented member satisfies the assertion by throwing on the
+        // way to doing nothing, so an adapter part-way through a phase goes green here while the
+        // guard does not exist. Phase 14 slice 1 hit exactly that window: a skeleton whose members
+        // all threw NotImplementedException would have passed this fact the moment its append
+        // turned green, before its PM read had a guard at all. The exclusion closes the window
+        // without inventing the type contract the port declined to make.
         var act = async () => await backend.Store.ReadProcessManagerStreamAsync(
             aggregateStream, 0, CancellationToken.None);
 
-        await act.Should().ThrowAsync<Exception>();
+        var thrown = (await act.Should().ThrowAsync<Exception>()).Which;
+        thrown.Should().NotBeOfType<NotImplementedException>(
+            "an unimplemented member is not a guard, however loudly it throws");
     }
 
     [Fact]

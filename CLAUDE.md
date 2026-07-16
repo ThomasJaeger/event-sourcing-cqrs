@@ -58,7 +58,7 @@ Two architectural decisions on disk (the self-contained event-store-adapter rule
 * Blazor Server for the UI, ASP.NET Core minimal APIs for the JSON API.
 * Tailwind for styling.
 * In-process notification dispatch for live dashboard updates (server-rendered Blazor circuits, ADR 0032).
-* xUnit, FluentAssertions, FsCheck (property-based tests), Stryker.NET (mutation tests), Testcontainers (PostgreSQL, SQL Server, and KurrentDB), LocalStack (DynamoDB).
+* xUnit, FluentAssertions, FsCheck (property-based tests), Stryker.NET (mutation tests), Testcontainers (PostgreSQL, SQL Server, and KurrentDB), LocalStack pinned to 4.14.0 (DynamoDB). The pin is required, not hygiene: `localstack/localstack:latest` exits 55 on startup with "License activation failed" unless an auth token is set, and the tag list carries a community-archive tag, so the community edition is archived rather than superseded. 4.14.0 is the last tag that starts with no token.
 * Docker Compose to run the whole system locally with one command.
 
 ## Architectural rules
