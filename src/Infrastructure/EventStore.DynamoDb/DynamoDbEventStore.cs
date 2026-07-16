@@ -142,10 +142,21 @@ public sealed class DynamoDbEventStore : IEventStore
             }
             catch (TransactionCanceledException cancelled)
             {
-                // Terminal failures throw from here; contention falls through to the retry.
-                TranslateCancellation(cancelled, streamId, expectedVersion, rows.Count);
-                lastContention = cancelled;
-                await Task.Delay(BackoffFor(attempt), ct);
+                // The mapping lives in DynamoDbCancellationTranslator, which is pure and pinned
+                // directly. This is the only place a verdict turns into control flow.
+                switch (DynamoDbCancellationTranslator.Translate(
+                    cancelled.CancellationReasons, rows.Count))
+                {
+                    case CancellationVerdict.VersionConflict:
+                        throw new ConcurrencyException(streamId, expectedVersion);
+                    case CancellationVerdict.Propagate:
+                        throw;
+                    case CancellationVerdict.Contention:
+                    default:
+                        lastContention = cancelled;
+                        await Task.Delay(BackoffFor(attempt), ct);
+                        break;
+                }
             }
         }
 
@@ -160,46 +171,6 @@ public sealed class DynamoDbEventStore : IEventStore
             throw new DynamoDbAppendTooLargeException(
                 eventCount, itemCount, DynamoDbSchema.TransactionItemLimit);
         }
-    }
-
-    // Reasons come back positionally, one per transaction item, against the layout
-    // DynamoDbSchema documents. Returns for contention, throws for anything terminal.
-    private static void TranslateCancellation(
-        TransactionCanceledException cancelled,
-        StreamId streamId,
-        int expectedVersion,
-        int eventCount)
-    {
-        var reasons = cancelled.CancellationReasons;
-        var failed = Enumerable.Range(0, reasons.Count)
-            .Where(i => reasons[i].Code is not null and not "None")
-            .ToList();
-
-        // Order matters. A reused event id must never surface as the concurrency contract, because
-        // a handler catching ConcurrencyException would retry a bug forever, so the id row is
-        // checked first and its failure propagates untranslated.
-        if (failed.Any(i => DynamoDbSchema.IsEventIdRowIndex(i, eventCount)))
-        {
-            throw cancelled;
-        }
-
-        // A taken version is terminal: retrying re-reads the counter and fails the same way.
-        if (failed.Any(i => DynamoDbSchema.IsEventRowIndex(i, eventCount)))
-        {
-            throw new ConcurrencyException(streamId, expectedVersion);
-        }
-
-        // Counter or log row only: another writer took the position between the read and the
-        // write. Both fail together, because the log row keys on the position the counter handed
-        // out. Re-read and retry.
-        var contention = failed.Any(i =>
-            i == DynamoDbSchema.CounterIndex || DynamoDbSchema.IsLogRowIndex(i, eventCount));
-        if (contention)
-        {
-            return;
-        }
-
-        throw cancelled;
     }
 
     // Small and jittered. The jitter matters more than the curve: without it, writers that
@@ -229,7 +200,8 @@ public sealed class DynamoDbEventStore : IEventStore
             read.Item[DynamoDbSchema.CounterValueAttribute].N, CultureInfo.InvariantCulture);
     }
 
-    // The layout here is the invariant DynamoDbSchema documents and TranslateCancellation reads.
+    // The layout here is the invariant DynamoDbSchema documents and the cancellation translator
+    // reads back.
     private List<TransactWriteItem> BuildTransactionItems(long counter, IReadOnlyList<AppendRow> rows)
     {
         var items = new List<TransactWriteItem>(1 + (rows.Count * DynamoDbSchema.ItemsPerEvent))

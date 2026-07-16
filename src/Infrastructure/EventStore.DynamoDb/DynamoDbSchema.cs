@@ -67,10 +67,10 @@ internal static class DynamoDbSchema
     //   index n+1 .. 2n    the log rows            condition: attribute_not_exists(sk)
     //   index 2n+1 .. 3n   the event-id rows       condition: attribute_not_exists(pk)
     //
-    // Change this layout and the translation in DynamoDbEventStore.TranslateCancellation goes
-    // silently wrong: a version conflict would surface as contention and retry forever, or a
-    // duplicate event id would arrive dressed as ConcurrencyException. The two live together for
-    // that reason, and the helpers below are the only place the arithmetic is written down.
+    // Change this layout and DynamoDbCancellationTranslator goes silently wrong: a version conflict
+    // would surface as contention and retry forever, or a duplicate event id would arrive dressed
+    // as ConcurrencyException. The helpers below are the only place the arithmetic is written down,
+    // and the translator reads them rather than repeating them.
     public static int CounterIndex => 0;
 
     public static bool IsEventRowIndex(int index, int eventCount)

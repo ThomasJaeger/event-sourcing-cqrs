@@ -70,6 +70,20 @@ breath and present a green bar that never went red.
 - **Don't mock what you don't own.** Never mock `DbConnection`, the KurrentDB client, or
   the AWS SDK. Verify adapters against the real backend via Testcontainers / LocalStack and
   the contract suite.
+  - **The error-path carve-out.** A derived stand-in of a client owned by someone else is
+    allowed under all five of these conditions, and the first one to fail takes the
+    permission with it: it stands in only for an **error path the live engine cannot
+    deterministically produce** (a cancellation aimed at one item index, a retry loop's
+    exhaustion); the shape it returns is one a **spike measured against the live engine**,
+    never one invented to suit the test; it is **named in the fact's header** as a
+    stand-in, with the condition it satisfies; it **replaces no live-engine fact**, so
+    whatever the engine really does stays pinned against Testcontainers or LocalStack; and
+    the reach for it is **surfaced, not assumed** (flag, don't skip). Prefer extracting the
+    decision into a pure seam and pinning that directly, which needs no stand-in at all:
+    the DynamoDB adapter's cancellation translation went that way, and only the loop's
+    exhaustion kept a client. A stand-in that pins what a backend does, rather than what
+    the adapter does about it, is outside the carve-out and is the thing this rule exists
+    to forbid.
 - **One assertion of behavior per test** (multiple physical asserts checking one behavior
   are fine). Name tests as specifications.
 

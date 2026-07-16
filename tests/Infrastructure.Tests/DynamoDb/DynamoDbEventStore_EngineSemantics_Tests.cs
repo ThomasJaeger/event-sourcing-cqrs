@@ -177,50 +177,86 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
 
     [Theory]
     [MemberData(nameof(TranslationCases))]
-    public async Task A_cancellation_reason_translates_by_its_item_index(
-        string because, int failedIndex, Type expected)
+    public void A_cancellation_reason_translates_by_its_item_index(
+        string because, int failedIndex, CancellationVerdict expected)
     {
-        // Deterministic and unit-level, over a fake client. The engine's real cancellations are
-        // hard to aim: producing an id-row failure on demand needs a second writer, and reaching
-        // the attempt cap needs 64 real losses. What these pin is the adapter's own translation,
-        // which is pure logic over a reason array, and which the spike's engine facts say arrives
-        // positionally.
+        // Direct facts against the translation seam. It is a pure function over a reason array, so
+        // these need no client at all: constructing the array the engine would return is the whole
+        // arrangement. The engine cannot produce these shapes on demand anyway, and the array shape
+        // is what the spike measured against the live engine.
         //
         // The layout under test is DynamoDbSchema's documented invariant, for a one-event append:
         // index 0 the counter, index 1 the event row, index 2 the log row, index 3 the event-id
-        // row. Their teeth were proven against a fake that shifted the array by one index.
-        var store = BuildStoreOverFake(new FakeCancellingDynamoDb(failedIndex, itemCount: 4));
+        // row. Teeth proven against a variant that shifted the array by one index, which inverted
+        // every verdict.
+        var reasons = ReasonsWithFailureAt(failedIndex, itemCount: 4);
 
-        var stream = ContractEnvelopes.NewStreamId();
-        var act = async () => await store.AppendAsync(stream, 0,
-            [ContractEnvelopes.Build(stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 1m))],
-            CancellationToken.None);
-
-        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeOfType(expected, because);
+        DynamoDbCancellationTranslator.Translate(reasons, eventCount: 1)
+            .Should().Be(expected, because);
     }
 
-    public static TheoryData<string, int, Type> TranslationCases() => new()
+    public static TheoryData<string, int, CancellationVerdict> TranslationCases() => new()
     {
         {
-            "an event row failing is a taken version, which is the concurrency contract",
-            1, typeof(ConcurrencyException)
+            "an event row failing is a taken version, which the append turns into the concurrency contract",
+            1, CancellationVerdict.VersionConflict
         },
         {
             "an id row failing is a reused event id, which propagates untranslated so no handler retries a bug",
-            3, typeof(TransactionCanceledException)
+            3, CancellationVerdict.Propagate
         },
         {
-            "a counter row failing is contention, which retries to the cap and then names it",
-            0, typeof(DynamoDbPositionContentionException)
+            "a counter row failing is another writer taking the position, which is retryable",
+            0, CancellationVerdict.Contention
+        },
+        {
+            "a log row failing is the same story as the counter: the log keys on the position the counter handed out",
+            2, CancellationVerdict.Contention
         },
     };
 
     [Fact]
+    public void An_unrecognized_cancellation_propagates_rather_than_retrying()
+    {
+        // Nothing failed, which is a shape the translator has no story for. Propagating beats
+        // guessing: a silent retry on an unknown failure is how an append spins forever on
+        // something structural.
+        var reasons = Enumerable.Range(0, 4)
+            .Select(_ => new CancellationReason { Code = "None" })
+            .ToList();
+
+        DynamoDbCancellationTranslator.Translate(reasons, eventCount: 1)
+            .Should().Be(CancellationVerdict.Propagate);
+    }
+
+    private static List<CancellationReason> ReasonsWithFailureAt(int failedIndex, int itemCount)
+        => Enumerable.Range(0, itemCount)
+            .Select(i => i == failedIndex
+                ? new CancellationReason
+                {
+                    Code = "ConditionalCheckFailed",
+                    Message = "The conditional request failed",
+                }
+                : new CancellationReason { Code = "None" })
+            .ToList();
+
+    [Fact]
     public async Task Exhausting_the_attempt_cap_names_the_cap()
     {
-        // The cap's own fact. The counter index fails forever, so every attempt loses and the
-        // adapter gives up rather than spinning. Configured small: the shipped default is 64,
-        // and reaching it against a fake would be 64 pointless round trips.
+        // The cap's own fact, and the one place in this class that still stands a client in. The
+        // translation facts above dropped theirs when the mapping became a pure seam; this one
+        // cannot, because what it pins is the loop's behavior over many attempts rather than one
+        // decision, and a loop needs something to call.
+        //
+        // The stand-in is the TDD_RULES §3 carve-out, and it holds only because every condition is
+        // met: it is a derived stand-in of a client this repository does not own, it exists for an
+        // error path the live engine cannot deterministically produce (64 real losses is a load
+        // test), it is confined to a reason-array shape the spike measured, it is named here, and
+        // it replaces no live-engine fact. What DynamoDB does under contention is pinned by the
+        // storm probe against LocalStack, not by this.
+        //
+        // The counter index fails forever, so every attempt loses. Configured small: the shipped
+        // default is 64, and reaching it against a stand-in would be 64 pointless round trips.
         var store = BuildStoreOverFake(
             new FakeCancellingDynamoDb(failedIndex: 0, itemCount: 4), maxAttempts: 3);
 
