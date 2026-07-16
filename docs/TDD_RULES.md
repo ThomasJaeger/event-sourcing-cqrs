@@ -86,6 +86,34 @@ breath and present a green bar that never went red.
     to forbid.
 - **One assertion of behavior per test** (multiple physical asserts checking one behavior
   are fine). Name tests as specifications.
+- **Test reach: the preference order.** Reaching a behavior a test cannot otherwise see is a
+  recurring pressure, and the answer is an order, not a judgment call. Take the first option
+  that works and say why the ones above it did not:
+  1. **An existing injected seam.** A constructor parameter or a hand-built harness the tests
+     already supply. Costs nothing and adds no production surface. The DynamoDB dispatcher's
+     wake facts decorate `IAmazonDynamoDBStreams` and `IEventStore` this way, because the
+     harness already hands both to the service by hand.
+  2. **An internal seam under `InternalsVisibleTo`.** Extracting a decision into a type the
+     test assembly can already see. Prefer a **pure** seam: it needs no stand-in and pins
+     directly. The DynamoDB adapter's cancellation translation went this way, and the facts
+     that had needed a client to reach it now call a function.
+  3. **Inert production widening, named as test-reach.** A setting or visibility change that
+     no shipping caller uses, taken only when the behavior is otherwise unpinnable, and
+     labelled in the code as existing for reach. `DynamoDbEventStoreOptions.MaxAppendAttempts`
+     is settable because 64 real losses is a load test rather than a fact; `CancellationVerdict`
+     is public because xUnit needs a public test class and a public method cannot take an
+     internal parameter. Both say so where they sit. "Inert" is the whole condition: widening
+     that changes what production does is not reach, it is a design change wearing a test's
+     clothes.
+  4. **Nothing.** Some behavior is not worth its seam. Say so in the fact's header and pin the
+     property that makes the behavior true instead of the scenario that would catch it
+     failing. The dispatcher's acquire-before-drain ordering is pinned as an ordering rather
+     than raced, because racing it would need option 5.
+  **Never a timing or delay seam in a hot path.** A `Task.Delay` hook, a settable interval, or
+  a callback wedged between two awaits so a test can slip inside the window: these buy a fact
+  by making the shipped loop slower, more complex, and differently timed than the one that
+  runs in production, which is the thing under test. A window narrow enough to need one is a
+  window to close by construction and pin by its invariant.
 
 ---
 

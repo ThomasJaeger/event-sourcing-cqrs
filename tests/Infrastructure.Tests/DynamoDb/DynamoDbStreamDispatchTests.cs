@@ -302,6 +302,51 @@ public class DynamoDbStreamDispatchTests
     }
 
     [Fact]
+    public async Task Startup_acquires_its_shard_iterators_before_it_drains()
+    {
+        // The ordering that closes the startup window. Draining first and taking LATEST after
+        // leaves an event committed between the two invisible to both halves: above the checkpoint
+        // the drain just wrote, behind the iterator's LATEST point. It then stalls until an
+        // unrelated later write wakes the loop, which on a quiet system is forever.
+        //
+        // What this pins is the ordering, not the race. Losing the race needs an append inside a
+        // sub-millisecond window between two awaits, and hitting it deliberately would need a delay
+        // seam in RunAsync between acquire and drain: production surface added purely for test
+        // reach, in the hot path, which TDD_RULES section 3's preference order forbids. So this
+        // fact asserts the property that makes the race unlosable rather than trying to lose it.
+        // The other eight facts cannot see this: all of them are satisfied by a drain alone, and
+        // the three wake facts settle before appending, which puts them well outside the window.
+        await using var harness = await DynamoDbStreamHarness.CreateAsync(_localStack, _postgres);
+        var log = new DispatchObservationLog();
+        var dispatcher = new DynamoDbRecordingDispatcher();
+        var service = harness.CreateService(
+            dispatcher,
+            streams: new RecordingStreamsDecorator(harness.Streams, log),
+            store: new CountingEventStore(harness.Store, log));
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        try
+        {
+            await SettleAsync(log);
+
+            var observations = log.Observations.ToList();
+            var firstAcquire = observations.IndexOf(DispatchObservation.IteratorAcquired);
+            var firstRead = observations.IndexOf(DispatchObservation.FeedRead);
+
+            firstAcquire.Should().BeGreaterThanOrEqualTo(0, "startup acquires an iterator");
+            firstRead.Should().BeGreaterThanOrEqualTo(0, "startup drains");
+            firstAcquire.Should().BeLessThan(firstRead,
+                "the iterator is in place before the drain reads, so an event committed during the "
+                + "drain lands after the iterator point and wakes the loop rather than stalling");
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task A_quiet_stream_costs_no_read_of_the_event_feed()
     {
         // The no-poll fact (PLAN.md:475). Once the startup drain finishes, a healthy but silent

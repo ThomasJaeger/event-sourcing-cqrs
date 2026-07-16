@@ -13,6 +13,7 @@ internal enum DispatchObservation
     RecordsReturned,
     RecordsEmpty,
     FeedRead,
+    IteratorAcquired,
 }
 
 internal sealed class DispatchObservationLog
@@ -73,9 +74,13 @@ internal sealed class RecordingStreamsDecorator : AmazonDynamoDBStreamsClient
         DescribeStreamRequest request, CancellationToken cancellationToken = default)
         => _inner.DescribeStreamAsync(request, cancellationToken);
 
-    public override Task<GetShardIteratorResponse> GetShardIteratorAsync(
+    public override async Task<GetShardIteratorResponse> GetShardIteratorAsync(
         GetShardIteratorRequest request, CancellationToken cancellationToken = default)
-        => _inner.GetShardIteratorAsync(request, cancellationToken);
+    {
+        var iterator = await _inner.GetShardIteratorAsync(request, cancellationToken);
+        _log.Record(DispatchObservation.IteratorAcquired);
+        return iterator;
+    }
 
     public override async Task<GetRecordsResponse> GetRecordsAsync(
         GetRecordsRequest request, CancellationToken cancellationToken = default)
