@@ -220,8 +220,75 @@ public abstract class EventStoreContractTests
         // (ADR 0013), so the feed they drive off must not carry them. The second assertion is
         // what makes the first mean something: both rows really landed, and both drew a
         // position, so the feed is filtering rather than the PM append having quietly failed.
+        //
+        // Provenance: a green-on-write characterization of the position hook, hardened rather
+        // than written fresh. HaveCount alone was the whole assertion, and a backend returning
+        // any two-element list satisfied it, so a hook that answered with a hardcoded literal
+        // passed every core fact. The strengthening is ascending plus distinct; its teeth were
+        // proven against a scratch backend built to return exactly that literal, which failed
+        // here and was then discarded. Not asserted: gaplessness. ADR 0044 tolerates permanent
+        // gaps and SQL Server burns identity-cache positions, so contiguity is not the port's.
         feed.Select(e => e.StreamId).Should().Equal(aggregateStream);
-        (await backend.ReadCommittedPositionsAsync()).Should().HaveCount(2);
+        var committed = await backend.ReadCommittedPositionsAsync();
+        committed.Should().HaveCount(2).And.BeInAscendingOrder();
+        committed.Distinct().Should().HaveCount(committed.Count);
+    }
+
+    [Fact]
+    public async Task Reading_committed_positions_spans_both_append_paths_strictly_ascending()
+    {
+        await using var backend = await CreateBackendAsync();
+
+        // Provenance: a green-on-write characterization, added when the hook's only core
+        // assertion turned out to be a count. IEventStoreContractBackend says the hook returns
+        // "every committed position, ascending, including the rows ReadAllAsync excludes", and
+        // nothing in the core suite held it to any of that. This fact does. Its teeth were
+        // proven against a scratch backend whose hook returned a hardcoded two-element list,
+        // which failed here and was then discarded.
+        //
+        // One event per append, each aggregate event on its own stream. Multi-event appends are
+        // avoided deliberately: KurrentDB stamps GlobalPosition from the append's commit
+        // position, so every event of one call shares it, and distinctness would then be a claim
+        // about the engine's batching rather than about the hook. That is why the multi-event
+        // fact above pins only BeInAscendingOrder, which admits equals.
+        var streamA = ContractEnvelopes.NewStreamId();
+        await backend.Store.AppendAsync(streamA, 0,
+            [ContractEnvelopes.Build(streamA, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m))],
+            CancellationToken.None);
+
+        var pmStream = ContractEnvelopes.NewProcessManagerStreamId();
+        await backend.Store.AppendProcessManagerEventsAsync(pmStream, 0,
+            [ContractEnvelopes.BuildProcessManager(pmStream, 1, new ContractStepRecorded(1))],
+            CancellationToken.None);
+
+        var streamB = ContractEnvelopes.NewStreamId();
+        await backend.Store.AppendAsync(streamB, 0,
+            [ContractEnvelopes.Build(streamB, 1, new ContractOrderNoted("second stream"))],
+            CancellationToken.None);
+
+        await backend.Store.AppendProcessManagerEventsAsync(pmStream, 1,
+            [ContractEnvelopes.BuildProcessManager(pmStream, 2, new ContractStepRecorded(2))],
+            CancellationToken.None);
+
+        var positions = await backend.ReadCommittedPositionsAsync();
+        var feed = await ReadFeedAsync(backend.Store);
+
+        // Four rows committed across the two append paths; the aggregate feed carries two of
+        // them. Both numbers are asserted, because the gap between them is the PM rows and that
+        // gap is what the hook exists to see.
+        positions.Should().HaveCount(4);
+        feed.Should().HaveCount(2);
+
+        // Strictly ascending, spelled as ascending plus distinct. BeInAscendingOrder alone
+        // admits equal neighbours, which is what let a degenerate hook through before.
+        positions.Should().BeInAscendingOrder();
+        positions.Distinct().Should().HaveCount(positions.Count);
+
+        // Every position the feed reports is one the hook reports, and the hook reports two
+        // more: the PM rows ReadAllAsync excludes by design. Gaplessness is not asserted here
+        // either (ADR 0044).
+        positions.Should().Contain(feed.Select(e => e.GlobalPosition));
+        (positions.Count - feed.Count).Should().Be(2);
     }
 
     [Fact]
