@@ -114,8 +114,7 @@ public class KurrentSubscriptionDispatchTests
     // advance, and no PM event dispatches. This tests the checkpoint passing a filtered stretch; it
     // does not test a filtered TAIL, because KurrentDB advances the checkpoint past a tail only when
     // the server emits a checkpoint message, which below its catch-up batch threshold it does not. That
-    // tail-lag characteristic is documented at KurrentSubscriptionService and the engine-mappings ADR
-    // (TODO slice 6).
+    // tail-lag characteristic is documented at KurrentSubscriptionService and in ADR 0047.
     [Fact]
     public async Task The_checkpoint_passes_a_filtered_stretch_when_the_next_aggregate_event_dispatches()
     {

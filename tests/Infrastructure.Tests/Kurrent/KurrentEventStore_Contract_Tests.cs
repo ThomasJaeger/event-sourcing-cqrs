@@ -11,7 +11,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Kurrent;
 //   held-writer: KurrentDB has no interactive, held-open append to park mid-transaction.
 //   throwing-duplicate: KurrentDB append is idempotent by event id, so it does not raise on a
 //     reused id and cannot own the throwing-duplicate fact.
-// TODO(slice 6): record both engine reasons in the KurrentDB engine-mappings ADR.
+// Both engine reasons are recorded in ADR 0047.
 public class KurrentEventStore_Contract_Tests
     : EventStoreContractTests, IClassFixture<KurrentFixture>
 {
