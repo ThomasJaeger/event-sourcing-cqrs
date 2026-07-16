@@ -42,6 +42,15 @@ internal static class DynamoDbSchema
     public const string OccurredUtcAttribute = "occurred_utc";
     public const string PositionAttribute = "position";
 
+    // The storage type name, resolved back to a CLR type through the shared registry (ADR 0048).
+    public const string TypeNameAttribute = "type_name";
+
+    // The row's tenant, lifted out of the metadata JSON to the top level so a tenant-window read
+    // filters server-side. The tenant is inside the metadata document too, and that copy stays
+    // authoritative: this one exists to be filterable, and hydration still reads the metadata.
+    // The two are written from one value on the append path, so they cannot disagree.
+    public const string TenantAttribute = "tenant";
+
     // TransactWriteItems' 100-item ceiling, measured against the live engine: 101 items are
     // rejected with "Member must have length less than or equal to 100" (ValidationException).
     public const int TransactionItemLimit = 100;

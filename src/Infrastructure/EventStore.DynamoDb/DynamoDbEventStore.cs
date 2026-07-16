@@ -326,9 +326,12 @@ public sealed class DynamoDbEventStore : IEventStore
             [DynamoDbSchema.OccurredUtcAttribute] =
                 new AttributeValue { S = row.OccurredUtc.ToString("O", CultureInfo.InvariantCulture) },
             [DynamoDbSchema.PositionAttribute] = Number(position),
-            // The storage type name, resolved through the shared registry (ADR 0048). Reads
-            // resolve it back to a CLR type through the same registry.
-            ["type_name"] = new AttributeValue { S = row.TypeName },
+            [DynamoDbSchema.TypeNameAttribute] = new AttributeValue { S = row.TypeName },
+            // Lifted out of the metadata JSON so ReadAllForTenantAsync can filter on it
+            // server-side. Written from the same metadata value hydration reads back, so the
+            // top-level copy and the document copy come from one source and cannot drift.
+            [DynamoDbSchema.TenantAttribute] =
+                new AttributeValue { S = row.Metadata.Tenant.Value.ToString("N") },
         };
 
     public async Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
@@ -402,6 +405,13 @@ public sealed class DynamoDbEventStore : IEventStore
         long toPositionInclusive,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // The tenant predicate runs server-side on the log partition's own Query. It is a
+        // FilterExpression rather than a key condition, so DynamoDB still reads every row in the
+        // position window and then drops the ones that do not match: the read capacity is the
+        // window's, not the tenant's. What it buys is that other tenants' payloads never cross the
+        // wire or get deserialized, which is the part that matters on a partition carrying every
+        // tenant's traffic. Narrowing the capacity too would need the tenant in a key, and no key
+        // on this table can carry it without giving up the single ordered feed.
         var rows = await QueryPartitionAsync(
             DynamoDbSchema.LogPartitionKey,
             $"{DynamoDbSchema.PartitionKeyAttribute} = :pk " +
@@ -413,16 +423,14 @@ public sealed class DynamoDbEventStore : IEventStore
                 // moves up one. Positions are integers, so this is exact rather than approximate.
                 [":from"] = Number(fromPosition + 1),
                 [":to"] = Number(toPositionInclusive),
+                [":tenant"] = new AttributeValue { S = tenant.Value.ToString("N") },
             },
-            ct);
+            ct,
+            filterExpression: $"{DynamoDbSchema.TenantAttribute} = :tenant");
 
         foreach (var row in rows.Where(IsAggregateRow))
         {
-            var hydrated = HydrateAggregate(row);
-            if (hydrated.Metadata.Tenant == tenant)
-            {
-                yield return hydrated;
-            }
+            yield return HydrateAggregate(row);
         }
     }
 
@@ -434,11 +442,14 @@ public sealed class DynamoDbEventStore : IEventStore
         => !row[DynamoDbSchema.StreamIdAttribute].S
             .StartsWith(StreamPrefixes.ProcessManagerPrefix, StringComparison.Ordinal);
 
+    // A filtered page can come back empty with a continuation key, because the filter runs after
+    // the page is read: the loop keys on LastEvaluatedKey and never on the item count.
     private async Task<List<Dictionary<string, AttributeValue>>> QueryPartitionAsync(
         string partitionKey,
         string keyCondition,
         Dictionary<string, AttributeValue> values,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? filterExpression = null)
     {
         var rows = new List<Dictionary<string, AttributeValue>>();
         Dictionary<string, AttributeValue>? start = null;
@@ -451,6 +462,7 @@ public sealed class DynamoDbEventStore : IEventStore
                 {
                     TableName = _options.TableName,
                     KeyConditionExpression = keyCondition,
+                    FilterExpression = filterExpression,
                     ExpressionAttributeValues = values,
                     ConsistentRead = true,
                     ScanIndexForward = true,
@@ -469,7 +481,7 @@ public sealed class DynamoDbEventStore : IEventStore
     private EventEnvelope HydrateAggregate(Dictionary<string, AttributeValue> row)
     {
         var streamId = StreamId.Parse(row[DynamoDbSchema.StreamIdAttribute].S);
-        var typeName = row["type_name"].S;
+        var typeName = row[DynamoDbSchema.TypeNameAttribute].S;
         Type clrType;
         try
         {
@@ -498,7 +510,7 @@ public sealed class DynamoDbEventStore : IEventStore
     private ProcessManagerEventEnvelope HydrateProcessManager(Dictionary<string, AttributeValue> row)
     {
         var streamId = StreamId.Parse(row[DynamoDbSchema.StreamIdAttribute].S);
-        var typeName = row["type_name"].S;
+        var typeName = row[DynamoDbSchema.TypeNameAttribute].S;
         Type clrType;
         try
         {
