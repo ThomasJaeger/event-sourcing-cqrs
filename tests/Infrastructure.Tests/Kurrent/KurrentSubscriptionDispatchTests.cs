@@ -24,10 +24,16 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Kurrent;
 // notification tests' drive-and-observe shape: start the hosted service, poll a recording double
 // within a budget, tear down in a finally.
 //
-// Every fact runs RED today by starting the service, whose ExecuteAsync throws NotImplementedException
-// until the GREEN slice implements the subscription loop against the spike's SQ1/SQ2 semantics. The
-// checkpoint is read and seeded through the existing ICheckpointStore surface, so the facts do not
-// depend on how the GREEN loop advances it.
+// How these ran RED, corrected. This header used to claim the facts failed on the skeleton's
+// NotImplementedException, and they cannot have: BackgroundService.StartAsync does not propagate a
+// faulted ExecuteAsync on this framework, not even a completed one, which Phase 14 measured
+// directly while writing the DynamoDB dispatcher's own RED. The skeleton's throw went unobserved on
+// a background thread, so each fact went RED by dispatching nothing and failing its poll budget.
+// That is still RED for the intended reason, the asserted behavior missing, and it is worth knowing
+// that a hosted service's RED costs a poll budget rather than an immediate throw.
+//
+// The checkpoint is read and seeded through the existing ICheckpointStore surface, so the facts do
+// not depend on how the loop advances it.
 public class KurrentSubscriptionDispatchTests
     : IClassFixture<KurrentFixture>, IClassFixture<PostgresFixture>
 {

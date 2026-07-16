@@ -60,6 +60,17 @@ public sealed class DynamoDbTableProvisioner
                             new KeySchemaElement(DynamoDbSchema.SortKeyAttribute, KeyType.RANGE),
                         ],
                         BillingMode = BillingMode.PAY_PER_REQUEST,
+                        // The change feed the dispatch service wakes on (PLAN.md:465). KEYS_ONLY is
+                        // everything this system reads: the dispatcher treats a record as a wake
+                        // signal and never parses it, then reads the envelope from the log
+                        // partition, so an image would be carried across the wire and dropped.
+                        // A consumer that reads images changes the view type when it exists;
+                        // provisioning for one that does not is speculative.
+                        StreamSpecification = new StreamSpecification
+                        {
+                            StreamEnabled = true,
+                            StreamViewType = StreamViewType.KEYS_ONLY,
+                        },
                     },
                     ct);
             }

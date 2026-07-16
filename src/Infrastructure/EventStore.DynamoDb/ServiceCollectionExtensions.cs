@@ -1,7 +1,9 @@
 using Amazon;
+using Amazon.DynamoDBStreams;
 using Amazon.DynamoDBv2;
 using Amazon.Runtime;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.Outbox;
 using EventSourcingCqrs.Infrastructure.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -108,6 +110,56 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<DynamoDbTableProvisioner>();
         services.TryAddSingleton<IEventStore, DynamoDbEventStore>();
+
+        return services;
+    }
+
+    // Registers the DynamoDB Streams dispatch service, the native read-side mechanism the Workers
+    // host composes in place of an outbox processor. The table's change feed wakes it; the log
+    // partition is what it reads. There is no outbox table and no poll of the event table.
+    //
+    // Same posture as AddKurrentSubscriptionService: the hosted service is a plain Add, everything
+    // else TryAdd, so this composes into a host whose read-model side is PostgreSQL without
+    // double-registering a shared dependency.
+    public static IServiceCollection AddDynamoDbStreamDispatchService(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<DynamoDbStreamDispatchOptions>();
+
+        // The Streams consumer API lives in AWSSDK.DynamoDBStreams, a package separate from
+        // AWSSDK.DynamoDBv2: the table client cannot read the stream it enables. Its endpoint is
+        // the same one the table client uses, so it reads the same options.
+        services.TryAddSingleton<IAmazonDynamoDBStreams>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<DynamoDbEventStoreOptions>>().Value;
+            var config = new AmazonDynamoDBStreamsConfig
+            {
+                RegionEndpoint = RegionEndpoint.GetBySystemName(opts.Region),
+            };
+
+            if (!string.IsNullOrWhiteSpace(opts.ServiceUrl))
+            {
+                config = new AmazonDynamoDBStreamsConfig
+                {
+                    ServiceURL = opts.ServiceUrl,
+                    AuthenticationRegion = opts.Region,
+                };
+            }
+
+            return string.IsNullOrWhiteSpace(opts.AccessKeyId)
+                ? new AmazonDynamoDBStreamsClient(config)
+                : new AmazonDynamoDBStreamsClient(
+                    new BasicAWSCredentials(opts.AccessKeyId, opts.SecretAccessKey), config);
+        });
+
+        // The in-process dispatcher the drain plays events into, resolving projections and
+        // process-manager handlers per event through the same class the relational outbox processors
+        // and the KurrentDB subscription use (ADR 0004 covers engine-specific mechanics, not this
+        // consumer-side resolver). TryAdd so a host that also composed a relational path keeps its
+        // single dispatcher.
+        services.TryAddSingleton<IMessageDispatcher, InProcessMessageDispatcher>();
+        services.AddHostedService<DynamoDbStreamDispatchService>();
 
         return services;
     }
