@@ -49,10 +49,6 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // refutation, the substrate, and the hot-partition cost it buys.
 public sealed class DynamoDbEventStore : IEventStore
 {
-    // Generous, because contention is this engine's normal case rather than its exception. The cap
-    // exists to make a losing writer fail loudly rather than spin forever.
-    private const int MaxAppendAttempts = 64;
-
     private readonly IAmazonDynamoDB _client;
     private readonly EventTypeRegistry _registry;
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
@@ -127,8 +123,11 @@ public sealed class DynamoDbEventStore : IEventStore
 
         GuardItemBudget(rows.Count);
 
+        // The cap makes a writer that keeps losing the counter race fail loudly rather than spin
+        // forever. Contention is this engine's normal case, so the default is generous.
+        var cap = _options.MaxAppendAttempts;
         TransactionCanceledException? lastContention = null;
-        for (var attempt = 1; attempt <= MaxAppendAttempts; attempt++)
+        for (var attempt = 1; attempt <= cap; attempt++)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -150,7 +149,7 @@ public sealed class DynamoDbEventStore : IEventStore
             }
         }
 
-        throw new DynamoDbPositionContentionException(MaxAppendAttempts, lastContention!);
+        throw new DynamoDbPositionContentionException(cap, lastContention!);
     }
 
     private static void GuardItemBudget(int eventCount)

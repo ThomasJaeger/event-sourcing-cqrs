@@ -26,4 +26,14 @@ public sealed class DynamoDbEventStoreOptions
     public string AccessKeyId { get; set; } = string.Empty;
 
     public string SecretAccessKey { get; set; } = string.Empty;
+
+    // How many times an append re-reads the counter and retries before giving up with
+    // DynamoDbPositionContentionException. The default is generous because contention is this
+    // engine's normal case: a spike measured one writer retrying 42 times among 12 concurrent
+    // appenders, so a small cap would fail correct appends under ordinary load.
+    //
+    // It is settable because the exhaustion path is otherwise unreachable in a test: driving 64
+    // real losses is slow and flaky, and a fact that pins the cap needs to reach it deterministically.
+    // A host has no reason to change it.
+    public int MaxAppendAttempts { get; set; } = 64;
 }
