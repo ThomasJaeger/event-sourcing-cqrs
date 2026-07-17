@@ -100,7 +100,7 @@ breath and present a green bar that never went red.
   3. **Inert production widening, named as test-reach.** A setting or visibility change that
      no shipping caller uses, taken only when the behavior is otherwise unpinnable, and
      labelled in the code as existing for reach. `DynamoDbEventStoreOptions.MaxAppendAttempts`
-     is settable because 64 real losses is a load test rather than a fact; `CancellationVerdict`
+     is settable because 256 real losses is a load test rather than a fact; `CancellationVerdict`
      is public because xUnit needs a public test class and a public method cannot take an
      internal parameter. Both say so where they sit. "Inert" is the whole condition: widening
      that changes what production does is not reach, it is a design change wearing a test's

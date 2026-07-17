@@ -173,10 +173,25 @@ public sealed class DynamoDbEventStore : IEventStore
         }
     }
 
-    // Small and jittered. The jitter matters more than the curve: without it, writers that
-    // collided once collide again on the same schedule.
+    // Full-jitter exponential, the shape OutboxRetryPolicy carries, at durations an append path can
+    // afford: milliseconds where the outbox spends seconds. The spread matters more than the curve,
+    // and the spread is what this fixes. The previous policy was linear and saturated every writer
+    // into a 25ms to 39ms band by the thirteenth attempt, so twelve writers that collided once
+    // retried inside the same 14ms window and collided again; a policy whose whole job is to pull
+    // contenders apart was holding them together. Full jitter draws from the entire interval below
+    // the ceiling, which is what separates them.
+    //
+    // Base and ceiling are private constants rather than options. No host has a reason to tune an
+    // append's retry rhythm, and the cap above is the knob that carries the design decision.
+    private const double BackoffBaseMilliseconds = 2;
+    private const double BackoffCeilingMilliseconds = 50;
+
     private static TimeSpan BackoffFor(int attempt)
-        => TimeSpan.FromMilliseconds(Math.Min(2 * attempt, 25) + Random.Shared.Next(0, 15));
+    {
+        var ceiling = Math.Min(
+            Math.Pow(2, attempt - 1) * BackoffBaseMilliseconds, BackoffCeilingMilliseconds);
+        return TimeSpan.FromMilliseconds(ceiling * Random.Shared.NextDouble());
+    }
 
     private async Task<long> ReadCounterAsync(CancellationToken ct)
     {

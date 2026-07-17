@@ -71,8 +71,13 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
 
         // Every appender completing is itself an assertion: a writer that exhausted the default
         // attempt cap would surface here as DynamoDbPositionContentionException rather than as a
-        // count mismatch, which is the difference between "the engine is slow" and "the cap is
-        // wrong".
+        // count mismatch. At 256 that exception is a defect, because chance exhaustion is negligible
+        // by construction there and no amount of slow hardware reaches it.
+        //
+        // The sentence this replaces read the exception as evidence the cap was wrong, and at 64 it
+        // was right to: (11/12)^64 put a 300-append run's odds of starving somebody near two in
+        // three, so the probe was adjudicating its own margin rather than the engine. That premise
+        // was the defect, and it failed on CI before it was found here.
         await Task.WhenAll(work);
         sw.Stop();
 
@@ -250,13 +255,14 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
         //
         // The stand-in is the TDD_RULES §3 carve-out, and it holds only because every condition is
         // met: it is a derived stand-in of a client this repository does not own, it exists for an
-        // error path the live engine cannot deterministically produce (64 real losses is a load
+        // error path the live engine cannot deterministically produce (256 real losses is a load
         // test), it is confined to a reason-array shape the spike measured, it is named here, and
         // it replaces no live-engine fact. What DynamoDB does under contention is pinned by the
         // storm probe against LocalStack, not by this.
         //
-        // The counter index fails forever, so every attempt loses. Configured small: the shipped
-        // default is 64, and reaching it against a stand-in would be 64 pointless round trips.
+        // The counter index fails forever, so every attempt loses. Configured small, and the cap
+        // this fact pins is its own rather than the shipped one: reaching 256 against a stand-in
+        // would be 256 pointless round trips to learn what three already prove.
         var store = BuildStoreOverFake(
             new FakeCancellingDynamoDb(failedIndex: 0, itemCount: 4), maxAttempts: 3);
 
@@ -278,7 +284,7 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
             .ToList();
 
     private static DynamoDbEventStore BuildStoreOverFake(
-        FakeCancellingDynamoDb fake, int maxAttempts = 64)
+        FakeCancellingDynamoDb fake, int maxAttempts = 256)
     {
         var registry = new Infrastructure.Versioning.EventTypeRegistry();
         foreach (var t in ContractEventTypes.DomainEvents)

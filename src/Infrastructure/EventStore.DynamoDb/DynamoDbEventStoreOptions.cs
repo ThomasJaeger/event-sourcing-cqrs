@@ -29,12 +29,31 @@ public sealed class DynamoDbEventStoreOptions
     public string SecretAccessKey { get; set; } = string.Empty;
 
     // How many times an append re-reads the counter and retries before giving up with
-    // DynamoDbPositionContentionException. The default is generous because contention is this
-    // engine's normal case: a spike measured one writer retrying 42 times among 12 concurrent
-    // appenders, so a small cap would fail correct appends under ordinary load.
+    // DynamoDbPositionContentionException. Contention is this engine's normal case: every writer in
+    // the deployment races for one counter row, so losing is ordinary, and a cap a correct append
+    // can reach under ordinary load converts load into failure.
     //
-    // It is settable because the exhaustion path is otherwise unreachable in a test: driving 64
-    // real losses is slow and flaky, and a fact that pins the cap needs to reach it deterministically.
+    // The derivation. One writer wins each round, so among N contenders a given writer loses a round
+    // with probability (N-1)/N. At the spike's twelve writers, (11/12)^64 is 3.8e-3: about one
+    // append in 262, which over a 300-append run is a two-in-three chance of starving somebody. That
+    // is a coin flip, not a cap. (11/12)^256 is 2.1e-10, about one in 4.7 billion, negligible by
+    // construction rather than by luck. The model is the worst case, since backoff desynchronizes
+    // the writers and stragglers drop out, so real runs starve far less often than it predicts. The
+    // ratio is the point: 256 buys eighteen million times the margin, and the extra attempts are
+    // only ever spent by an append that was going to fail anyway.
+    //
+    // Attempts rather than milliseconds, because attempts are what the engine charges for and a
+    // wall-clock budget would mean a different cap on every machine. CI proved the hazard: 64
+    // survived this repository's 32-core box five runs out of five and starved on a 4-core runner,
+    // same code and same LocalStack. What changed was how long a writer waits between reading the
+    // counter and writing it, which is scheduling rather than the engine.
+    //
+    // The cap is backpressure and should stay loud. At 256 an exhaustion is no longer a writer that
+    // got unlucky; it is a deployment writing faster than one global position can be handed out, and
+    // ADR 0044's ordering guarantee is then the thing to revisit rather than this number.
+    //
+    // It is settable because the exhaustion path is otherwise unreachable in a test: driving 256
+    // real losses is a load test, and a fact that pins the cap needs to reach it deterministically.
     // A host has no reason to change it.
-    public int MaxAppendAttempts { get; set; } = 64;
+    public int MaxAppendAttempts { get; set; } = 256;
 }
