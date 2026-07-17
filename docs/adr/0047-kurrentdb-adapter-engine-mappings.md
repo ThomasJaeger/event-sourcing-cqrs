@@ -156,3 +156,27 @@ seam collapses at Phase 15's Infrastructure/Versioning, or earlier if Phase 14's
 fourth adapter forces it. An engine-native correlation index, or a dedicated
 correlation projection, would reopen the tracer's unavailable state and be its own
 ADR. A native scheduler in place of the reused delay queue reopens ADR 0046.
+
+## Amendment (July 2026)
+
+Equal positions within one append are an engine fact this record left implicit.
+KurrentDB stamps GlobalPosition from the append's commit position, so every event
+of one AppendAsync call shares one position; positions are distinct across appends
+and equal within them. Two shapes in the test suite rest on it and neither said so
+here. The shared contract suite's multi-event ordering fact pins only
+BeInAscendingOrder, which admits equals, and the weakness is deliberate rather than
+lax: distinctness would be a claim about the engine's batching rather than about the
+adapter. The position hook's own fact then appends one event per call, each on its
+own stream, so that what it pins is the hook rather than the batching. The
+concurrent-append load probe at the engine-semantics class asserts strict ascent and
+non-collision across eight separate appends, which is consistent: the tie is inside
+an append, never between two.
+
+DynamoDB diverges strongly, and the divergence is why this is worth recording. Its
+adapter draws positions from a counter it advances by the append's own event count,
+so one append of n events writes P+1 through P+n: distinct positions within a single
+append, where KurrentDB gives one. A suite fact that assumed distinctness would pass
+on DynamoDB and fail on KurrentDB, and one that assumed equality would do the
+reverse; BeInAscendingOrder is the honest contract both satisfy. ADR 0049 carries the
+DynamoDB mapping and the counter shape it follows from. The third engine's arrival is
+what surfaced the gap: a mapping stays implicit until a peer contradicts it.
