@@ -114,6 +114,20 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    // Registers the DynamoDB head-position reader for the AdminConsole's projection-lag read, the
+    // engine-specific counterpart to AddKurrentEventStoreHeadPosition and to the relational
+    // AddEventStoreHeadPosition. It reads the log partition's tail, so it needs only the client and
+    // the options the AddDynamoDbEventStore registration provides; a host composes both. TryAdd so it
+    // composes beside that registration without racing it.
+    public static IServiceCollection AddDynamoDbEventStoreHeadPosition(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IEventStoreHeadPosition, DynamoDbEventStoreHeadReader>();
+
+        return services;
+    }
+
     // Registers the DynamoDB Streams dispatch service, the native read-side mechanism the Workers
     // host composes in place of an outbox processor. The table's change feed wakes it; the log
     // partition is what it reads. There is no outbox table and no poll of the event table.

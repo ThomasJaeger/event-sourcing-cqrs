@@ -283,8 +283,11 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
             .Select(v => ContractEnvelopes.Build(stream, v, new ContractOrderNoted($"e{v}")))
             .ToList();
 
+    // maxAttempts is required rather than defaulted. Its default mirrored the shipped cap with nothing
+    // binding the two, and the only caller has always passed its own, so the default was dead the day
+    // it was written and stale the day the cap moved.
     private static DynamoDbEventStore BuildStoreOverFake(
-        FakeCancellingDynamoDb fake, int maxAttempts = 256)
+        FakeCancellingDynamoDb fake, int maxAttempts)
     {
         var registry = new Infrastructure.Versioning.EventTypeRegistry();
         foreach (var t in ContractEventTypes.DomainEvents)

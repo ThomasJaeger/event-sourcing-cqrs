@@ -1,5 +1,6 @@
 extern alias AdminConsoleHost;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using FluentAssertions;
@@ -33,6 +34,16 @@ public class AdminConsoleProviderCompositionTests
         => new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder => builder
             .UseSetting("EVENT_STORE_PROVIDER", provider)
             .UseSetting("EVENT_STORE_CONNECTION_STRING", eventStoreConnectionString)
+            .UseSetting("READ_MODEL_CONNECTION_STRING", ReadModelConnectionString));
+
+    // The DynamoDb arm is addressed by its own key rather than a DSN, so it needs its own factory. No
+    // EVENT_STORE_CONNECTION_STRING, and the absence is load-bearing: this host does not ask for a DSN
+    // on an engine that has none, and a factory that supplied one anyway would compose green whether or
+    // not that conditional existed.
+    private static WebApplicationFactory<AdminConsoleHost::Program> DynamoDbFactory()
+        => new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder => builder
+            .UseSetting("EVENT_STORE_PROVIDER", "DynamoDb")
+            .UseSetting("EVENT_STORE_DYNAMODB_SERVICE_URL", "http://localhost:4566")
             .UseSetting("READ_MODEL_CONNECTION_STRING", ReadModelConnectionString));
 
     [Fact]
@@ -79,29 +90,44 @@ public class AdminConsoleProviderCompositionTests
         boot.Should().Throw<InvalidOperationException>().WithMessage("*SqlServer*");
     }
 
-    // Green on write, and declared rather than dressed up. The console's switch already refuses every
-    // provider it has no arm for, and slice 3's parser scaffolding is what lets DynamoDb reach that
-    // refusal as a parsed value instead of dying in Read. Nothing here discovers anything: it pins
-    // that the console stays refused while the write side gains an engine, which is the property the
-    // provider-switch slice must not break.
+    // The console's DynamoDb arm, the twin of the Kurrent case above and composed for the same
+    // reasons. Green on write and declared: the arm's registrations are wiring, and resolving them
+    // proves only that the container hands back the types the arm named. The head reader is the part
+    // with behavior, and it is pinned against LocalStack in
+    // Infrastructure.Tests/DynamoDb/DynamoDbEventStoreHeadReaderTests. This fact would not survive
+    // the arm being deleted, which is what it is for.
     //
-    // The message prose is unpinned, and that is the fact's honest limit rather than laziness. The
-    // console refuses SqlServer through a dedicated arm that says why, and refuses DynamoDb through
-    // the default arm, which says only "Unhandled event store provider: DynamoDb." That prose is
-    // byte-identical to ValidateConnectionString's own default arm, so an assertion on it could not
-    // tell "the console has no DynamoDb read side" from "validation has no DynamoDb form." Pinning
-    // an accident of arm ordering would pin the wrong thing.
+    // This pair supersedes and replaces the refusal fact that stood here, which asserted the console
+    // threw on DynamoDb through its default arm. That fact was true of a console with no DynamoDb read
+    // side and is false of this one.
     //
-    // The AdminConsole slice supersedes and deletes this fact. When the console grows a DynamoDb read
-    // side it gains a dedicated arm like the other engines, and the fact that replaces this one
-    // asserts what that arm composes rather than that nothing does.
+    // No connection is opened here. The host composes DI only, and DynamoDbEventStore builds its
+    // client lazily from options, so a service URL pointing at nothing is enough to compose against.
     [Fact]
-    public void DynamoDb_refuses_to_compose_because_the_console_has_no_dynamodb_read_side()
+    public void DynamoDb_composes_the_dynamodb_read_side_ports()
     {
-        using var factory = Factory("DynamoDb", "http://localhost:4566");
+        using var factory = DynamoDbFactory();
+        var services = factory.Services;
 
-        var boot = () => _ = factory.Services;
+        services.GetRequiredService<IEventStore>().Should().BeOfType<DynamoDbEventStore>();
+        services.GetRequiredService<IEventStoreHeadPosition>()
+            .Should().BeOfType<DynamoDbEventStoreHeadReader>();
+        services.GetRequiredService<ICorrelationTraceReader>()
+            .Should().BeOfType<DynamoDbCorrelationTraceReader>();
+    }
 
-        boot.Should().Throw<InvalidOperationException>();
+    // The tracer's unavailable state on this engine, and the reason is the fact rather than the flag.
+    // An operator who opens /correlations on a DynamoDB deployment gets a notice, and the notice is
+    // only useful if it says why, which is why an empty reason throws at composition.
+    [Fact]
+    public void DynamoDb_composes_an_unavailable_tracer_naming_the_missing_index()
+    {
+        using var factory = DynamoDbFactory();
+
+        var availability =
+            factory.Services.GetRequiredService<AdminConsoleHost::EventSourcingCqrs.Hosts.AdminConsole.Tracer.CorrelationTracerAvailability>();
+
+        availability.IsAvailable.Should().BeFalse();
+        availability.UnavailableReason.Should().Contain("no cross-stream correlation-id index");
     }
 }

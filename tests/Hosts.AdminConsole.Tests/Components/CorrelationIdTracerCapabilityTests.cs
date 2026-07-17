@@ -32,6 +32,28 @@ public class CorrelationIdTracerCapabilityTests : BunitContext
         cut.FindAll("button").Should().BeEmpty();
     }
 
+    // The DynamoDb reason reaches the notice the same way KurrentDB's does. Green on write, and the
+    // redundancy is the honest report: the page gates on IsAvailable and never on which engine said
+    // so, so the mechanism above already covers this and only the reason string differs. What this
+    // adds is that the DynamoDb deployment's operator is told why rather than shown an empty notice,
+    // which the capability's own ThrowIfNullOrEmpty already refuses to allow. It is a
+    // characterization of the pair, not a discovery.
+    [Fact]
+    public void Under_the_dynamodb_unavailable_capability_the_page_names_the_missing_index()
+    {
+        Services.AddSingleton<ICorrelationTracer>(new ThrowingTracer());
+        Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
+            "The DynamoDB event store has no cross-stream correlation-id index; a correlation trace "
+            + "would scan the whole log, so it needs a dedicated read path, which is deferred."));
+
+        var cut = Render<CorrelationIdTracer>();
+
+        cut.Markup.Should().Contain("Correlation tracing is not available");
+        cut.Markup.Should().Contain("no cross-stream correlation-id index");
+        cut.FindAll("input").Should().BeEmpty();
+        cut.FindAll("button").Should().BeEmpty();
+    }
+
     private sealed class ThrowingTracer : ICorrelationTracer
     {
         public Task<CorrelationTraceView> TraceCorrelationAsync(

@@ -12,6 +12,7 @@ using EventSourcingCqrs.Hosts.AdminConsole.Browser;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Hosts.AdminConsole.Replay;
 using EventSourcingCqrs.Hosts.AdminConsole.Tracer;
+using EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
@@ -53,19 +54,30 @@ builder.Services.AddCurrentRolesReadModel(options => options.ConnectionString = 
 // The Projection Status Dashboard reads projection lag in process (ADR 0040): the head of the event
 // stream minus each projection's checkpoint. It composes the reader's three ports focused, with no
 // read-model or event-store over-provisioning. The checkpoint store comes from AddCurrentRolesReadModel
-// above; AddEventStoreHeadPosition adds only the head read and its connection, not the full event store;
-// AddProjectionRoster adds the name-only projection set. Throw-on-missing for the event-store
-// connection, the same guard the read-model connection uses.
-var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
-    ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
-
+// above; the arm below adds only the head read and its connection, not the full event store;
+// AddProjectionRoster adds the name-only projection set.
+//
 // Which engine holds the events is a configuration choice (PLAN.md:253). The console reads it through
 // the same twin the Api and Workers hosts use, retiring the earlier PostgreSQL-only inline guard, and
 // composes its three read-side event-store ports (head position, replay/browse IEventStore, correlation
 // trace) plus the correlation-tracer capability per arm. The read-model side below stays PostgreSQL
 // regardless of the provider, and every read-side collaborator below reaches the arm's ports through
-// their abstractions.
+// their abstractions. The provider is read first because it decides which key addresses the engine.
 var eventStoreProvider = EventStoreProviderSelection.Read(builder.Configuration["EVENT_STORE_PROVIDER"]);
+
+// DynamoDB is addressed by a service URL and a table, not a DSN, so this host does not ask for one on
+// that provider, the same flat surface the Api and Workers hosts read. The absence is a guard rather
+// than a courtesy: demand a key the engine never reads and an operator fills it with the DSN they are
+// migrating off, and a dropped provider key then lands on Read's Postgres default and composes the old
+// engine against a live database. Unset, that slip dies on the throw below. Throw-on-missing for the
+// engines that do have a DSN, the same guard the read-model connection uses.
+var dynamoDbServiceUrl = builder.Configuration["EVENT_STORE_DYNAMODB_SERVICE_URL"];
+var dynamoDbTableName = builder.Configuration["EVENT_STORE_DYNAMODB_TABLE_NAME"];
+var eventStoreConnectionString = eventStoreProvider is EventStoreProvider.DynamoDb
+    ? string.Empty
+    : builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
+
 switch (eventStoreProvider)
 {
     case EventStoreProvider.Postgres:
@@ -89,6 +101,30 @@ switch (eventStoreProvider)
         builder.Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
             "The KurrentDB event store has no cross-stream correlation-id index; a correlation trace "
             + "would need a dedicated user projection, which is deferred."));
+        break;
+    case EventStoreProvider.DynamoDb:
+        EventStoreProviderSelection.ValidateConnectionString(
+            eventStoreProvider, eventStoreConnectionString, dynamoDbServiceUrl, dynamoDbTableName);
+        builder.Services.AddDynamoDbEventStore(opts =>
+        {
+            // ValidateConnectionString proved the service URL above; this arm is unreachable otherwise.
+            opts.ServiceUrl = dynamoDbServiceUrl!;
+            if (!string.IsNullOrEmpty(dynamoDbTableName))
+            {
+                opts.TableName = dynamoDbTableName;
+            }
+        });
+        builder.Services.AddDynamoDbEventStoreHeadPosition();
+        // DynamoDB carries no cross-stream metadata index either. The table's only key is the stream
+        // id and the log partition's only order is the global position, so finding every event with
+        // one correlation id would scan the whole log. The Correlation-ID Tracer is unavailable for
+        // the reason it is unavailable on KurrentDB, and the shape is the same: the throwing reader
+        // registers so the port resolves and the tracer seam composes, and the capability keeps the
+        // page from ever reaching it.
+        builder.Services.AddSingleton<ICorrelationTraceReader, DynamoDbCorrelationTraceReader>();
+        builder.Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
+            "The DynamoDB event store has no cross-stream correlation-id index; a correlation trace "
+            + "would scan the whole log, so it needs a dedicated read path, which is deferred."));
         break;
     case EventStoreProvider.SqlServer:
         // The AdminConsole has no SQL Server read side: its three ports are hand-rolled PostgreSQL. It

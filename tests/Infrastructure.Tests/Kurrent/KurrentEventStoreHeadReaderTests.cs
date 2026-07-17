@@ -70,6 +70,48 @@ public class KurrentEventStoreHeadReaderTests : IClassFixture<KurrentFixture>
         }
     }
 
+    // The exclusion's own fact, and the twin of the DynamoDB reader's PM fact, which asserts the
+    // opposite because the two engines land on opposite sides of the same split. Green on write, and
+    // declared: the filter has excluded PM streams since the reader shipped, and ADR 0047 records the
+    // divergence. What was missing is a test. Both facts here appended only aggregate events, so
+    // nothing pinned the property that makes this head aggregate-only, and the reader and its ADR were
+    // its only evidence.
+    //
+    // The pairing is the point. On KurrentDB a PM append does not move the head, so the head lands in
+    // the projection checkpoints' own space. On DynamoDB it does, so a caught-up projection reports a
+    // small permanent lag on a PM-tailed log. Neither is a defect; they are the same question answered
+    // by what each engine charges for the filter.
+    [Fact]
+    public async Task A_process_manager_append_does_not_move_the_head()
+    {
+        var container = await _fixture.StartNodeAsync();
+        try
+        {
+            var (store, client) = Compose(container);
+            var aggregate = ContractEnvelopes.NewStreamId();
+            await store.AppendAsync(aggregate, 0,
+                [ContractEnvelopes.Build(aggregate, 1, new ContractOrderPlaced(Guid.NewGuid(), 1m))],
+                CancellationToken.None);
+            var reader = new KurrentEventStoreHeadReader(client);
+            var afterAggregate = await reader.GetHeadPositionAsync(CancellationToken.None);
+
+            var pmStream = ContractEnvelopes.NewProcessManagerStreamId();
+            await store.AppendProcessManagerEventsAsync(pmStream, 0,
+                [ContractEnvelopes.BuildProcessManager(pmStream, 1, new ContractStepRecorded(1))],
+                CancellationToken.None);
+
+            var afterPm = await reader.GetHeadPositionAsync(CancellationToken.None);
+
+            afterPm.Should().Be(afterAggregate,
+                "the aggregate-feed filter excludes PM streams, so the head stays in the projection "
+                + "checkpoints' space");
+        }
+        finally
+        {
+            await container.DisposeAsync();
+        }
+    }
+
     private static (IEventStore Store, KurrentDBClient Client) Compose(
         DotNet.Testcontainers.Containers.IContainer container)
     {

@@ -28,15 +28,26 @@ internal sealed class DynamoDbContractBackend : IEventStoreContractBackend
     private readonly string _tableName;
 
     private DynamoDbContractBackend(
-        ServiceProvider provider, IAmazonDynamoDB client, string tableName, IEventStore store)
+        ServiceProvider provider,
+        IAmazonDynamoDB client,
+        string tableName,
+        IEventStore store,
+        IEventStoreHeadPosition headReader)
     {
         _provider = provider;
         _client = client;
         _tableName = tableName;
         Store = store;
+        HeadReader = headReader;
     }
 
     public IEventStore Store { get; }
+
+    // The head reader rides this backend rather than a Compose helper of its own, because it needs
+    // the same provisioned table the store writes to and the shared contract suite ignores members
+    // it does not know about. KurrentEventStoreHeadReaderTests builds its own graph instead, for the
+    // reason its fixture hands out a container rather than a composed store.
+    public IEventStoreHeadPosition HeadReader { get; }
 
     public static async Task<DynamoDbContractBackend> CreateAsync(LocalStackFixture fixture)
     {
@@ -53,19 +64,21 @@ internal sealed class DynamoDbContractBackend : IEventStoreContractBackend
             opts.AccessKeyId = "test";
             opts.SecretAccessKey = "test";
         });
+        services.AddDynamoDbEventStoreHeadPosition();
 
         var provider = services.BuildServiceProvider();
         try
         {
             var store = provider.GetRequiredService<IEventStore>();
             var client = provider.GetRequiredService<IAmazonDynamoDB>();
+            var headReader = provider.GetRequiredService<IEventStoreHeadPosition>();
 
             // The schema is the test's to provision, the way the relational fixtures migrate before
             // handing a database over. The Workers host adopts the same provisioner in a later slice.
             await provider.GetRequiredService<DynamoDbTableProvisioner>()
                 .EnsureTableAsync(CancellationToken.None);
 
-            return new DynamoDbContractBackend(provider, client, tableName, store);
+            return new DynamoDbContractBackend(provider, client, tableName, store, headReader);
         }
         catch
         {
