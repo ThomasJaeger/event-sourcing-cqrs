@@ -4,6 +4,7 @@ using EventSourcingCqrs.Domain.Access;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
@@ -26,10 +27,20 @@ namespace EventSourcingCqrs.Hosts.Workers;
 // migration-free.
 public static class WorkersHostFactory
 {
+    // eventStoreConnectionString carries the engine's address whatever shape that engine takes: a
+    // DSN on the three that have one, a service URL on DynamoDB, which has none. The name predates
+    // the fourth engine and a test pins it by keyword.
+    //
+    // dynamoDbTableName is the one part of a DynamoDB address that channel cannot carry. Program.cs
+    // reads the same key the Api host reads and hands it here, because the store, the provisioner
+    // and the stream dispatch service all draw their table from this host's one options object: a
+    // Workers host that ignored the key would provision and drain the default table while the Api
+    // wrote to another, and both halves would look healthy while every projection froze.
     public static IHost Build(
         EventStoreProvider eventStoreProvider,
         string eventStoreConnectionString,
-        string readModelConnectionString)
+        string readModelConnectionString,
+        string? dynamoDbTableName = null)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
@@ -58,6 +69,20 @@ public static class WorkersHostFactory
                 .AddKurrentEventStore(opts => opts.ConnectionString = eventStoreConnectionString)
                 .AddPostgresIdempotencyStore(readModelConnectionString)
                 .AddPostgresDelayQueue(readModelConnectionString),
+            // DynamoDB holds the events; the idempotency store and delay queue land on the
+            // read-model PostgreSQL database, where their tables live, exactly as the KurrentDB arm
+            // above composes them and for the same reason (ADR 0046).
+            EventStoreProvider.DynamoDb => builder.Services
+                .AddDynamoDbEventStore(opts =>
+                {
+                    opts.ServiceUrl = eventStoreConnectionString;
+                    if (!string.IsNullOrEmpty(dynamoDbTableName))
+                    {
+                        opts.TableName = dynamoDbTableName;
+                    }
+                })
+                .AddPostgresIdempotencyStore(readModelConnectionString)
+                .AddPostgresDelayQueue(readModelConnectionString),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };
@@ -72,6 +97,11 @@ public static class WorkersHostFactory
             // KurrentDB has no outbox; its catch-up subscription is the read-side drain, dispatching
             // aggregate events into the same in-process dispatcher the outbox processors feed.
             EventStoreProvider.Kurrent => builder.Services.AddKurrentSubscriptionService(),
+            // DynamoDB has no outbox either; its change feed is the read-side drain, dispatching
+            // aggregate events into the same in-process dispatcher the outbox processors feed. It
+            // reads its endpoint and table from the options the arm above set, so nothing inside
+            // this host can disagree about which table it drains.
+            EventStoreProvider.DynamoDb => builder.Services.AddDynamoDbStreamDispatchService(),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };
@@ -85,6 +115,10 @@ public static class WorkersHostFactory
             // The delay-queue processor drains PM timeouts off the read-model database on KurrentDB
             // too, through the connection-string overload since there is no relational event store here.
             EventStoreProvider.Kurrent => builder.Services.AddPostgresDelayQueueProcessor(
+                readModelConnectionString),
+            // The same on DynamoDB, through the same connection-string overload: there is no
+            // relational event store here either.
+            EventStoreProvider.DynamoDb => builder.Services.AddPostgresDelayQueueProcessor(
                 readModelConnectionString),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),

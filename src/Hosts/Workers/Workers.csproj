@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\ProcessManagers\ProcessManagers.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\EventStore.DynamoDb\EventStore.DynamoDb.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.SqlServer\EventStore.SqlServer.csproj" />

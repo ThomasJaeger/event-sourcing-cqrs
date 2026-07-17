@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Hosts\Workers\Workers.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\EventStore.DynamoDb\EventStore.DynamoDb.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\src\ProcessManagers\ProcessManagers.csproj" />

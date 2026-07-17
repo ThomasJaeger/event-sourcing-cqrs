@@ -12,6 +12,7 @@ using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Hosts.Api;
 using EventSourcingCqrs.Hosts.Api.Authentication;
 using EventSourcingCqrs.Hosts.Api.Endpoints;
+using EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 using EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
@@ -20,23 +21,32 @@ using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Connection strings come from configuration: the same EVENT_STORE_CONNECTION_STRING
-// and READ_MODEL_CONNECTION_STRING keys the Workers host reads as environment
-// variables, here through IConfiguration so a WebApplicationFactory test can
-// override them with a Testcontainer connection (Commit 12). The Api host does not
-// run migrations; the Workers host owns migration orchestration, so two hosts
-// never race to migrate the same database.
-var eventStoreConnectionString = builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
-    ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
-var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STRING"]
-    ?? throw new InvalidOperationException("READ_MODEL_CONNECTION_STRING is not set.");
-
+// Connection strings come from configuration: the same keys the Workers host reads as environment
+// variables, here through IConfiguration so a WebApplicationFactory test can override them with a
+// Testcontainer connection (Commit 12). The Api host does not run migrations; the Workers host owns
+// migration orchestration, so two hosts never race to migrate the same database.
+//
 // Which engine holds the events is a configuration choice, not a code change (PLAN.md:253). The
-// provider is read once, here, and governs the single event-store registration below. The read-model
-// database stays PostgreSQL under its own key regardless of the provider.
+// provider is read once, here, and it is read first because it decides which key addresses the
+// engine. The read-model database stays PostgreSQL under its own key regardless of the provider.
 var eventStoreProvider = EventStoreProviderSelection.Read(
     builder.Configuration["EVENT_STORE_PROVIDER"]);
-EventStoreProviderSelection.ValidateConnectionString(eventStoreProvider, eventStoreConnectionString);
+
+// DynamoDB is addressed by a service URL and a table, not a DSN, so this host does not ask for one
+// on that provider. The absence is a guard, not a courtesy. Demand a key the engine never reads and
+// an operator fills it with the DSN they are migrating off; lose EVENT_STORE_PROVIDER to a
+// templating slip after that, and Read's Postgres default composes the old engine against a live
+// database and writes events there in silence. Unset, the same slip dies on the throw below.
+var dynamoDbServiceUrl = builder.Configuration["EVENT_STORE_DYNAMODB_SERVICE_URL"];
+var dynamoDbTableName = builder.Configuration["EVENT_STORE_DYNAMODB_TABLE_NAME"];
+var eventStoreConnectionString = eventStoreProvider is EventStoreProvider.DynamoDb
+    ? string.Empty
+    : builder.Configuration["EVENT_STORE_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("EVENT_STORE_CONNECTION_STRING is not set.");
+var readModelConnectionString = builder.Configuration["READ_MODEL_CONNECTION_STRING"]
+    ?? throw new InvalidOperationException("READ_MODEL_CONNECTION_STRING is not set.");
+EventStoreProviderSelection.ValidateConnectionString(
+    eventStoreProvider, eventStoreConnectionString, dynamoDbServiceUrl, dynamoDbTableName);
 
 // Aggregate event types so the event store serializes them on append and resolves
 // them when the command handlers this host dispatches rehydrate aggregates. The
@@ -73,17 +83,32 @@ _ = eventStoreProvider switch
         opts.ConnectionString = eventStoreConnectionString),
     EventStoreProvider.Kurrent => builder.Services.AddKurrentEventStore(opts =>
         opts.ConnectionString = eventStoreConnectionString),
+    // DynamoDB sets the two settings that address it instead of a connection string it does not
+    // have. Credentials stay with the SDK's own chain: a deployed host resolves them from its role,
+    // and no key here can be mistaken for a place to put a secret. An unset table name means the
+    // adapter's default, which the Workers host that provisions and drains the table lands on from
+    // the same key, so the two cannot name different tables.
+    EventStoreProvider.DynamoDb => builder.Services.AddDynamoDbEventStore(opts =>
+    {
+        // ValidateConnectionString proved this above; this arm is unreachable otherwise.
+        opts.ServiceUrl = dynamoDbServiceUrl!;
+        if (!string.IsNullOrEmpty(dynamoDbTableName))
+        {
+            opts.TableName = dynamoDbTableName;
+        }
+    }),
     _ => throw new InvalidOperationException(
         $"Unhandled event store provider: {eventStoreProvider}."),
 };
 
-// KurrentDB holds only events; the Kurrent adapter bundles no relational companion ports. The
-// command pipeline still needs the idempotency store, so it composes on the read-model PostgreSQL
-// database, where the command-idempotency table lives (migrations 0007 and 0019). The delay queue
-// stays absent: no Api registration demands it. Its sole consumer is the OrderFulfillment
-// process-manager handler, which lives in the ProcessManagers assembly AddApplication does not scan,
-// so this host never registers it.
-if (eventStoreProvider is EventStoreProvider.Kurrent)
+// Neither KurrentDB nor DynamoDB holds anything but events, and neither adapter bundles a relational
+// companion port. The command pipeline still needs the idempotency store, so it composes on the
+// read-model PostgreSQL database, where the command-idempotency table lives (migrations 0007 and
+// 0019). That is ADR 0046's non-relational posture, and DynamoDB inherits it for the reason
+// KurrentDB has it. The delay queue stays absent: no Api registration demands it. Its sole consumer
+// is the OrderFulfillment process-manager handler, which lives in the ProcessManagers assembly
+// AddApplication does not scan, so this host never registers it.
+if (eventStoreProvider is EventStoreProvider.Kurrent or EventStoreProvider.DynamoDb)
 {
     builder.Services.AddPostgresIdempotencyStore(readModelConnectionString);
 }

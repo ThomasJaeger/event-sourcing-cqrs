@@ -78,4 +78,30 @@ public class AdminConsoleProviderCompositionTests
 
         boot.Should().Throw<InvalidOperationException>().WithMessage("*SqlServer*");
     }
+
+    // Green on write, and declared rather than dressed up. The console's switch already refuses every
+    // provider it has no arm for, and slice 3's parser scaffolding is what lets DynamoDb reach that
+    // refusal as a parsed value instead of dying in Read. Nothing here discovers anything: it pins
+    // that the console stays refused while the write side gains an engine, which is the property the
+    // provider-switch slice must not break.
+    //
+    // The message prose is unpinned, and that is the fact's honest limit rather than laziness. The
+    // console refuses SqlServer through a dedicated arm that says why, and refuses DynamoDb through
+    // the default arm, which says only "Unhandled event store provider: DynamoDb." That prose is
+    // byte-identical to ValidateConnectionString's own default arm, so an assertion on it could not
+    // tell "the console has no DynamoDb read side" from "validation has no DynamoDb form." Pinning
+    // an accident of arm ordering would pin the wrong thing.
+    //
+    // The AdminConsole slice supersedes and deletes this fact. When the console grows a DynamoDb read
+    // side it gains a dedicated arm like the other engines, and the fact that replaces this one
+    // asserts what that arm composes rather than that nothing does.
+    [Fact]
+    public void DynamoDb_refuses_to_compose_because_the_console_has_no_dynamodb_read_side()
+    {
+        using var factory = Factory("DynamoDb", "http://localhost:4566");
+
+        var boot = () => _ = factory.Services;
+
+        boot.Should().Throw<InvalidOperationException>();
+    }
 }
