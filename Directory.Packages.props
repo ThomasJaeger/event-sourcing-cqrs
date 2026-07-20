@@ -24,5 +24,9 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.10.0" />
     <PackageVersion Include="bunit" Version="2.7.2" />
+    <!-- bUnit pulls AngleSharp 1.4.0 transitively, which carries CVE-2026-54570 (NU1902).
+         Pin the patched 1.5.0 here and reference it directly in the two bUnit test projects;
+         drop the pin and those references once bUnit's transitive AngleSharp reaches 1.5.0. -->
+    <PackageVersion Include="AngleSharp" Version="1.5.0" />
   </ItemGroup>
 </Project>

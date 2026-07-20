@@ -11,6 +11,8 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="bunit" />
+    <!-- Direct reference so AngleSharp resolves at Directory.Packages.props's pinned 1.5.0, ahead of bUnit's transitive 1.4.0 (CVE-2026-54570). -->
+    <PackageReference Include="AngleSharp" />
   </ItemGroup>
 
   <ItemGroup>
