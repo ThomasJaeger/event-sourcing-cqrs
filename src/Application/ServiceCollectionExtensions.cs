@@ -2,8 +2,10 @@ using System.Reflection;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Sales;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using EventSourcingCqrs.Application.Authorization;
 
 namespace EventSourcingCqrs.Application;
@@ -78,6 +80,22 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(AuthorizationQueryBehavior<,>));
 
         services.AddScoped(typeof(IEventStoreRepository<>), typeof(EventStoreRepository<>));
+
+        // Order is the one aggregate that snapshots in v1 (Chapter 12), so its repository is a
+        // closed-generic override registered after the open generic, which last-wins for the closed
+        // service type. The snapshotting variant needs an ISnapshotStore: every provider arm registers
+        // one, so this resolves with no capability check, and a host that composed the override without
+        // an arm supplying the store fails loudly at resolution rather than silently skipping snapshots.
+        services.AddScoped<IEventStoreRepository<Order>>(sp =>
+            new SnapshottingEventStoreRepository<Order, OrderSnapshot>(
+                sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<ICommandContextAccessor>(),
+                sp.GetRequiredService<ICurrentTenantAccessor>(),
+                sp.GetRequiredService<ICurrentEventSchemaVersions>(),
+                sp.GetRequiredService<ISnapshotStore>(),
+                OrderSnapshot.SnapshotSchemaVersion,
+                sp.GetRequiredService<ILogger<SnapshottingEventStoreRepository<Order, OrderSnapshot>>>(),
+                snapshotInterval: 50));
         services.AddScoped(typeof(IProcessManagerRepository<>), typeof(ProcessManagerRepository<>));
 
         RegisterHandlers(services);

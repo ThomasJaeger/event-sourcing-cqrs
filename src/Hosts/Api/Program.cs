@@ -115,6 +115,10 @@ _ = eventStoreProvider switch
 if (eventStoreProvider is EventStoreProvider.Kurrent or EventStoreProvider.DynamoDb)
 {
     builder.Services.AddPostgresIdempotencyStore(readModelConnectionString);
+    // The snapshotting Order repository this host resolves needs an ISnapshotStore. KurrentDB and
+    // DynamoDB hold only events, so it composes on the read-model PostgreSQL database beside the
+    // idempotency store, where the snapshots table lives (migration 0023).
+    builder.Services.AddPostgresSnapshotStore(readModelConnectionString);
 }
 builder.Services.AddApplication();
 builder.Services.AddReadModels(opts =>

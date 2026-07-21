@@ -72,7 +72,8 @@ public static class WorkersHostFactory
             EventStoreProvider.Kurrent => builder.Services
                 .AddKurrentEventStore(opts => opts.ConnectionString = eventStoreConnectionString)
                 .AddPostgresIdempotencyStore(readModelConnectionString)
-                .AddPostgresDelayQueue(readModelConnectionString),
+                .AddPostgresDelayQueue(readModelConnectionString)
+                .AddPostgresSnapshotStore(readModelConnectionString),
             // DynamoDB holds the events; the idempotency store and delay queue land on the
             // read-model PostgreSQL database, where their tables live, exactly as the KurrentDB arm
             // above composes them and for the same reason (ADR 0046).
@@ -86,7 +87,8 @@ public static class WorkersHostFactory
                     }
                 })
                 .AddPostgresIdempotencyStore(readModelConnectionString)
-                .AddPostgresDelayQueue(readModelConnectionString),
+                .AddPostgresDelayQueue(readModelConnectionString)
+                .AddPostgresSnapshotStore(readModelConnectionString),
             _ => throw new InvalidOperationException(
                 $"Unhandled event store provider: {eventStoreProvider}."),
         };

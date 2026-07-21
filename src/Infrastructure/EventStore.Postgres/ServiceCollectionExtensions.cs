@@ -113,6 +113,11 @@ public static class ServiceCollectionExtensions
         // IdempotencyBehavior that reads it is registered in AddApplication.
         services.AddSingleton<IIdempotencyStore, PostgresIdempotencyStore>();
 
+        // Snapshot store (Chapter 12). Same placement and lifetime as the idempotency
+        // store: it consumes the same INpgsqlConnectionFactory and its table lives in
+        // the event_store schema. The snapshotting Order repository resolves it.
+        services.AddSingleton<ISnapshotStore, PostgresSnapshotStore>();
+
         // Delay queue (ADR 0017). ScheduleAsync and CancelAsync ship here; the
         // DelayQueueProcessor that drains due rows is a Workers-host background
         // service registered in commit 17.
@@ -397,9 +402,39 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers the PostgreSQL snapshot store against an arbitrary connection string, for a host that
+    /// does not call AddPostgresEventStore. A KurrentDB or DynamoDB host composes it on its read-model
+    /// PostgreSQL database, where the snapshots table lives (migration 0023). Every dependency registers
+    /// with TryAdd, and the JSON serializer options are captured from this adapter's own shape rather
+    /// than resolved as a bare container JsonSerializerOptions: a non-relational host registers its own
+    /// bare options, and a snapshot must round-trip through the Postgres schema's shape, not that one.
+    /// </summary>
+    public static IServiceCollection AddPostgresSnapshotStore(
+        this IServiceCollection services, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrEmpty(connectionString);
+
+        // Same container-owned connection seam as AddPostgresIdempotencyStore, all-TryAdd.
+        services.TryAddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(connectionString));
+        services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
+
+        // The serializer options are captured from this adapter's shape and handed straight to the
+        // store, never resolved from the container, the same capture-the-shape discipline
+        // AddPostgresDelayQueue follows: a non-relational host has its own bare JsonSerializerOptions,
+        // and a snapshot must serialize through the Postgres schema's shape, not that one.
+        var jsonOptions = CreateJsonOptions();
+        services.TryAddSingleton<ISnapshotStore>(sp => new PostgresSnapshotStore(
+            sp.GetRequiredService<INpgsqlConnectionFactory>(),
+            jsonOptions));
+
+        return services;
+    }
+
     // The serialization seam is EventStoreJsonOptions.Create() in Infrastructure/Versioning, shared
-    // with the other adapters (ADR 0048). This adapter's three registration paths route through this
-    // one call, and the shape and the reasoning behind it live with the factory.
+    // with the other adapters (ADR 0048). This adapter's registration paths route through this one
+    // call, and the shape and the reasoning behind it live with the factory.
     private static JsonSerializerOptions CreateJsonOptions()
         => EventStoreJsonOptions.Create();
 }

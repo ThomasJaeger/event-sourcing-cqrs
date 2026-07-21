@@ -106,6 +106,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIdempotencyStore, SqlServerIdempotencyStore>();
         services.AddSingleton<IDelayQueue, SqlServerDelayQueue>();
 
+        // The snapshot store companion (Chapter 12), on the same event-store database and the same
+        // lifetime, native to this engine per ADR 0004. The snapshotting Order repository resolves it.
+        services.AddSingleton<ISnapshotStore, SqlServerSnapshotStore>();
+
         return services;
     }
 
