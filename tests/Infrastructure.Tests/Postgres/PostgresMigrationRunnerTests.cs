@@ -52,6 +52,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             "pk_command_idempotency",
             "pk_delayed_commands",
             "pk_delayed_commands_quarantine",
+            "pk_snapshots",
         });
 
         // Standalone (non-constraint) indexes.
@@ -75,7 +76,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(22);
+        rows.Should().HaveCount(23);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -142,6 +143,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[21].Version.Should().Be(22);
         rows[21].Name.Should().Be("add_outbox_event_version");
         rows[21].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[22].Version.Should().Be(23);
+        rows[22].Name.Should().Be("add_snapshots");
+        rows[22].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -165,7 +169,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0020 tenant_scoped_delayed_commands.");
         log.Should().Contain("Applying 0021 create_order_throughput.");
         log.Should().Contain("Applying 0022 add_outbox_event_version.");
-        log.Should().Contain("Applied 22 migration(s).");
+        log.Should().Contain("Applying 0023 add_snapshots.");
+        log.Should().Contain("Applied 23 migration(s).");
     }
 
     [Fact]
@@ -185,7 +190,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(22);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(23);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -241,11 +246,11 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(22);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(23);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
-        // pending batch (0001 through 0022); the other sees nothing pending.
+        // pending batch (0001 through 0023); the other sees nothing pending.
         // That signature is what the advisory lock produces and nothing else does.
         var combined = logA.Concat(logB).ToList();
         combined.Count(m => m == "Applying 0001 initial_event_store.").Should().Be(1);
@@ -297,7 +302,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 22 migration(s) pending.");
+        log.Should().Contain("Dry run: 23 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -320,6 +325,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0020 tenant_scoped_delayed_commands"));
         log.Should().Contain(m => m.EndsWith("0021 create_order_throughput"));
         log.Should().Contain(m => m.EndsWith("0022 add_outbox_event_version"));
+        log.Should().Contain(m => m.EndsWith("0023 add_snapshots"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();
