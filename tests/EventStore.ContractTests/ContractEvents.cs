@@ -1,5 +1,4 @@
 using EventSourcingCqrs.Domain.Abstractions;
-using EventSourcingCqrs.Infrastructure.Versioning;
 
 namespace EventSourcingCqrs.EventStore.ContractTests;
 

@@ -1,2 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- The upcaster contract (Upcaster<TFrom, TTo>, IEventUpcaster) lives here so a domain lineage's
+       upcaster references only domain types. EventUpcasterPipeline in the Versioning project binds a
+       delegate to Upcaster's internal UpcastUntyped, so Versioning is a friend assembly. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Versioning" />
+  </ItemGroup>
 </Project>
