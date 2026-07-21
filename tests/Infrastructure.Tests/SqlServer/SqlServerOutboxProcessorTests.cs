@@ -302,7 +302,8 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
             new SqlServerConnectionFactory(connStr),
             NewRegistry(),
             new ProcessManagerEventTypeRegistry(),
-            SqlServerContractBackend.CreateJsonOptions());
+            SqlServerContractBackend.CreateJsonOptions(),
+            new EventUpcasterPipeline(NewRegistry(), []));
 
     private static EventTypeRegistry NewRegistry()
     {
@@ -331,7 +332,8 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
                 BatchSize = batchSize,
                 Jitter = () => 1.0,
             }),
-            NullLogger<SqlServerOutboxProcessor>.Instance);
+            NullLogger<SqlServerOutboxProcessor>.Instance,
+            new EventUpcasterPipeline(NewRegistry(), []));
 
     private static async Task AppendOneAsync(string connStr)
     {

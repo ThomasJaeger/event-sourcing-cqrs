@@ -54,24 +54,28 @@ public sealed class DynamoDbEventStore : IEventStore
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly DynamoDbEventStoreOptions _options;
+    private readonly EventUpcasterPipeline _pipeline;
 
     public DynamoDbEventStore(
         IAmazonDynamoDB client,
         EventTypeRegistry registry,
         ProcessManagerEventTypeRegistry pmRegistry,
         JsonSerializerOptions jsonOptions,
-        IOptions<DynamoDbEventStoreOptions> options)
+        IOptions<DynamoDbEventStoreOptions> options,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(pmRegistry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _client = client;
         _registry = registry;
         _pmRegistry = pmRegistry;
         _jsonOptions = jsonOptions;
         _options = options.Value;
+        _pipeline = pipeline;
     }
 
     public Task AppendAsync(
@@ -468,10 +472,12 @@ public sealed class DynamoDbEventStore : IEventStore
     {
         var streamId = StreamId.Parse(row[DynamoDbSchema.StreamIdAttribute].S);
         var typeName = row[DynamoDbSchema.TypeNameAttribute].S;
+        var storedVersion = int.Parse(
+            row[DynamoDbSchema.EventVersionAttribute].N, CultureInfo.InvariantCulture);
         Type clrType;
         try
         {
-            clrType = _registry.TypeFor(typeName);
+            clrType = _pipeline.ResolveType(typeName, storedVersion);
         }
         catch (UnknownEventTypeException ex)
         {
@@ -480,13 +486,14 @@ public sealed class DynamoDbEventStore : IEventStore
 
         var payload = (IDomainEvent)JsonSerializer.Deserialize(
             row[DynamoDbSchema.PayloadAttribute].S, clrType, _jsonOptions)!;
+        payload = _pipeline.Upcast(typeName, storedVersion, payload);
 
         return new EventEnvelope(
             StreamId: streamId,
             StreamVersion: int.Parse(row[DynamoDbSchema.VersionAttribute].N, CultureInfo.InvariantCulture),
             EventId: Guid.Parse(row[DynamoDbSchema.EventIdAttribute].S),
             EventType: row[DynamoDbSchema.EventTypeAttribute].S,
-            EventVersion: int.Parse(row[DynamoDbSchema.EventVersionAttribute].N, CultureInfo.InvariantCulture),
+            EventVersion: _pipeline.CurrentVersionFor(typeName),
             Payload: payload,
             Metadata: ReadMetadata(row),
             OccurredUtc: ReadOccurredUtc(row),

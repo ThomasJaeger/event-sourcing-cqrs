@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
@@ -40,7 +41,7 @@ public class PostgresEventStoreHeadReader_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamA = NewStreamId();
         var streamB = NewStreamId();
 

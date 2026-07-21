@@ -65,7 +65,8 @@ public class SqlServerOutboxEncodingTests : IClassFixture<SqlServerFixture>
             new SqlServerConnectionFactory(connStr),
             registry,
             new ProcessManagerEventTypeRegistry(),
-            relaxed);
+            relaxed,
+            new EventUpcasterPipeline(registry, []));
 
         var stream = ContractEnvelopes.NewStreamId();
         var payload = new ContractOrderNoted(NonAscii);

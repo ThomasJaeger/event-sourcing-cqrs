@@ -33,7 +33,7 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,
@@ -52,7 +52,7 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await InsertLegacyEventAsync(connStr, streamId, tenantIdJson: null);
 
@@ -68,7 +68,7 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await InsertLegacyEventAsync(connStr, streamId, tenantIdJson: "null");
 
@@ -87,7 +87,8 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
             new NpgsqlConnectionFactory(dataSource),
             CreateRegistry(),
             new ProcessManagerEventTypeRegistry().Register<TenantPmEvent>(),
-            CreateJsonOptions());
+            CreateJsonOptions(),
+            new EventUpcasterPipeline(CreateRegistry(), []));
         var stream = StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, OtherTenant, Guid.NewGuid());
         var eventId = Guid.NewGuid();
         var envelope = new ProcessManagerEventEnvelope(
@@ -122,7 +123,7 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await store.AppendAsync(
             streamId, 0,

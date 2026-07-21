@@ -136,7 +136,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(

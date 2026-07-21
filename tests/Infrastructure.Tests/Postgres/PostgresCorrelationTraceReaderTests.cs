@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
@@ -232,7 +233,7 @@ public class PostgresCorrelationTraceReaderTests : IClassFixture<PostgresFixture
     }
 
     private static PostgresEventStore CreateStore(NpgsqlDataSource dataSource)
-        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
 
     private static PostgresCorrelationTraceReader CreateReader(NpgsqlDataSource dataSource)
         => new(new NpgsqlConnectionFactory(dataSource), CreateJsonOptions());

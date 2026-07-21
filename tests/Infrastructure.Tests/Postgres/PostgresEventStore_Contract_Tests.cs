@@ -105,7 +105,8 @@ internal sealed class PostgresContractBackend : IHeldWriterContractBackend
                 new NpgsqlConnectionFactory(dataSource),
                 registry,
                 pmRegistry,
-                CreateJsonOptions());
+                CreateJsonOptions(),
+                new EventUpcasterPipeline(registry, []));
 
             return new PostgresContractBackend(connectionString, dataSource, store);
         }

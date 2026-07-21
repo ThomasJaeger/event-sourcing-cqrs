@@ -24,7 +24,8 @@ public class PostgresEventStore_ProcessManager_Tests : IClassFixture<PostgresFix
             new NpgsqlConnectionFactory(dataSource),
             new EventTypeRegistry(),
             new ProcessManagerEventTypeRegistry().Register<PmTestEvent>(),
-            CreateJsonOptions());
+            CreateJsonOptions(),
+            new EventUpcasterPipeline(new EventTypeRegistry(), []));
 
     private static StreamId PmStream()
         => StreamId.ForProcessManager(StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());

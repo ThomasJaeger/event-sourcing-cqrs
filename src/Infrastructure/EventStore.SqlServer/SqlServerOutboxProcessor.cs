@@ -39,6 +39,7 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
     private readonly ISqlServerConnectionFactory _factory;
     private readonly IMessageDispatcher _dispatcher;
     private readonly EventTypeRegistry _registry;
+    private readonly EventUpcasterPipeline _pipeline;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly SqlServerOutboxRetryPolicy _retryPolicy;
     private readonly SqlServerOutboxProcessorOptions _options;
@@ -51,7 +52,8 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         JsonSerializerOptions jsonOptions,
         SqlServerOutboxRetryPolicy retryPolicy,
         IOptions<SqlServerOutboxProcessorOptions> options,
-        ILogger<SqlServerOutboxProcessor> logger)
+        ILogger<SqlServerOutboxProcessor> logger,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -60,6 +62,7 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         ArgumentNullException.ThrowIfNull(retryPolicy);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _factory = factory;
         _dispatcher = dispatcher;
         _registry = registry;
@@ -67,6 +70,7 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         _retryPolicy = retryPolicy;
         _options = options.Value;
         _logger = logger;
+        _pipeline = pipeline;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -206,15 +210,16 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
 
     private OutboxMessage HydrateMessage(PendingOutboxRow row)
     {
-        var clrType = _registry.TypeFor(row.EventType);
+        var clrType = _pipeline.ResolveType(row.EventType, row.EventVersion);
         var payload = (IDomainEvent)JsonSerializer.Deserialize(
             row.PayloadJson, clrType, _jsonOptions)!;
+        payload = _pipeline.Upcast(row.EventType, row.EventVersion, payload);
         var metadata = EventMetadataReader.Read(row.MetadataJson, _jsonOptions);
         return new OutboxMessage(
             OutboxId: row.OutboxId,
             EventId: row.EventId,
             EventType: row.EventType,
-            EventVersion: row.EventVersion,
+            EventVersion: _pipeline.CurrentVersionFor(row.EventType),
             Event: payload,
             Metadata: metadata,
             GlobalPosition: row.GlobalPosition,

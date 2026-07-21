@@ -57,6 +57,13 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
+        // The upcaster pipeline reads the same registry the store reads, plus the IEventUpcaster
+        // links a host contributes. Empty by default: with no upcasters registered, every event is
+        // already at its current version, so the read path is unchanged.
+        services.TryAddSingleton(sp => new EventUpcasterPipeline(
+            sp.GetRequiredService<EventTypeRegistry>(),
+            sp.GetServices<IEventUpcaster>()));
+
         // PM event types resolve through a separate registry (ADR 0013).
         services.TryAddSingleton<ProcessManagerEventTypeRegistry>(sp =>
         {

@@ -37,21 +37,25 @@ public sealed class SqlServerEventStore : IEventStore
     private readonly EventTypeRegistry _registry;
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly EventUpcasterPipeline _pipeline;
 
     public SqlServerEventStore(
         ISqlServerConnectionFactory factory,
         EventTypeRegistry registry,
         ProcessManagerEventTypeRegistry pmRegistry,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(pmRegistry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _factory = factory;
         _registry = registry;
         _pmRegistry = pmRegistry;
         _jsonOptions = jsonOptions;
+        _pipeline = pipeline;
     }
 
     public async Task AppendAsync(
@@ -172,8 +176,8 @@ public sealed class SqlServerEventStore : IEventStore
                 StreamVersion: streamVersion,
                 EventId: eventId,
                 EventType: eventType,
-                EventVersion: eventVersion,
-                Payload: DeserializeDomainEvent(eventType, payloadJson, streamId),
+                EventVersion: _pipeline.CurrentVersionFor(eventType),
+                Payload: DeserializeDomainEvent(eventType, eventVersion, payloadJson, streamId),
                 Metadata: EventMetadataReader.Read(metadataJson, _jsonOptions),
                 OccurredUtc: occurredUtc,
                 GlobalPosition: globalPosition));
@@ -377,25 +381,27 @@ public sealed class SqlServerEventStore : IEventStore
             StreamVersion: streamVersion,
             EventId: eventId,
             EventType: eventType,
-            EventVersion: eventVersion,
-            Payload: DeserializeDomainEvent(eventType, payloadJson, streamId),
+            EventVersion: _pipeline.CurrentVersionFor(eventType),
+            Payload: DeserializeDomainEvent(eventType, eventVersion, payloadJson, streamId),
             Metadata: EventMetadataReader.Read(metadataJson, _jsonOptions),
             OccurredUtc: occurredUtc,
             GlobalPosition: globalPosition);
     }
 
-    private IDomainEvent DeserializeDomainEvent(string eventType, string json, StreamId streamId)
+    private IDomainEvent DeserializeDomainEvent(
+        string eventType, int storedVersion, string json, StreamId streamId)
     {
         Type clrType;
         try
         {
-            clrType = _registry.TypeFor(eventType);
+            clrType = _pipeline.ResolveType(eventType, storedVersion);
         }
         catch (UnknownEventTypeException ex)
         {
             throw new UnknownEventTypeException(eventType, streamId, ex);
         }
-        return (IDomainEvent)JsonSerializer.Deserialize(json, clrType, _jsonOptions)!;
+        var payload = (IDomainEvent)JsonSerializer.Deserialize(json, clrType, _jsonOptions)!;
+        return _pipeline.Upcast(eventType, storedVersion, payload);
     }
 
     private IProcessManagerEvent DeserializeProcessManagerEvent(

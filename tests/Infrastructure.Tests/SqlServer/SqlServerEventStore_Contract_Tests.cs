@@ -101,7 +101,8 @@ internal sealed class SqlServerContractBackend : IHeldWriterContractBackend
             new SqlServerConnectionFactory(connectionString),
             registry,
             pmRegistry,
-            CreateJsonOptions());
+            CreateJsonOptions(),
+            new EventUpcasterPipeline(registry, []));
 
         return new SqlServerContractBackend(connectionString, store);
     }

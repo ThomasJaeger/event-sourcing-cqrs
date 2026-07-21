@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Npgsql;
@@ -23,7 +24,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
 
         var read = await CollectAsync(store.ReadAllAsync(0, CancellationToken.None));
 
@@ -36,7 +37,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [
@@ -63,7 +64,7 @@ public class PostgresEventStore_ReadAllAsync_Tests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var store = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var streamId = NewStreamId();
         await store.AppendAsync(streamId, 0,
             [

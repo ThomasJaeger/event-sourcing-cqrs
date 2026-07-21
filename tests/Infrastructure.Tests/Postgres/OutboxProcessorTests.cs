@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -257,7 +258,8 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
             CreateJsonOptions(),
             new OutboxRetryPolicy(),
             options,
-            NullLogger<OutboxProcessor>.Instance);
+            NullLogger<OutboxProcessor>.Instance,
+            new EventUpcasterPipeline(CreateRegistry(), []));
     }
 
     // global_position is NOT NULL on event_store.outbox as of migration 0002.

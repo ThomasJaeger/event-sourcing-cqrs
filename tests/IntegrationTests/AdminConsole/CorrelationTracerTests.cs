@@ -251,7 +251,8 @@ public class CorrelationTracerTests : IClassFixture<AdminConsoleAdmitFixture>
             new NpgsqlConnectionFactory(dataSource),
             new EventTypeRegistry(),
             new ProcessManagerEventTypeRegistry().Register<TracedPmEvent>(),
-            jsonOptions);
+            jsonOptions,
+            new EventUpcasterPipeline(new EventTypeRegistry(), []));
 
         var eventId = Guid.NewGuid();
         var envelope = new ProcessManagerEventEnvelope(

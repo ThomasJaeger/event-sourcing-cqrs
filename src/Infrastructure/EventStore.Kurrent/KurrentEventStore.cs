@@ -28,21 +28,25 @@ public sealed class KurrentEventStore : IEventStore
     private readonly EventTypeRegistry _registry;
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly EventUpcasterPipeline _pipeline;
 
     public KurrentEventStore(
         KurrentDBClient client,
         EventTypeRegistry registry,
         ProcessManagerEventTypeRegistry pmRegistry,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(pmRegistry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _client = client;
         _registry = registry;
         _pmRegistry = pmRegistry;
         _jsonOptions = jsonOptions;
+        _pipeline = pipeline;
     }
 
     public async Task AppendAsync(
@@ -258,7 +262,7 @@ public sealed class KurrentEventStore : IEventStore
     }
 
     private EventEnvelope HydrateEvent(ResolvedEvent resolved, StreamId streamId)
-        => KurrentEventHydration.ToEventEnvelope(resolved, streamId, _registry, _jsonOptions);
+        => KurrentEventHydration.ToEventEnvelope(resolved, streamId, _pipeline, _jsonOptions);
 
     private ProcessManagerEventEnvelope HydrateProcessManagerEvent(
         ResolvedEvent resolved, StreamId streamId)

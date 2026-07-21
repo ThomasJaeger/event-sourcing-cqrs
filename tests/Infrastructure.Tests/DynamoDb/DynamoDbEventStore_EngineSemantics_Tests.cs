@@ -309,6 +309,7 @@ public class DynamoDbEventStore_EngineSemantics_Tests : IClassFixture<LocalStack
             {
                 TableName = "fake",
                 MaxAppendAttempts = maxAttempts,
-            }));
+            }),
+            new Infrastructure.Versioning.EventUpcasterPipeline(registry, []));
     }
 }

@@ -131,7 +131,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var store = new PostgresOrderDetailStore(
             readModelFactory, new PostgresCheckpointStore(readModelFactory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
@@ -175,7 +175,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var store = new PostgresOrderDetailStore(

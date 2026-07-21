@@ -289,7 +289,8 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             new NpgsqlConnectionFactory(ds),
             new EventTypeRegistry().Register<OrderPlaced>(),
             new ProcessManagerEventTypeRegistry(),
-            JsonOptions());
+            JsonOptions(),
+            new EventUpcasterPipeline(new EventTypeRegistry().Register<OrderPlaced>(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(ds);
         // No manual tenant: the set-point under test must supply it from each event's metadata.
         var stub = new StubTenantAccessor { Current = null };

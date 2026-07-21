@@ -15,7 +15,7 @@ internal static class KurrentEventHydration
     public static EventEnvelope ToEventEnvelope(
         ResolvedEvent resolved,
         StreamId streamId,
-        EventTypeRegistry registry,
+        EventUpcasterPipeline pipeline,
         JsonSerializerOptions jsonOptions)
     {
         var record = resolved.Event;
@@ -25,8 +25,9 @@ internal static class KurrentEventHydration
             StreamVersion: checked((int)(record.EventNumber.ToUInt64() + 1)),
             EventId: record.EventId.ToGuid(),
             EventType: record.EventType,
-            EventVersion: stored.EventVersion,
-            Payload: DeserializeDomainEvent(record.EventType, record.Data, streamId, registry, jsonOptions),
+            EventVersion: pipeline.CurrentVersionFor(record.EventType),
+            Payload: DeserializeDomainEvent(
+                record.EventType, record.Data, streamId, stored.EventVersion, pipeline, jsonOptions),
             Metadata: stored.Metadata,
             OccurredUtc: stored.OccurredUtc,
             GlobalPosition: checked((long)record.Position.CommitPosition));
@@ -60,7 +61,7 @@ internal static class KurrentEventHydration
     // reconnect rather than tracking a per-message attempt count the way the outbox does.
     public static OutboxMessage ToOutboxMessage(
         ResolvedEvent resolved,
-        EventTypeRegistry registry,
+        EventUpcasterPipeline pipeline,
         JsonSerializerOptions jsonOptions)
     {
         var record = resolved.Event;
@@ -71,8 +72,9 @@ internal static class KurrentEventHydration
             OutboxId: globalPosition,
             EventId: record.EventId.ToGuid(),
             EventType: record.EventType,
-            EventVersion: stored.EventVersion,
-            Event: DeserializeDomainEvent(record.EventType, record.Data, streamId, registry, jsonOptions),
+            EventVersion: pipeline.CurrentVersionFor(record.EventType),
+            Event: DeserializeDomainEvent(
+                record.EventType, record.Data, streamId, stored.EventVersion, pipeline, jsonOptions),
             Metadata: stored.Metadata,
             GlobalPosition: globalPosition,
             AttemptCount: 0);
@@ -82,19 +84,21 @@ internal static class KurrentEventHydration
         string eventType,
         ReadOnlyMemory<byte> json,
         StreamId streamId,
-        EventTypeRegistry registry,
+        int storedVersion,
+        EventUpcasterPipeline pipeline,
         JsonSerializerOptions jsonOptions)
     {
         Type clrType;
         try
         {
-            clrType = registry.TypeFor(eventType);
+            clrType = pipeline.ResolveType(eventType, storedVersion);
         }
         catch (UnknownEventTypeException ex)
         {
             throw new UnknownEventTypeException(eventType, streamId, ex);
         }
-        return (IDomainEvent)JsonSerializer.Deserialize(json.Span, clrType, jsonOptions)!;
+        var payload = (IDomainEvent)JsonSerializer.Deserialize(json.Span, clrType, jsonOptions)!;
+        return pipeline.Upcast(eventType, storedVersion, payload);
     }
 
     private static IProcessManagerEvent DeserializeProcessManagerEvent(

@@ -5,8 +5,9 @@ namespace EventSourcingCqrs.Infrastructure.Versioning;
 // One schema-version link: maps a stored event shape (TFrom) to the next shape (TTo) in its
 // lineage. Pattern from Chapter 11: Upcasting. A single link carries no chaining knowledge, only
 // its own one-step mapping; EventUpcasterPipeline composes links into a chain and derives the
-// version numbers from the chain's topology.
-public abstract class Upcaster<TFrom, TTo>
+// version numbers from the chain's topology. It implements the IEventUpcaster marker so a host
+// registers each concrete link as that type and a composition root enumerates them for the pipeline.
+public abstract class Upcaster<TFrom, TTo> : IEventUpcaster
     where TFrom : IDomainEvent
     where TTo : IDomainEvent
 {

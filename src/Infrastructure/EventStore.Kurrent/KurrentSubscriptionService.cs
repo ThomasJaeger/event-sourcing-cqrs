@@ -22,7 +22,7 @@ public sealed class KurrentSubscriptionService : BackgroundService
     public const string CheckpointName = "kurrent-subscription-dispatch";
 
     private readonly KurrentDBClient _client;
-    private readonly EventTypeRegistry _registry;
+    private readonly EventUpcasterPipeline _pipeline;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ICheckpointStore _checkpointStore;
     private readonly IMessageDispatcher _dispatcher;
@@ -31,27 +31,27 @@ public sealed class KurrentSubscriptionService : BackgroundService
 
     public KurrentSubscriptionService(
         KurrentDBClient client,
-        EventTypeRegistry registry,
         JsonSerializerOptions jsonOptions,
         ICheckpointStore checkpointStore,
         IMessageDispatcher dispatcher,
         IOptions<KurrentSubscriptionOptions> options,
-        ILogger<KurrentSubscriptionService> logger)
+        ILogger<KurrentSubscriptionService> logger,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _client = client;
-        _registry = registry;
         _jsonOptions = jsonOptions;
         _checkpointStore = checkpointStore;
         _dispatcher = dispatcher;
         _options = options.Value;
         _logger = logger;
+        _pipeline = pipeline;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -119,7 +119,7 @@ public sealed class KurrentSubscriptionService : BackgroundService
             {
                 case StreamMessage.Event matched:
                     var outboxMessage = KurrentEventHydration.ToOutboxMessage(
-                        matched.ResolvedEvent, _registry, _jsonOptions);
+                        matched.ResolvedEvent, _pipeline, _jsonOptions);
                     await _dispatcher.DispatchAsync(outboxMessage, ct);
                     await _checkpointStore.AdvanceAsync(
                         CheckpointName, outboxMessage.GlobalPosition, ct);

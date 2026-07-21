@@ -134,7 +134,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
     }
 
     private static PostgresEventStore CreateEventStore(NpgsqlDataSource dataSource)
-        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
 
     private static Task<long> HeadAsync(NpgsqlDataSource dataSource)
         => new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource))

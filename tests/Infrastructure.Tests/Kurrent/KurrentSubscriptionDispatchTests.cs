@@ -288,14 +288,14 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
     private readonly ServiceProvider _provider;
     private readonly NpgsqlReadModelConnectionFactory _readModelFactory;
     private readonly KurrentDBClient _client;
-    private readonly EventTypeRegistry _registry;
+    private readonly EventUpcasterPipeline _pipeline;
     private readonly JsonSerializerOptions _jsonOptions;
 
     private KurrentSubscriptionHarness(
         IContainer container,
         ServiceProvider provider,
         KurrentDBClient client,
-        EventTypeRegistry registry,
+        EventUpcasterPipeline pipeline,
         JsonSerializerOptions jsonOptions,
         NpgsqlReadModelConnectionFactory readModelFactory,
         IEventStore store,
@@ -304,7 +304,7 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
         _container = container;
         _provider = provider;
         _client = client;
-        _registry = registry;
+        _pipeline = pipeline;
         _jsonOptions = jsonOptions;
         _readModelFactory = readModelFactory;
         Store = store;
@@ -333,14 +333,14 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
             {
                 var store = provider.GetRequiredService<IEventStore>();
                 var client = provider.GetRequiredService<KurrentDBClient>();
-                var registry = provider.GetRequiredService<EventTypeRegistry>();
+                var pipeline = provider.GetRequiredService<EventUpcasterPipeline>();
                 var jsonOptions = provider.GetRequiredService<JsonSerializerOptions>();
                 var readModelConnectionString = await postgres.CreateMigratedDatabaseAsync();
                 var readModelFactory = new NpgsqlReadModelConnectionFactory(
                     NpgsqlDataSource.Create(readModelConnectionString));
                 var checkpointStore = new PostgresCheckpointStore(readModelFactory);
                 return new KurrentSubscriptionHarness(
-                    container, provider, client, registry, jsonOptions, readModelFactory,
+                    container, provider, client, pipeline, jsonOptions, readModelFactory,
                     store, checkpointStore);
             }
             catch
@@ -359,12 +359,12 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
     public KurrentSubscriptionService CreateService(IMessageDispatcher dispatcher)
         => new(
             _client,
-            _registry,
             _jsonOptions,
             CheckpointStore,
             dispatcher,
             Options.Create(new KurrentSubscriptionOptions()),
-            NullLogger<KurrentSubscriptionService>.Instance);
+            NullLogger<KurrentSubscriptionService>.Instance,
+            _pipeline);
 
     // Every committed position on the $all feed excluding system events, PM streams included: the
     // stretch a dispatch checkpoint has to advance across spans both append paths.

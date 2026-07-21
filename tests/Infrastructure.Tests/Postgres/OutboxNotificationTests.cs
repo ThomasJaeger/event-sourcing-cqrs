@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -113,7 +114,8 @@ public class OutboxNotificationTests : IClassFixture<PostgresFixture>
             CreateJsonOptions(),
             new OutboxRetryPolicy(),
             options,
-            NullLogger<OutboxProcessor>.Instance);
+            NullLogger<OutboxProcessor>.Instance,
+            new EventUpcasterPipeline(CreateRegistry(), []));
     }
 
     private static async Task<DateTime?> PollForSentAsync(

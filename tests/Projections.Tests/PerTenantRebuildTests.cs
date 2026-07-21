@@ -130,7 +130,7 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
 
         var customer = Guid.NewGuid();
         // Two default-tenant orders span global positions 1-6 (order A at 1-3, order B at
@@ -170,7 +170,7 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
     {
         var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(
@@ -333,7 +333,7 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
     {
         var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions());
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var store = new PostgresOrderThroughputStore(

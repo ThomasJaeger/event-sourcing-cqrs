@@ -166,7 +166,8 @@ internal static class CrossTenantProjectionCases
             new NpgsqlConnectionFactory(ds),
             new EventTypeRegistry().Register<InventoryCreated>(),
             new ProcessManagerEventTypeRegistry(),
-            SkuToInventoryIdProjectionTenantTests.JsonOptions());
+            SkuToInventoryIdProjectionTenantTests.JsonOptions(),
+            new EventUpcasterPipeline(new EventTypeRegistry().Register<InventoryCreated>(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(ds);
         var tenantAccessor = new StubTenantAccessor();
         var store = new PostgresSkuToInventoryIdStore(

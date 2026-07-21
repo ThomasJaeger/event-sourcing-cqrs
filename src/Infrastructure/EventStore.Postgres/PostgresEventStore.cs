@@ -32,21 +32,25 @@ public sealed class PostgresEventStore : IEventStore
     private readonly EventTypeRegistry _registry;
     private readonly ProcessManagerEventTypeRegistry _pmRegistry;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly EventUpcasterPipeline _pipeline;
 
     public PostgresEventStore(
         INpgsqlConnectionFactory factory,
         EventTypeRegistry registry,
         ProcessManagerEventTypeRegistry pmRegistry,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        EventUpcasterPipeline pipeline)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(pmRegistry);
         ArgumentNullException.ThrowIfNull(jsonOptions);
+        ArgumentNullException.ThrowIfNull(pipeline);
         _factory = factory;
         _registry = registry;
         _pmRegistry = pmRegistry;
         _jsonOptions = jsonOptions;
+        _pipeline = pipeline;
     }
 
     public async Task AppendAsync(
@@ -165,7 +169,7 @@ public sealed class PostgresEventStore : IEventStore
             Type clrType;
             try
             {
-                clrType = _registry.TypeFor(eventType);
+                clrType = _pipeline.ResolveType(eventType, eventVersion);
             }
             catch (UnknownEventTypeException ex)
             {
@@ -174,6 +178,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IDomainEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
+            payload = _pipeline.Upcast(eventType, eventVersion, payload);
             var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             envelopes.Add(new EventEnvelope(
@@ -181,7 +186,7 @@ public sealed class PostgresEventStore : IEventStore
                 StreamVersion: streamVersion,
                 EventId: eventId,
                 EventType: eventType,
-                EventVersion: eventVersion,
+                EventVersion: _pipeline.CurrentVersionFor(eventType),
                 Payload: payload,
                 Metadata: metadata,
                 OccurredUtc: occurredUtc,
@@ -361,7 +366,7 @@ public sealed class PostgresEventStore : IEventStore
             Type clrType;
             try
             {
-                clrType = _registry.TypeFor(eventType);
+                clrType = _pipeline.ResolveType(eventType, eventVersion);
             }
             catch (UnknownEventTypeException ex)
             {
@@ -370,6 +375,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IDomainEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
+            payload = _pipeline.Upcast(eventType, eventVersion, payload);
             var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             yield return new EventEnvelope(
@@ -377,7 +383,7 @@ public sealed class PostgresEventStore : IEventStore
                 StreamVersion: streamVersion,
                 EventId: eventId,
                 EventType: eventType,
-                EventVersion: eventVersion,
+                EventVersion: _pipeline.CurrentVersionFor(eventType),
                 Payload: payload,
                 Metadata: metadata,
                 OccurredUtc: occurredUtc,
@@ -427,7 +433,7 @@ public sealed class PostgresEventStore : IEventStore
             Type clrType;
             try
             {
-                clrType = _registry.TypeFor(eventType);
+                clrType = _pipeline.ResolveType(eventType, eventVersion);
             }
             catch (UnknownEventTypeException ex)
             {
@@ -436,6 +442,7 @@ public sealed class PostgresEventStore : IEventStore
 
             var payload = (IDomainEvent)JsonSerializer.Deserialize(
                 payloadJson, clrType, _jsonOptions)!;
+            payload = _pipeline.Upcast(eventType, eventVersion, payload);
             var metadata = EventMetadataReader.Read(metadataJson, _jsonOptions);
 
             yield return new EventEnvelope(
@@ -443,7 +450,7 @@ public sealed class PostgresEventStore : IEventStore
                 StreamVersion: streamVersion,
                 EventId: eventId,
                 EventType: eventType,
-                EventVersion: eventVersion,
+                EventVersion: _pipeline.CurrentVersionFor(eventType),
                 Payload: payload,
                 Metadata: metadata,
                 OccurredUtc: occurredUtc,
