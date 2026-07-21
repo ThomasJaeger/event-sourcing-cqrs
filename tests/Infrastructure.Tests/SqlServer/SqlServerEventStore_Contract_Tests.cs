@@ -66,10 +66,26 @@ public class SqlServerEventStore_DuplicateEventId_Contract_Tests
         => await SqlServerContractBackend.CreateAsync(_fixture);
 }
 
+// The upcast-on-read capability suite on SQL Server: the same backend, now carrying the read-time
+// upcaster its pipeline was threaded with, seeds a version-1 row and reads it back lifted.
+public class SqlServerEventStore_UpcastOnRead_Contract_Tests
+    : UpcastOnReadContractTests, IClassFixture<SqlServerFixture>
+{
+    private readonly SqlServerFixture _fixture;
+
+    public SqlServerEventStore_UpcastOnRead_Contract_Tests(SqlServerFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    protected override async Task<IUpcastSeedingContractBackend> CreateBackendAsync()
+        => await SqlServerContractBackend.CreateAsync(_fixture);
+}
+
 // One instance per fact: its own migrated database with RCSI on, torn down with the fact. The
 // suite's event types register into the adapter's registries here, which is the whole job of a
 // backend.
-internal sealed class SqlServerContractBackend : IHeldWriterContractBackend
+internal sealed class SqlServerContractBackend : IHeldWriterContractBackend, IUpcastSeedingContractBackend
 {
     private readonly string _connectionString;
 
@@ -102,7 +118,7 @@ internal sealed class SqlServerContractBackend : IHeldWriterContractBackend
             registry,
             pmRegistry,
             CreateJsonOptions(),
-            new EventUpcasterPipeline(registry, []));
+            new EventUpcasterPipeline(registry, [new ContractItemArchivedV1ToV2()]));
 
         return new SqlServerContractBackend(connectionString, store);
     }
@@ -120,6 +136,25 @@ internal sealed class SqlServerContractBackend : IHeldWriterContractBackend
 
     public async Task<IHeldWriter> StartHeldWriterAsync(StreamId streamId)
         => await SqlServerHeldWriter.StartAsync(_connectionString, streamId);
+
+    // A historical write, reproduced through the adapter's own append with a throwaway registry that
+    // maps the V1 shape onto the terminal's stable storage name. The row lands with event_version 1
+    // and the V1 payload, exactly as an older revision of the code left it; the suite's own store
+    // reads it back through the real pipeline.
+    public async Task SeedVersionOneAsync(
+        StreamId stream, string terminalStorageName, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), terminalStorageName);
+        var seedStore = new SqlServerEventStore(
+            new SqlServerConnectionFactory(_connectionString),
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            CreateJsonOptions(),
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
+    }
 
     public async Task<IReadOnlyList<long>> ReadCommittedPositionsAsync()
     {

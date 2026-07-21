@@ -25,3 +25,19 @@ public class KurrentEventStore_Contract_Tests
     protected override async Task<IEventStoreContractBackend> CreateBackendAsync()
         => await KurrentContractBackend.CreateAsync(_fixture);
 }
+
+// The upcast-on-read capability suite on KurrentDB: the same backend, now carrying the read-time
+// upcaster registered into its composed pipeline, seeds a version-1 row and reads it back lifted.
+public class KurrentEventStore_UpcastOnRead_Contract_Tests
+    : UpcastOnReadContractTests, IClassFixture<KurrentFixture>
+{
+    private readonly KurrentFixture _fixture;
+
+    public KurrentEventStore_UpcastOnRead_Contract_Tests(KurrentFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    protected override async Task<IUpcastSeedingContractBackend> CreateBackendAsync()
+        => await KurrentContractBackend.CreateAsync(_fixture);
+}

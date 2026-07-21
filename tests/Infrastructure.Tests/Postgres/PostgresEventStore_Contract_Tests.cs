@@ -63,10 +63,26 @@ public class PostgresEventStore_DuplicateEventId_Contract_Tests
         => await PostgresContractBackend.CreateAsync(_fixture);
 }
 
+// The upcast-on-read capability suite on PostgreSQL: the same backend, now carrying the read-time
+// upcaster its pipeline was threaded with, seeds a version-1 row and reads it back lifted.
+public class PostgresEventStore_UpcastOnRead_Contract_Tests
+    : UpcastOnReadContractTests, IClassFixture<PostgresFixture>
+{
+    private readonly PostgresFixture _fixture;
+
+    public PostgresEventStore_UpcastOnRead_Contract_Tests(PostgresFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    protected override async Task<IUpcastSeedingContractBackend> CreateBackendAsync()
+        => await PostgresContractBackend.CreateAsync(_fixture);
+}
+
 // One instance per fact: its own migrated database, its own data source, torn down with the
 // fact. The suite's event types register into the adapter's registries here, which is the whole
 // job of a backend; the suite itself knows nothing about EventTypeRegistry.
-internal sealed class PostgresContractBackend : IHeldWriterContractBackend
+internal sealed class PostgresContractBackend : IHeldWriterContractBackend, IUpcastSeedingContractBackend
 {
     private readonly string _connectionString;
     private readonly NpgsqlDataSource _dataSource;
@@ -106,7 +122,7 @@ internal sealed class PostgresContractBackend : IHeldWriterContractBackend
                 registry,
                 pmRegistry,
                 CreateJsonOptions(),
-                new EventUpcasterPipeline(registry, []));
+                new EventUpcasterPipeline(registry, [new ContractItemArchivedV1ToV2()]));
 
             return new PostgresContractBackend(connectionString, dataSource, store);
         }
@@ -119,6 +135,25 @@ internal sealed class PostgresContractBackend : IHeldWriterContractBackend
 
     public async Task<IHeldWriter> StartHeldWriterAsync(StreamId streamId)
         => await PostgresHeldWriter.StartAsync(_connectionString, streamId);
+
+    // A historical write, reproduced through the adapter's own append with a throwaway registry that
+    // maps the V1 shape onto the terminal's stable storage name. The row lands with event_version 1
+    // and the V1 payload, exactly as an older revision of the code left it; the suite's own store
+    // reads it back through the real pipeline.
+    public async Task SeedVersionOneAsync(
+        StreamId stream, string terminalStorageName, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), terminalStorageName);
+        var seedStore = new PostgresEventStore(
+            new NpgsqlConnectionFactory(_dataSource),
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            CreateJsonOptions(),
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
+    }
 
     public async Task<IReadOnlyList<long>> ReadCommittedPositionsAsync()
     {

@@ -225,6 +225,61 @@ public class KurrentSubscriptionDispatchTests
         }
     }
 
+    // The two Kurrent hydration helpers, characterized against a stored version-1 event. These are
+    // green-on-write and carry no RED of their own: the upcaster mechanism was RED-proven at the V1
+    // unit level (EventUpcasterPipelineTests) and its threading at the V2a composition level
+    // (EventUpcasterPipelineCompositionTests). What these pin is that ToEventEnvelope (the read path)
+    // and ToOutboxMessage (the dispatch path) each apply the composed pipeline. Reach is the sibling
+    // version-carry fact's reach exactly: ResolvedEvent is not constructible on disk, so the harness
+    // drives the helpers rather than a pure unit calling them.
+    [Fact]
+    public async Task Read_lifts_a_version_one_stored_event_to_the_current_shape()
+    {
+        await using var harness = await KurrentSubscriptionHarness.CreateAsync(_kurrent, _postgres);
+        var stream = ContractEnvelopes.NewStreamId();
+        var itemId = Guid.NewGuid();
+        await harness.SeedVersionOneAsync(
+            stream, nameof(ContractItemArchived), new ContractItemArchivedV1(itemId));
+
+        // ReadStreamAsync hydrates through ToEventEnvelope.
+        var read = await harness.Store.ReadStreamAsync(stream, 0, CancellationToken.None);
+
+        read.Should().ContainSingle();
+        var upcast = read[0].Payload.Should().BeOfType<ContractItemArchived>().Which;
+        upcast.ItemId.Should().Be(itemId);
+        upcast.Revision.Should().Be(1);
+        read[0].EventVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Dispatch_lifts_a_version_one_stored_event_to_the_current_shape()
+    {
+        await using var harness = await KurrentSubscriptionHarness.CreateAsync(_kurrent, _postgres);
+        var stream = ContractEnvelopes.NewStreamId();
+        var itemId = Guid.NewGuid();
+        await harness.SeedVersionOneAsync(
+            stream, nameof(ContractItemArchived), new ContractItemArchivedV1(itemId));
+
+        // The subscription dispatch hydrates through ToOutboxMessage.
+        var dispatcher = new KurrentRecordingDispatcher();
+        var service = harness.CreateService(dispatcher);
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        try
+        {
+            var received = await PollForDispatchedAsync(dispatcher, 1);
+            received.Should().ContainSingle();
+            var upcast = received[0].Event.Should().BeOfType<ContractItemArchived>().Which;
+            upcast.ItemId.Should().Be(itemId);
+            upcast.Revision.Should().Be(1);
+            received[0].EventVersion.Should().Be(2);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task<IReadOnlyList<OutboxMessage>> PollForDispatchedAsync(
         KurrentRecordingDispatcher dispatcher, int expected)
     {
@@ -327,6 +382,9 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
             var services = new ServiceCollection();
             services.AddSingleton<IEventTypeProvider, ContractDomainEventTypeProvider>();
             services.AddSingleton<IProcessManagerEventTypeProvider, ContractProcessManagerEventTypeProvider>();
+            // The upcaster reaches the composed pipeline the way a host contributes one, so the
+            // dispatch and read paths this harness drives lift a stored V1 event to the current shape.
+            services.AddSingleton<IEventUpcaster, ContractItemArchivedV1ToV2>();
             services.AddKurrentEventStore(opts => opts.ConnectionString = connectionString);
             var provider = services.BuildServiceProvider();
             try
@@ -397,6 +455,25 @@ internal sealed class KurrentSubscriptionHarness : IAsyncDisposable
             positions.Add(checked((long)resolved.Event.Position.CommitPosition));
         }
         return positions;
+    }
+
+    // A historical write, reproduced through the adapter's own append with a throwaway registry that
+    // maps the V1 shape onto the terminal's stable storage name, so the stored event lands at schema
+    // version 1 with the V1 payload. The harness's own store and subscription then hydrate it through
+    // the real pipeline.
+    public async Task SeedVersionOneAsync(
+        StreamId stream, string terminalStorageName, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), terminalStorageName);
+        var seedStore = new KurrentEventStore(
+            _client,
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            _jsonOptions,
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
     }
 
     public async Task SeedCheckpointAsync(long position)

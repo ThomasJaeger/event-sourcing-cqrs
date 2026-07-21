@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DotNet.Testcontainers.Containers;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
@@ -15,7 +16,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Kurrent;
 //
 // It implements the universal IEventStoreContractBackend only, not IHeldWriterContractBackend:
 // KurrentDB has no interactive, held-open append, so the held-writer probes do not run here.
-internal sealed class KurrentContractBackend : IEventStoreContractBackend
+internal sealed class KurrentContractBackend : IEventStoreContractBackend, IUpcastSeedingContractBackend
 {
     private readonly IContainer _container;
     private readonly ServiceProvider _provider;
@@ -43,6 +44,9 @@ internal sealed class KurrentContractBackend : IEventStoreContractBackend
             var services = new ServiceCollection();
             services.AddSingleton<IEventTypeProvider, ContractDomainEventTypeProvider>();
             services.AddSingleton<IProcessManagerEventTypeProvider, ContractProcessManagerEventTypeProvider>();
+            // The upcaster reaches the composed pipeline the way a host contributes one: an
+            // IEventUpcaster singleton the Add* registration enumerates into EventUpcasterPipeline.
+            services.AddSingleton<IEventUpcaster, ContractItemArchivedV1ToV2>();
             services.AddKurrentEventStore(opts => opts.ConnectionString = connectionString);
 
             var provider = services.BuildServiceProvider();
@@ -83,6 +87,24 @@ internal sealed class KurrentContractBackend : IEventStoreContractBackend
             positions.Add(checked((long)resolved.Event.Position.CommitPosition));
         }
         return positions;
+    }
+
+    // A historical write, reproduced through the adapter's own append with a throwaway registry that
+    // maps the V1 shape onto the terminal's stable storage name. The stored event lands at schema
+    // version 1 with the V1 payload; the suite's own store reads it back through the real pipeline.
+    public async Task SeedVersionOneAsync(
+        StreamId stream, string terminalStorageName, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), terminalStorageName);
+        var seedStore = new KurrentEventStore(
+            _client,
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            _provider.GetRequiredService<JsonSerializerOptions>(),
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
     }
 
     public async ValueTask DisposeAsync()

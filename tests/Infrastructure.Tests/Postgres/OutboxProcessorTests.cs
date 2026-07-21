@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.TestInfrastructure;
@@ -65,6 +66,36 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
 
         dispatcher.Received.Should().ContainSingle();
         dispatcher.Received[0].EventVersion.Should().Be(1);
+    }
+
+    // A version-1 outbox row, dispatched. Green-on-write characterization pinning V2a's threading of
+    // the V1 pipeline through the outbox dispatch path; the mechanism was RED-proven at the V1 unit
+    // level (EventUpcasterPipelineTests) and the V2a composition level
+    // (EventUpcasterPipelineCompositionTests). The row is seeded under the terminal's storage name at
+    // event_version 1, the shape an older revision of the code wrote, and the processor lifts it.
+    [Fact]
+    public async Task Dispatched_message_lifts_a_version_one_row_to_the_current_shape()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var time = new FakeTimeProvider(BaseTime);
+        var dispatcher = new RecordingDispatcher();
+        var registry = new EventTypeRegistry().Register<ContractItemArchived>();
+        var pipeline = new EventUpcasterPipeline(registry, [new ContractItemArchivedV1ToV2()]);
+        var processor = BuildProcessor(
+            dataSource, dispatcher, time, registry: registry, pipeline: pipeline);
+        var itemId = Guid.NewGuid();
+        await SeedOutboxRowAsync(
+            dataSource, Guid.NewGuid(), new ContractItemArchivedV1(itemId), globalPosition: 1,
+            eventTypeName: nameof(ContractItemArchived));
+
+        await processor.ProcessBatchAsync(CancellationToken.None);
+
+        dispatcher.Received.Should().ContainSingle();
+        var upcast = dispatcher.Received[0].Event.Should().BeOfType<ContractItemArchived>().Which;
+        upcast.ItemId.Should().Be(itemId);
+        upcast.Revision.Should().Be(1);
+        dispatcher.Received[0].EventVersion.Should().Be(2);
     }
 
     [Fact]
@@ -242,7 +273,9 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         TimeProvider timeProvider,
         Func<double>? jitter = null,
         int batchSize = 100,
-        int maxAttempts = 10)
+        int maxAttempts = 10,
+        EventTypeRegistry? registry = null,
+        EventUpcasterPipeline? pipeline = null)
     {
         var options = Options.Create(new OutboxProcessorOptions
         {
@@ -251,15 +284,16 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
             TimeProvider = timeProvider,
             Jitter = jitter ?? (() => 1.0),
         });
+        registry ??= CreateRegistry();
         return new OutboxProcessor(
             new NpgsqlConnectionFactory(dataSource),
             dispatcher,
-            CreateRegistry(),
+            registry,
             CreateJsonOptions(),
             new OutboxRetryPolicy(),
             options,
             NullLogger<OutboxProcessor>.Instance,
-            new EventUpcasterPipeline(CreateRegistry(), []));
+            pipeline ?? new EventUpcasterPipeline(registry, []));
     }
 
     // global_position is NOT NULL on event_store.outbox as of migration 0002.
@@ -272,7 +306,8 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         IDomainEvent payload,
         int attemptCount = 0,
         DateTime? nextAttemptAt = null,
-        long globalPosition = 1)
+        long globalPosition = 1,
+        string? eventTypeName = null)
     {
         var when = BaseTime.UtcDateTime;
         var json = CreateJsonOptions();
@@ -298,7 +333,7 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
             "@next_attempt_at, @global_position) " +
             "RETURNING outbox_id";
         cmd.Parameters.AddWithValue("event_id", NpgsqlDbType.Uuid, eventId);
-        cmd.Parameters.AddWithValue("event_type", NpgsqlDbType.Text, payload.GetType().Name);
+        cmd.Parameters.AddWithValue("event_type", NpgsqlDbType.Text, eventTypeName ?? payload.GetType().Name);
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Jsonb, payloadJson);
         cmd.Parameters.AddWithValue("metadata", NpgsqlDbType.Jsonb, metadataJson);
         cmd.Parameters.AddWithValue("occurred_utc", NpgsqlDbType.TimestampTz, when);

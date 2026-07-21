@@ -8,5 +8,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
+    <!-- The upcast-on-read lineage in ContractEvents carries an Upcaster<TFrom, TTo>. Versioning is
+         the shared, engine-agnostic home for the registry and the upcaster base, not one of the four
+         adapters, so referencing it keeps the "no adapter" boundary the suite depends on. -->
+    <ProjectReference Include="..\..\src\Infrastructure\Versioning\Versioning.csproj" />
   </ItemGroup>
 </Project>

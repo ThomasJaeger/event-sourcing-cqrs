@@ -297,6 +297,31 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         dispatcher.Received[0].EventVersion.Should().Be(1);
     }
 
+    // A version-1 outbox row, dispatched. Green-on-write characterization pinning V2a's threading of
+    // the V1 pipeline through the SQL Server outbox dispatch path; the mechanism was RED-proven at the
+    // V1 unit level (EventUpcasterPipelineTests) and the V2a composition level
+    // (EventUpcasterPipelineCompositionTests). The row is seeded at event_version 1 under the
+    // terminal's storage name, and the processor lifts it to the current shape.
+    [Fact]
+    public async Task Dispatched_message_lifts_a_version_one_row_to_the_current_shape()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        var itemId = Guid.NewGuid();
+        await SeedVersionOneOutboxRowAsync(
+            connStr, ContractEnvelopes.NewStreamId(), new ContractItemArchivedV1(itemId));
+        var dispatcher = new SqlServerRecordingDispatcher();
+        var pipeline = new EventUpcasterPipeline(NewRegistry(), [new ContractItemArchivedV1ToV2()]);
+
+        await NewProcessor(connStr, dispatcher, pipeline: pipeline)
+            .ProcessBatchAsync(CancellationToken.None);
+
+        dispatcher.Received.Should().ContainSingle();
+        var upcast = dispatcher.Received[0].Event.Should().BeOfType<ContractItemArchived>().Which;
+        upcast.ItemId.Should().Be(itemId);
+        upcast.Revision.Should().Be(1);
+        dispatcher.Received[0].EventVersion.Should().Be(2);
+    }
+
     private static SqlServerEventStore NewStore(string connStr)
         => new(
             new SqlServerConnectionFactory(connStr),
@@ -319,7 +344,8 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         string connStr,
         IMessageDispatcher dispatcher,
         int maxAttempts = 10,
-        int batchSize = 100)
+        int batchSize = 100,
+        EventUpcasterPipeline? pipeline = null)
         => new(
             new SqlServerConnectionFactory(connStr),
             dispatcher,
@@ -333,7 +359,7 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
                 Jitter = () => 1.0,
             }),
             NullLogger<SqlServerOutboxProcessor>.Instance,
-            new EventUpcasterPipeline(NewRegistry(), []));
+            pipeline ?? new EventUpcasterPipeline(NewRegistry(), []));
 
     private static async Task AppendOneAsync(string connStr)
     {
@@ -341,6 +367,24 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         await NewStore(connStr).AppendAsync(stream, 0,
             [ContractEnvelopes.Build(stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 1m))],
             CancellationToken.None);
+    }
+
+    // A version-1 outbox row, planted through a throwaway store whose registry maps the V1 shape onto
+    // the terminal's stable storage name, so the adapter's own append writes event_version 1 with the
+    // V1 payload, the way an older revision of the code left it.
+    private static async Task SeedVersionOneOutboxRowAsync(
+        string connStr, StreamId stream, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), nameof(ContractItemArchived));
+        var seedStore = new SqlServerEventStore(
+            new SqlServerConnectionFactory(connStr),
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            SqlServerContractBackend.CreateJsonOptions(),
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
     }
 
     // The processor's own claim SQL, run by hand so a test can hold rows locked.

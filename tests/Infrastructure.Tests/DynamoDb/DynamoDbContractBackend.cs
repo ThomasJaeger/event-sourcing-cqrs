@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
 using EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace EventSourcingCqrs.Infrastructure.Tests.DynamoDb;
 
@@ -21,7 +24,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests.DynamoDb;
 // only transaction surface is TransactWriteItems, a one-shot request carrying its whole item list,
 // with no Begin, Commit, or Rollback anywhere on AmazonDynamoDBClient. ADR 0049 records that engine
 // fact and the capability routing that follows from it.
-internal sealed class DynamoDbContractBackend : IEventStoreContractBackend
+internal sealed class DynamoDbContractBackend : IEventStoreContractBackend, IUpcastSeedingContractBackend
 {
     private readonly ServiceProvider _provider;
     private readonly IAmazonDynamoDB _client;
@@ -56,6 +59,9 @@ internal sealed class DynamoDbContractBackend : IEventStoreContractBackend
         var services = new ServiceCollection();
         services.AddSingleton<IEventTypeProvider, ContractDomainEventTypeProvider>();
         services.AddSingleton<IProcessManagerEventTypeProvider, ContractProcessManagerEventTypeProvider>();
+        // The upcaster reaches the composed pipeline the way a host contributes one: an
+        // IEventUpcaster singleton the Add* registration enumerates into EventUpcasterPipeline.
+        services.AddSingleton<IEventUpcaster, ContractItemArchivedV1ToV2>();
         services.AddDynamoDbEventStore(opts =>
         {
             opts.ServiceUrl = fixture.ServiceUrl;
@@ -118,6 +124,25 @@ internal sealed class DynamoDbContractBackend : IEventStoreContractBackend
         while (start is not null);
 
         return positions;
+    }
+
+    // A historical write, reproduced through the adapter's own append with a throwaway registry that
+    // maps the V1 shape onto the terminal's stable storage name. The item lands at schema version 1
+    // with the V1 payload; the suite's own store reads it back through the real pipeline.
+    public async Task SeedVersionOneAsync(
+        StreamId stream, string terminalStorageName, IDomainEvent versionOnePayload)
+    {
+        var seedRegistry = new EventTypeRegistry().Register(
+            versionOnePayload.GetType(), terminalStorageName);
+        var seedStore = new DynamoDbEventStore(
+            _client,
+            seedRegistry,
+            new ProcessManagerEventTypeRegistry(),
+            _provider.GetRequiredService<JsonSerializerOptions>(),
+            _provider.GetRequiredService<IOptions<DynamoDbEventStoreOptions>>(),
+            new EventUpcasterPipeline(seedRegistry, []));
+        await seedStore.AppendAsync(
+            stream, 0, [ContractEnvelopes.Build(stream, 1, versionOnePayload)], CancellationToken.None);
     }
 
     public async ValueTask DisposeAsync()

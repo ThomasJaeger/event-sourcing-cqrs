@@ -38,6 +38,20 @@ public class DynamoDbEventStore_Contract_Tests : EventStoreContractTests, IClass
         => await DynamoDbContractBackend.CreateAsync(_fixture);
 }
 
+// The upcast-on-read capability suite on DynamoDB: the same backend, now carrying the read-time
+// upcaster registered into its composed pipeline, seeds a version-1 item and reads it back lifted.
+public class DynamoDbEventStore_UpcastOnRead_Contract_Tests
+    : UpcastOnReadContractTests, IClassFixture<LocalStackFixture>
+{
+    private readonly LocalStackFixture _fixture;
+
+    public DynamoDbEventStore_UpcastOnRead_Contract_Tests(LocalStackFixture fixture)
+        => _fixture = fixture;
+
+    protected override async Task<IUpcastSeedingContractBackend> CreateBackendAsync()
+        => await DynamoDbContractBackend.CreateAsync(_fixture);
+}
+
 // Each fact gets its own table on the shared node, so this class is parallel-safe with the core
 // suite above.
 public class DynamoDbEventStore_DuplicateEventId_Contract_Tests
