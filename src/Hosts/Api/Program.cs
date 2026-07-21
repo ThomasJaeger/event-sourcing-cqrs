@@ -9,6 +9,7 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Hosts.Api;
 using EventSourcingCqrs.Hosts.Api.Authentication;
 using EventSourcingCqrs.Hosts.Api.Endpoints;
@@ -53,6 +54,9 @@ EventStoreProviderSelection.ValidateConnectionString(
 // Api host registers no process-manager-event or delay-queue-command providers: it
 // neither reads PM streams nor schedules timeouts, both Workers-host concerns.
 builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
+// The OrderDrafted version-1 lineage's upcaster, composed into the pipeline beside its event types
+// (Chapter 11: Upcasting).
+builder.Services.AddSingleton<IEventUpcaster, OrderDraftedV1ToV2>();
 builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
 

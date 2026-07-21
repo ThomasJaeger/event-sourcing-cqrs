@@ -194,7 +194,7 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
 
         await eventStore.AppendAsync(stream, 0,
         [
-            Envelope(stream, 1, new OrderDrafted(orderId, customerId, SeededAt), tenant),
+            Envelope(stream, 1, new OrderDrafted(orderId, customerId, SeededAt, "web"), tenant),
             Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(20m, Currency.USD), SeededAt), tenant),
             Envelope(stream, 3, new ShippingAddressSet(orderId, new Address("1 Main St", "Smalltown", "12345", "US"), SeededAt), tenant),
             orderPlaced,

@@ -34,8 +34,8 @@ public sealed class EventStoreRepositoryTenantTests
             }
         };
         var repo = new EventStoreRepository<Order>(
-            store, contextAccessor, new StubTenantAccessor { Current = null });
-        var order = Order.Draft(OrderId, CustomerId, At);
+            store, contextAccessor, new StubTenantAccessor { Current = null }, new StubCurrentVersions());
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         var act = () => repo.SaveAsync(order, CancellationToken.None);
 
@@ -47,8 +47,8 @@ public sealed class EventStoreRepositoryTenantTests
     {
         var store = new InMemoryEventStore();
         var repo = new EventStoreRepository<Order>(
-            store, new StubCommandContextAccessor { Current = null }, new StubTenantAccessor());
-        var order = Order.Draft(OrderId, CustomerId, At);
+            store, new StubCommandContextAccessor { Current = null }, new StubTenantAccessor(), new StubCurrentVersions());
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         await repo.SaveAsync(order, CancellationToken.None);
 
@@ -80,8 +80,8 @@ public sealed class EventStoreRepositoryTenantTests
             }
         };
         var repo = new EventStoreRepository<Order>(
-            store, contextAccessor, new StubTenantAccessor { Current = Tenant });
-        var order = Order.Draft(OrderId, CustomerId, At);
+            store, contextAccessor, new StubTenantAccessor { Current = Tenant }, new StubCurrentVersions());
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         await repo.SaveAsync(order, CancellationToken.None);
 

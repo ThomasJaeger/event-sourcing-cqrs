@@ -27,7 +27,7 @@ public class OrderThroughputProjectionTests
         // second (sub-second apart). Shape A discards the type and buckets on the
         // second, so they must collapse into one bucket.
         await projection.HandleAsync(
-            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), SecondNow),
+            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), SecondNow, "web"),
                 position: 1, occurredUtc: SecondNow),
             CancellationToken.None);
         await projection.HandleAsync(
@@ -107,7 +107,7 @@ public class OrderThroughputProjectionTests
         DateTime At(int secondsBefore) => latest.AddSeconds(-secondsBefore);
 
         await projection.HandleAsync(
-            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), At(400)), position: 1, occurredUtc: At(400)),
+            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), At(400), "web"), position: 1, occurredUtc: At(400)),
             CancellationToken.None);
         await projection.HandleAsync(
             Context(new OrderLineAdded(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, new Money(10m, Currency.USD), At(250)),
@@ -178,7 +178,7 @@ public class OrderThroughputProjectionTests
 
         // A same-second, same-tenant burst of three different Sales event types.
         await projection.HandleAsync(
-            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), second),
+            Context(new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), second, "web"),
                 position: 1, occurredUtc: second, tenant: tenant),
             CancellationToken.None);
         await projection.HandleAsync(

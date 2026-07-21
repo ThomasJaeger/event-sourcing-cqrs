@@ -75,7 +75,7 @@ public sealed class EventStoreBrowserOverDynamoDbTests : IAsyncLifetime
         await EventStoreSeed.AppendAsync(
             eventStore,
             stream,
-            [new OrderDrafted(orderId, Guid.NewGuid(), SeedTime)],
+            [new OrderDrafted(orderId, Guid.NewGuid(), SeedTime, "web")],
             CancellationToken.None);
 
         var result = await inspector.InspectStreamAsync(stream.Value, CancellationToken.None);

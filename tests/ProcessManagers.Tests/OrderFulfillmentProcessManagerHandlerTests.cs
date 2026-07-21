@@ -454,7 +454,7 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
 
     private static Order BuildOrder(Guid orderId, params (Guid LineId, string Sku, int Qty)[] lines)
     {
-        var order = Order.Draft(orderId, Guid.NewGuid(), Now);
+        var order = Order.Draft(orderId, Guid.NewGuid(), Now, "web");
         foreach (var (lineId, sku, qty) in lines)
         {
             order.AddLine(lineId, sku, qty, Usd(10m), Now);

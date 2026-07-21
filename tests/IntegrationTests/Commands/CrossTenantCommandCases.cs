@@ -148,7 +148,7 @@ internal static class CrossTenantCommandCases
     private static Func<Task> Case(Func<Guid, Task> body) => () => body(Guid.NewGuid());
 
     // The minimal creating event for each aggregate's other-tenant twin.
-    private static OrderDrafted OrderTwin(Guid id) => new(id, Guid.NewGuid(), SeededAt);
+    private static OrderDrafted OrderTwin(Guid id) => new(id, Guid.NewGuid(), SeededAt, "web");
     private static InventoryCreated InventoryTwin(Guid id) => new(id, "SKU-OTHER", SeededAt);
     private static ShipmentScheduled ShipmentTwin(Guid id) =>
         new(id, Guid.NewGuid(), TwinDestination,

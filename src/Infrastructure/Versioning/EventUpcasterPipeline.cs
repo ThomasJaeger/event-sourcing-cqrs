@@ -13,7 +13,7 @@ namespace EventSourcingCqrs.Infrastructure.Versioning;
 // upcaster's non-generic bridge), so the read path performs no per-event reflection. Construction
 // rejects a malformed link set loudly: a non-upcaster element, a branch or a merge that would make
 // the chain non-linear, a cycle, and a chain that reaches no registered terminal.
-public sealed class EventUpcasterPipeline
+public sealed class EventUpcasterPipeline : ICurrentEventSchemaVersions
 {
     private readonly EventTypeRegistry _registry;
     private readonly Dictionary<Type, Link> _byFrom = [];

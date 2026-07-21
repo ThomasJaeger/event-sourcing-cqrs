@@ -22,20 +22,20 @@ public class OrderTests
     [Fact]
     public void Draft_creates_an_order_with_Draft_status()
     {
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         order.Id.Should().Be(OrderId);
         order.Status.Should().Be(OrderStatus.Draft);
         order.DequeueUncommittedEvents()
             .Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new OrderDrafted(OrderId, CustomerId, At));
+            .Which.Should().BeEquivalentTo(new OrderDrafted(OrderId, CustomerId, At, "web"));
     }
 
     [Fact]
     public void AddLine_adds_a_line_when_status_is_Draft()
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.AddLine(LineId1, "SKU-1", 2, TenUsd, At))
             .Then(new OrderLineAdded(OrderId, LineId1, "SKU-1", 2, TenUsd, At));
     }
@@ -45,7 +45,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -60,7 +60,7 @@ public class OrderTests
     public void AddLine_throws_when_quantity_is_not_positive(int quantity)
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.AddLine(LineId1, "SKU-1", quantity, TenUsd, At))
             .ThenThrows<DomainException>()
             .WithMessage("*quantity must be positive*");
@@ -71,7 +71,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At))
             .When(o => o.RemoveLine(LineId1, At))
             .Then(new OrderLineRemoved(OrderId, LineId1, At));
@@ -81,7 +81,7 @@ public class OrderTests
     public void RemoveLine_throws_when_line_not_found()
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.RemoveLine(LineId1, At))
             .ThenThrows<DomainException>()
             .WithMessage($"Line {LineId1} not found*");
@@ -91,7 +91,7 @@ public class OrderTests
     public void SetShippingAddress_sets_the_address()
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.SetShippingAddress(Shipping, At))
             .Then(new ShippingAddressSet(OrderId, Shipping, At));
     }
@@ -101,7 +101,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 2, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At))
             .When(o => o.Place(At))
@@ -113,7 +113,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new ShippingAddressSet(OrderId, Shipping, At))
             .When(o => o.Place(At))
             .ThenThrows<DomainException>()
@@ -125,7 +125,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At))
             .When(o => o.Place(At))
             .ThenThrows<DomainException>()
@@ -137,7 +137,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -151,7 +151,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -164,7 +164,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -179,7 +179,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -194,7 +194,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -207,7 +207,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At))
             .When(o => o.AddLine(LineId1, "SKU-1-DUPLICATE", 1, TenUsd, At))
             .ThenThrows<DomainException>()
@@ -219,7 +219,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -233,7 +233,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -246,7 +246,7 @@ public class OrderTests
     public void Ship_throws_when_order_is_Draft()
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.Ship("UPS", "1Z999", At))
             .ThenThrows<DomainException>()
             .WithMessage("*order is Draft*");
@@ -257,7 +257,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -272,7 +272,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -287,7 +287,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At))
@@ -299,7 +299,7 @@ public class OrderTests
     public void Complete_throws_when_order_is_Draft()
     {
         new AggregateTest<Order>()
-            .Given(new OrderDrafted(OrderId, CustomerId, At))
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"))
             .When(o => o.Complete(At))
             .ThenThrows<DomainException>()
             .WithMessage("*order is Draft*");
@@ -310,7 +310,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -325,7 +325,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),
@@ -340,7 +340,7 @@ public class OrderTests
     {
         new AggregateTest<Order>()
             .Given(
-                new OrderDrafted(OrderId, CustomerId, At),
+                new OrderDrafted(OrderId, CustomerId, At, "web"),
                 new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
                 new ShippingAddressSet(OrderId, Shipping, At),
                 new OrderPlaced(OrderId, CustomerId, TenUsd, At),

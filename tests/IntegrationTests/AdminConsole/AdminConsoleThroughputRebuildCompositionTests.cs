@@ -98,7 +98,7 @@ public class AdminConsoleThroughputRebuildCompositionTests : IClassFixture<Admin
         var stream = StreamId.ForAggregate<Order>(tenant, orderId);
         return eventStore.AppendAsync(stream, 0,
         [
-            Env(stream, 1, new OrderDrafted(orderId, customer, BaseTime), tenant),
+            Env(stream, 1, new OrderDrafted(orderId, customer, BaseTime, "web"), tenant),
             Env(stream, 2, new OrderLineAdded(
                 orderId, Guid.NewGuid(), "SKU-1", 1, new Money(20m, Currency.USD), BaseTime), tenant),
             Env(stream, 3, new OrderPlaced(

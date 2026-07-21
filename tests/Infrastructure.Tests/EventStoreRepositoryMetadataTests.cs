@@ -35,8 +35,8 @@ public class EventStoreRepositoryMetadataTests
             }
         };
         var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
-        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor, new StubCurrentVersions());
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         await repo.SaveAsync(order, CancellationToken.None);
 
@@ -55,8 +55,8 @@ public class EventStoreRepositoryMetadataTests
     {
         var store = new InMemoryEventStore();
         var accessor = new StubAccessor { Current = null };
-        var repo = new EventStoreRepository<Order>(store, accessor, new StubTenantAccessor());
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var repo = new EventStoreRepository<Order>(store, accessor, new StubTenantAccessor(), new StubCurrentVersions());
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
 
         await repo.SaveAsync(order, CancellationToken.None);
 
@@ -79,9 +79,9 @@ public class EventStoreRepositoryMetadataTests
             Current = new StubContext { CausationCommandId = commandId }
         };
         var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
-        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor, new StubCurrentVersions());
 
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
 
         await repo.SaveAsync(order, CancellationToken.None);
@@ -102,9 +102,9 @@ public class EventStoreRepositoryMetadataTests
             Current = new StubContext { CorrelationId = correlationId }
         };
         var tenantAccessor = new StubTenantAccessor { Current = WellKnownTenants.Default };
-        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor);
+        var repo = new EventStoreRepository<Order>(store, accessor, tenantAccessor, new StubCurrentVersions());
 
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
 
         await repo.SaveAsync(order, CancellationToken.None);

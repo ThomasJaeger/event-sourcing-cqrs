@@ -34,7 +34,7 @@ public class EventStoreRepositoryShipmentTests
     public async Task SaveAsync_then_LoadAsync_round_trip_returns_equivalent_aggregate()
     {
         var store = new InMemoryEventStore();
-        var repo = new EventStoreRepository<Shipment>(store, new StubAccessor(), new StubTenantAccessor());
+        var repo = new EventStoreRepository<Shipment>(store, new StubAccessor(), new StubTenantAccessor(), new StubCurrentVersions());
 
         var lines = new[] { new ShipmentLine(OrderId, LineId, Sku, 2) };
         var shipment = Shipment.Schedule(ShipmentId, OrderId, Destination, lines, At);

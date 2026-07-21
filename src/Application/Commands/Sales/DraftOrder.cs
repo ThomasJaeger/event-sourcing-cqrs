@@ -30,8 +30,11 @@ public sealed class DraftOrderHandler : ICommandHandler<DraftOrder>
 
     public Task HandleAsync(DraftOrder command, CancellationToken ct)
     {
-        var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
-        var order = Order.Draft(command.OrderId, command.CustomerId, utcNow);
+        // The channel a draft enters through. For a server-initiated draft the honest value is the
+        // composing host's own name, which the command context carries as ServiceName.
+        var context = _accessor.Current ?? CommandContext.System;
+        var order = Order.Draft(
+            command.OrderId, command.CustomerId, context.UtcNow().UtcDateTime, context.ServiceName);
         return _repository.SaveAsync(order, ct);
     }
 }

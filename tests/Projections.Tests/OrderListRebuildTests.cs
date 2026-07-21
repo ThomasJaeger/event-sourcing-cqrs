@@ -153,7 +153,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamA, 0,
         [
-            Env(streamA, 1, new OrderDrafted(orderA, customer, BaseTime)),
+            Env(streamA, 1, new OrderDrafted(orderA, customer, BaseTime, "web")),
             Env(streamA, 2, new OrderLineAdded(
                 orderA, Guid.NewGuid(), "SKU-A", 1, new Money(20m, Currency.USD), BaseTime)),
             Env(streamA, 3, new OrderPlaced(
@@ -163,7 +163,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamB, 0,
         [
-            Env(streamB, 1, new OrderDrafted(orderB, customer, BaseTime)),
+            Env(streamB, 1, new OrderDrafted(orderB, customer, BaseTime, "web")),
             Env(streamB, 2, new OrderLineAdded(
                 orderB, Guid.NewGuid(), "SKU-B", 3, new Money(5m, Currency.USD), BaseTime)),
             Env(streamB, 3, new OrderPlaced(
@@ -174,7 +174,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamC, 0,
         [
-            Env(streamC, 1, new OrderDrafted(orderC, customer, BaseTime)),
+            Env(streamC, 1, new OrderDrafted(orderC, customer, BaseTime, "web")),
             Env(streamC, 2, new OrderLineAdded(
                 orderC, Guid.NewGuid(), "SKU-C", 2, new Money(49.50m, Currency.USD), BaseTime)),
             Env(streamC, 3, new OrderPlaced(

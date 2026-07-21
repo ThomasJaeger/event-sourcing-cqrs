@@ -133,8 +133,8 @@ internal sealed class OrderFulfillmentTestHarness
 
     public OrderFulfillmentTestHarness()
     {
-        _orders = new EventStoreRepository<Order>(_store, _accessor, _tenantAccessor);
-        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor);
+        _orders = new EventStoreRepository<Order>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
+        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _pms = new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor, _tenantAccessor);
         Bus = new RecordingCausedCommandBus();
         DelayQueue = new RecordingDelayQueue();

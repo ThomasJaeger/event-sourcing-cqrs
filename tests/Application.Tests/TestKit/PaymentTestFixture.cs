@@ -29,7 +29,7 @@ internal sealed class PaymentTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Payment>(Store, Accessor, new StubTenantAccessor());
+        Repository = new EventStoreRepository<Payment>(Store, Accessor, new StubTenantAccessor(), new StubCurrentVersions());
     }
 
     public async Task SeedAuthorizedAsync()

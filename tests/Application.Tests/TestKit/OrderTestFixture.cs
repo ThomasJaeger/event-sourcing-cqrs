@@ -28,25 +28,25 @@ internal sealed class OrderTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Order>(Store, Accessor, new StubTenantAccessor());
+        Repository = new EventStoreRepository<Order>(Store, Accessor, new StubTenantAccessor(), new StubCurrentVersions());
     }
 
     public async Task SeedDraftedAsync()
     {
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         await Repository.SaveAsync(order, CancellationToken.None);
     }
 
     public async Task SeedWithLineAsync()
     {
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
         await Repository.SaveAsync(order, CancellationToken.None);
     }
 
     public async Task SeedReadyToPlaceAsync()
     {
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
         order.SetShippingAddress(Shipping, At);
         await Repository.SaveAsync(order, CancellationToken.None);
@@ -54,7 +54,7 @@ internal sealed class OrderTestFixture
 
     public async Task SeedPlacedAsync()
     {
-        var order = Order.Draft(OrderId, CustomerId, At);
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
         order.AddLine(LineId1, "SKU-1", 2, TenUsd, At);
         order.SetShippingAddress(Shipping, At);
         order.Place(At);

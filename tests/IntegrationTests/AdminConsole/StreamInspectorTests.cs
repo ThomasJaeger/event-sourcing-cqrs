@@ -40,7 +40,7 @@ public class StreamInspectorTests : IClassFixture<AdminConsoleAdmitFixture>
             eventStore,
             stream,
             [
-                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime),
+                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime, "web"),
                 new OrderPlaced(orderId, Guid.NewGuid(), new Money(20m, Currency.USD), SeedTime.AddHours(1)),
             ],
             CancellationToken.None);

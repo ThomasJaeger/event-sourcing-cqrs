@@ -96,11 +96,11 @@ public class CorrelationTracerTests : IClassFixture<AdminConsoleAdmitFixture>
 
         await SeedAggregateAsync(eventStore, orderStream, correlationId, WellKnownTenants.Default,
             [
-                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime),
+                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime, "web"),
                 new OrderPlaced(orderId, Guid.NewGuid(), new Money(20m, Currency.USD), SeedTime.AddHours(1)),
             ]);
         await SeedAggregateAsync(eventStore, otherStream, correlationId, WellKnownTenants.Default,
-            [new OrderDrafted(otherOrderId, Guid.NewGuid(), SeedTime.AddHours(2))]);
+            [new OrderDrafted(otherOrderId, Guid.NewGuid(), SeedTime.AddHours(2), "web")]);
 
         var view = await tracer.TraceCorrelationAsync(correlationId.ToString(), CancellationToken.None);
 
@@ -171,9 +171,9 @@ public class CorrelationTracerTests : IClassFixture<AdminConsoleAdmitFixture>
         var otherStream = StreamId.ForAggregate<Order>(OtherTenant, otherOrderId);
 
         await SeedAggregateAsync(eventStore, defaultStream, correlationId, WellKnownTenants.Default,
-            [new OrderDrafted(defaultOrderId, Guid.NewGuid(), SeedTime)]);
+            [new OrderDrafted(defaultOrderId, Guid.NewGuid(), SeedTime, "web")]);
         await SeedAggregateAsync(eventStore, otherStream, correlationId, OtherTenant,
-            [new OrderDrafted(otherOrderId, Guid.NewGuid(), SeedTime.AddHours(1))]);
+            [new OrderDrafted(otherOrderId, Guid.NewGuid(), SeedTime.AddHours(1), "web")]);
 
         var view = await tracer.TraceCorrelationAsync(correlationId.ToString(), CancellationToken.None);
 
@@ -202,7 +202,7 @@ public class CorrelationTracerTests : IClassFixture<AdminConsoleAdmitFixture>
         var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
         await SeedAggregateAsync(eventStore, stream, correlationId, WellKnownTenants.Default,
             [
-                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime),
+                new OrderDrafted(orderId, Guid.NewGuid(), SeedTime, "web"),
                 new OrderPlaced(orderId, Guid.NewGuid(), new Money(20m, Currency.USD), SeedTime.AddHours(1)),
                 new OrderCancelled(orderId, "operator request", Guid.NewGuid(), SeedTime.AddHours(2)),
             ]);

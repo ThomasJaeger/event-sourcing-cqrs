@@ -31,7 +31,7 @@ public class OrderDetailProjectionTests
         var customerId = Guid.NewGuid();
 
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, customerId, At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, customerId, At, "web"), position: 1), CancellationToken.None);
 
         var header = (await store.GetHeaderAsync(orderId, CancellationToken.None))!;
         header.Status.Should().Be(OrderStatus.Draft);
@@ -48,7 +48,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderLineAdded(orderId, lineId, "SKU-1", 2, new Money(5m, Currency.USD), At),
@@ -72,7 +72,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
         await projection.HandleAsync(
             Context(new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(5m, Currency.USD), At),
                 position: 2),
@@ -94,7 +94,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         var address = new Address("12 Main St", "Portland", "97201", "US");
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new ShippingAddressSet(orderId, address, At), position: 2), CancellationToken.None);
@@ -112,7 +112,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(125m, Currency.USD), At),
@@ -134,7 +134,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderShipped(orderId, "UPS", "1Z999", At), position: 2), CancellationToken.None);
@@ -151,7 +151,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderCancelled(orderId, "out of stock", Guid.NewGuid(), At), position: 2),
@@ -169,7 +169,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderCompleted(orderId, At), position: 2), CancellationToken.None);
@@ -224,7 +224,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
 
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 7, occurredUtc: SystemAt),
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 7, occurredUtc: SystemAt),
             CancellationToken.None);
 
         var entry = (await store.GetTimelineAsync(orderId, CancellationToken.None)).Single();
@@ -256,7 +256,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         // The draft commits at position 10, so the checkpoint sits at 10.
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 10), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 10), CancellationToken.None);
 
         // OrderShipped redelivered at position 10 (at the checkpoint) returns early:
         // the status stays Draft and no second timeline entry is appended.
@@ -273,7 +273,7 @@ public class OrderDetailProjectionTests
         var store = new InMemoryOrderDetailStore();
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
-        var drafted = new OrderDrafted(orderId, Guid.NewGuid(), At);
+        var drafted = new OrderDrafted(orderId, Guid.NewGuid(), At, "web");
 
         await projection.HandleAsync(Context(drafted, position: 5), CancellationToken.None);
         await projection.HandleAsync(Context(drafted, position: 5), CancellationToken.None);
@@ -289,7 +289,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
         await projection.HandleAsync(
             Context(new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(5m, Currency.USD), At),
                 position: 2),
@@ -318,7 +318,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
 
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
         await projection.HandleAsync(
             Context(new OrderLineAdded(orderId, Guid.NewGuid(), "SKU-1", 1, new Money(5m, Currency.USD), At),
                 position: 2),
@@ -344,9 +344,9 @@ public class OrderDetailProjectionTests
         var order2 = Guid.NewGuid();
 
         await projection.HandleAsync(
-            Context(new OrderDrafted(order1, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(order1, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
         await projection.HandleAsync(
-            Context(new OrderDrafted(order2, Guid.NewGuid(), At), position: 2), CancellationToken.None);
+            Context(new OrderDrafted(order2, Guid.NewGuid(), At, "web"), position: 2), CancellationToken.None);
 
         (await store.GetTimelineAsync(order1, CancellationToken.None)).Should().ContainSingle();
         (await store.GetTimelineAsync(order2, CancellationToken.None)).Should().ContainSingle();
@@ -359,7 +359,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 10), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 10), CancellationToken.None);
 
         // A redelivered OrderLineAdded at position 10 returns early, so no line lands.
         await projection.HandleAsync(
@@ -414,7 +414,7 @@ public class OrderDetailProjectionTests
         var shipmentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
         await projection.HandleAsync(
             Context(new ShipmentScheduled(shipmentId, orderId, Addr, [], At), position: 2),
             CancellationToken.None);
@@ -539,7 +539,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         // No ShipmentScheduled recorded the mapping, so the return cannot resolve an
         // order; the header's returned_utc stays null and the checkpoint advances.
@@ -599,7 +599,7 @@ public class OrderDetailProjectionTests
         var orderId = Guid.NewGuid();
         // The draft commits at position 10, so the checkpoint sits at 10.
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 10), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 10), CancellationToken.None);
 
         // PaymentAuthorized redelivered at position 10 returns early, so the
         // payment-to-order mapping is never recorded.
@@ -619,7 +619,7 @@ public class OrderDetailProjectionTests
         var projection = Projection(store);
         var orderId = Guid.NewGuid();
         await projection.HandleAsync(
-            Context(new OrderDrafted(orderId, Guid.NewGuid(), At), position: 1), CancellationToken.None);
+            Context(new OrderDrafted(orderId, Guid.NewGuid(), At, "web"), position: 1), CancellationToken.None);
 
         await projection.HandleAsync(
             Context(new OrderPlaced(orderId, Guid.NewGuid(), new Money(125m, Currency.USD), At), position: 2),
@@ -646,7 +646,7 @@ public class OrderDetailProjectionTests
         // built inline here with the chosen tenant.
         var tenant = TenantId.From(Guid.Parse("55555555-5555-5555-5555-555555555555"));
         var context = new EventContext<OrderDrafted>(
-            new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), At),
+            new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), At, "web"),
             new EventMetadata(
                 EventId: Guid.NewGuid(),
                 CorrelationId: Guid.NewGuid(),

@@ -316,22 +316,22 @@ public sealed class HttpTransportParityTests : IClassFixture<ApiFixture>
         EventStoreSeed.AppendAsync(EventStore, stream, events);
 
     private Task SeedDraftedAsync(Guid id) =>
-        SeedAsync(OrderStream(id), new OrderDrafted(id, Guid.NewGuid(), Seed));
+        SeedAsync(OrderStream(id), new OrderDrafted(id, Guid.NewGuid(), Seed, "web"));
 
     private Task SeedDraftedWithLineAsync(Guid id, Guid lineId, string sku) =>
         SeedAsync(OrderStream(id),
-            new OrderDrafted(id, Guid.NewGuid(), Seed),
+            new OrderDrafted(id, Guid.NewGuid(), Seed, "web"),
             new OrderLineAdded(id, lineId, sku, 1, new Money(10m, Currency.USD), Seed));
 
     private Task SeedDraftLineAddressAsync(Guid id) =>
         SeedAsync(OrderStream(id),
-            new OrderDrafted(id, Guid.NewGuid(), Seed),
+            new OrderDrafted(id, Guid.NewGuid(), Seed, "web"),
             new OrderLineAdded(id, Guid.NewGuid(), "SKU-SEED", 1, new Money(10m, Currency.USD), Seed),
             new ShippingAddressSet(id, new Address("1 Seed St", "Seedville", "00000", "US"), Seed));
 
     private Task SeedPlacedAsync(Guid id) =>
         SeedAsync(OrderStream(id),
-            new OrderDrafted(id, Guid.NewGuid(), Seed),
+            new OrderDrafted(id, Guid.NewGuid(), Seed, "web"),
             new OrderLineAdded(id, Guid.NewGuid(), "SKU-SEED", 1, new Money(10m, Currency.USD), Seed),
             new ShippingAddressSet(id, new Address("1 Seed St", "Seedville", "00000", "US"), Seed),
             new OrderPlaced(id, Guid.NewGuid(), new Money(10m, Currency.USD), Seed));

@@ -213,7 +213,7 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(stream, 0,
         [
-            Envelope(stream, 1, new OrderDrafted(orderId, customerId, now), now),
+            Envelope(stream, 1, new OrderDrafted(orderId, customerId, now, "web"), now),
             Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 1, new Money(20m, Currency.USD), now), now),
             Envelope(stream, 3, new ShippingAddressSet(orderId, new Address("1 Main St", "Smalltown", "12345", "US"), now), now),
             orderPlaced,

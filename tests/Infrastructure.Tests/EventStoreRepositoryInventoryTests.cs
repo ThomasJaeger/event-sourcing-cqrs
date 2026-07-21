@@ -24,7 +24,7 @@ public class EventStoreRepositoryInventoryTests
     public async Task SaveAsync_then_LoadAsync_round_trip_returns_equivalent_aggregate()
     {
         var store = new InMemoryEventStore();
-        var repo = new EventStoreRepository<Inventory>(store, new StubAccessor(), new StubTenantAccessor());
+        var repo = new EventStoreRepository<Inventory>(store, new StubAccessor(), new StubTenantAccessor(), new StubCurrentVersions());
 
         var inventory = Inventory.Create(InventoryId, Sku, At);
         inventory.Adjust(100, "Initial stock", At);

@@ -21,10 +21,10 @@ public sealed class Order : AggregateRoot
     // Public for event-sourced rehydration. Use Order.Draft(...) to create a new order from a command.
     public Order() { }
 
-    public static Order Draft(Guid orderId, Guid customerId, DateTime utcNow)
+    public static Order Draft(Guid orderId, Guid customerId, DateTime utcNow, string channel)
     {
         var order = new Order();
-        order.Raise(new OrderDrafted(orderId, customerId, utcNow));
+        order.Raise(new OrderDrafted(orderId, customerId, utcNow, channel));
         return order;
     }
 

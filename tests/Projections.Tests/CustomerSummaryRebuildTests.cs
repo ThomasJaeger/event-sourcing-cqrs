@@ -126,7 +126,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamA, 0,
         [
-            Env(streamA, 1, new OrderDrafted(orderA, cust1, BaseTime)),
+            Env(streamA, 1, new OrderDrafted(orderA, cust1, BaseTime, "web")),
             Env(streamA, 2, new OrderLineAdded(
                 orderA, Guid.NewGuid(), "SKU-A", 1, new Money(50m, Currency.USD), BaseTime)),
             Env(streamA, 3, new OrderPlaced(
@@ -135,7 +135,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamB, 0,
         [
-            Env(streamB, 1, new OrderDrafted(orderB, cust1, BaseTime)),
+            Env(streamB, 1, new OrderDrafted(orderB, cust1, BaseTime, "web")),
             Env(streamB, 2, new OrderLineAdded(
                 orderB, Guid.NewGuid(), "SKU-B", 1, new Money(30m, Currency.USD), BaseTime)),
             Env(streamB, 3, new OrderPlaced(
@@ -144,7 +144,7 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
 
         await eventStore.AppendAsync(streamC, 0,
         [
-            Env(streamC, 1, new OrderDrafted(orderC, cust2, BaseTime)),
+            Env(streamC, 1, new OrderDrafted(orderC, cust2, BaseTime, "web")),
             Env(streamC, 2, new OrderLineAdded(
                 orderC, Guid.NewGuid(), "SKU-C", 1, new Money(99m, Currency.USD), BaseTime)),
             Env(streamC, 3, new OrderPlaced(

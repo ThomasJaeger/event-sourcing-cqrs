@@ -45,7 +45,7 @@ internal sealed class ReturnProcessManagerTestHarness
 
     public ReturnProcessManagerTestHarness()
     {
-        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor);
+        _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _pms = new ProcessManagerRepository<ReturnProcessManager>(_store, _accessor, _tenantAccessor);
         Bus = new RecordingCausedCommandBus();
         _handler = new ReturnProcessManagerHandler(Bus, _pms, _shipments, _skuLookup, _paymentLookup);

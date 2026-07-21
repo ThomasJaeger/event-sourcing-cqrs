@@ -12,6 +12,13 @@ internal sealed class StubTenantAccessor : ICurrentTenantAccessor
     public TenantId? Current { get; set; }
 }
 
+// Reports every event at version 1, the pre-lineage default. These tests build stores without an
+// upcaster, so the current version of everything they write is 1.
+internal sealed class StubCurrentVersions : ICurrentEventSchemaVersions
+{
+    public int CurrentVersionFor(string storageName) => 1;
+}
+
 internal sealed class StubContext : ICommandContext
 {
     public Guid CorrelationId { get; init; } = Guid.Empty;

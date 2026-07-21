@@ -85,6 +85,11 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<EventTypeRegistry>(),
             sp.GetServices<IEventUpcaster>()));
 
+        // The write path stamps events at their current schema version through this port, forwarded to
+        // the pipeline so the version written and the version read back come from one topology.
+        services.TryAddSingleton<ICurrentEventSchemaVersions>(
+            sp => sp.GetRequiredService<EventUpcasterPipeline>());
+
         // PM event types resolve through a separate registry (ADR 0013).
         services.TryAddSingleton<ProcessManagerEventTypeRegistry>(sp =>
         {

@@ -19,13 +19,18 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
     private readonly IEventStore _store;
     private readonly ICommandContextAccessor _accessor;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly ICurrentEventSchemaVersions _currentVersions;
 
     public EventStoreRepository(
-        IEventStore store, ICommandContextAccessor accessor, ICurrentTenantAccessor tenantAccessor)
+        IEventStore store,
+        ICommandContextAccessor accessor,
+        ICurrentTenantAccessor tenantAccessor,
+        ICurrentEventSchemaVersions currentVersions)
     {
         _store = store;
         _accessor = accessor;
         _tenantAccessor = tenantAccessor;
+        _currentVersions = currentVersions;
     }
 
     public async Task<TAggregate?> LoadAsync(Guid id, CancellationToken ct)
@@ -108,7 +113,10 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
                 StreamVersion: baseVersion + i + 1,
                 EventId: metadata.EventId,
                 EventType: @event.GetType().Name,
-                EventVersion: 1,
+                // Stamp the current schema version so a read resolves the terminal shape directly. A
+                // literal 1 lied once a type gained a lineage: the read then took a current-shape row
+                // for a v1 row and walked it back through the upcaster.
+                EventVersion: _currentVersions.CurrentVersionFor(@event.GetType().Name),
                 Payload: @event,
                 Metadata: metadata,
                 OccurredUtc: metadata.OccurredUtc,

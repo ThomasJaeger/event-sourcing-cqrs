@@ -144,7 +144,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
         await eventStore.AppendAsync(stream, 0,
         [
-            Env(stream, 1, new OrderDrafted(orderId, customerId, BaseTime)),
+            Env(stream, 1, new OrderDrafted(orderId, customerId, BaseTime, "web")),
             Env(stream, 2, placed),
         ], CancellationToken.None);
 
@@ -212,7 +212,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         // Order A populate (positions 1-8).
         await eventStore.AppendAsync(streamOA, 0,
         [
-            Env(streamOA, 1, new OrderDrafted(orderA, custA, BaseTime)),
+            Env(streamOA, 1, new OrderDrafted(orderA, custA, BaseTime, "web")),
             Env(streamOA, 2, new OrderLineAdded(orderA, a1, "SKU-A1", 1, money, BaseTime)),
             Env(streamOA, 3, new OrderLineRemoved(orderA, a1, BaseTime)),
             Env(streamOA, 4, new OrderLineAdded(orderA, a2, "SKU-A2", 2, money, BaseTime)),
@@ -231,7 +231,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         // Order B full (positions 9-16): cancelled, returned, refunded.
         await eventStore.AppendAsync(streamOB, 0,
         [
-            Env(streamOB, 1, new OrderDrafted(orderB, custB, BaseTime)),
+            Env(streamOB, 1, new OrderDrafted(orderB, custB, BaseTime, "web")),
             Env(streamOB, 2, new OrderLineAdded(orderB, b1, "SKU-B1", 1, money, BaseTime)),
             Env(streamOB, 3, new OrderPlaced(orderB, custB, money, BaseTime.AddHours(1))),
             Env(streamOB, 4, new OrderCancelled(orderB, "out of stock", Guid.NewGuid(), BaseTime.AddHours(2))),
@@ -265,7 +265,7 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         // Order C (positions 21-24): shipped terminal.
         await eventStore.AppendAsync(streamOC, 0,
         [
-            Env(streamOC, 1, new OrderDrafted(orderC, custC, BaseTime)),
+            Env(streamOC, 1, new OrderDrafted(orderC, custC, BaseTime, "web")),
             Env(streamOC, 2, new OrderLineAdded(orderC, c1, "SKU-C1", 1, money, BaseTime)),
             Env(streamOC, 3, new OrderPlaced(orderC, custC, money, BaseTime.AddHours(1))),
             Env(streamOC, 4, new OrderShipped(orderC, "UPS", "1Z-C", BaseTime.AddHours(2))),

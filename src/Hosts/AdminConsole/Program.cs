@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Access;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Hosts.AdminConsole;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
@@ -149,6 +150,9 @@ builder.Services.AddSingleton<ProjectionLagReader>();
 // history can span every context and ReadAllForTenantAsync throws on any unregistered type. The tenant
 // accessor and the notification publisher are the throughput store's remaining dependencies.
 builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
+// The OrderDrafted version-1 lineage's upcaster, composed into the pipeline beside its event types
+// (Chapter 11: Upcasting).
+builder.Services.AddSingleton<IEventUpcaster, OrderDraftedV1ToV2>();
 builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();

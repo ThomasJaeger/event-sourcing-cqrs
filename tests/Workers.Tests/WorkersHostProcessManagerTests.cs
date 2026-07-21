@@ -53,7 +53,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
             var eventStore = host.Services.GetRequiredService<IEventStore>();
             await eventStore.AppendAsync(stream, 0,
             [
-                Envelope(stream, 1, new OrderDrafted(orderId, customerId, now), now),
+                Envelope(stream, 1, new OrderDrafted(orderId, customerId, now, "web"), now),
                 Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 2, new Money(10m, Currency.USD), now), now),
                 Envelope(stream, 3, new ShippingAddressSet(orderId, Address(), now), now),
                 Envelope(stream, 4, new OrderPlaced(orderId, customerId, new Money(20m, Currency.USD), now), now),
@@ -144,7 +144,7 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
             var eventStore = host.Services.GetRequiredService<IEventStore>();
             await eventStore.AppendAsync(stream, 0,
             [
-                Envelope(stream, 1, new OrderDrafted(orderId, customerId, now), now, correlationId),
+                Envelope(stream, 1, new OrderDrafted(orderId, customerId, now, "web"), now, correlationId),
                 Envelope(stream, 2, new OrderLineAdded(orderId, lineId, "SKU-1", 2, new Money(10m, Currency.USD), now), now, correlationId),
                 Envelope(stream, 3, new ShippingAddressSet(orderId, Address(), now), now, correlationId),
                 orderPlaced,
