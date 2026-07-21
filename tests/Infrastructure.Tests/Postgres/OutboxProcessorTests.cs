@@ -50,6 +50,23 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Dispatched_message_carries_the_stored_event_version()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var time = new FakeTimeProvider(BaseTime);
+        var dispatcher = new RecordingDispatcher();
+        var processor = BuildProcessor(dataSource, dispatcher, time);
+        await SeedOutboxRowAsync(
+            dataSource, Guid.NewGuid(), new TestPayload(Guid.NewGuid(), 1m), globalPosition: 1);
+
+        await processor.ProcessBatchAsync(CancellationToken.None);
+
+        dispatcher.Received.Should().ContainSingle();
+        dispatcher.Received[0].EventVersion.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Empty_outbox_returns_zero_and_does_not_call_dispatcher()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();

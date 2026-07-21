@@ -108,11 +108,13 @@ public sealed class PostgresEventStore : IEventStore
                     insertOutbox.Transaction = transaction;
                     insertOutbox.CommandText =
                         "INSERT INTO event_store.outbox " +
-                        "(event_id, event_type, payload, metadata, occurred_utc, global_position) " +
-                        "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, " +
-                        "@global_position)";
+                        "(event_id, event_type, event_version, payload, metadata, occurred_utc, " +
+                        "global_position) " +
+                        "VALUES (@event_id, @event_type, @event_version, @payload, @metadata, " +
+                        "@occurred_utc, @global_position)";
                     AddUuid(insertOutbox, "event_id", envelope.EventId);
                     AddText(insertOutbox, "event_type", eventTypeName);
+                    AddSmallInt(insertOutbox, "event_version", (short)envelope.EventVersion);
                     AddJsonb(insertOutbox, "payload", payloadJson);
                     AddJsonb(insertOutbox, "metadata", metadataJson);
                     AddTimestampTz(insertOutbox, "occurred_utc", envelope.OccurredUtc);

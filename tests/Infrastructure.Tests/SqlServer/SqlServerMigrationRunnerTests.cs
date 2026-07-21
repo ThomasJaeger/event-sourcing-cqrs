@@ -46,13 +46,15 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
         log.Should().Contain("Applying 0002 add_outbox.");
         log.Should().Contain("Applying 0003 add_command_idempotency.");
         log.Should().Contain("Applying 0004 add_delayed_commands.");
-        log.Should().Contain("Applied 4 migration(s).");
+        log.Should().Contain("Applying 0005 add_outbox_event_version.");
+        log.Should().Contain("Applied 5 migration(s).");
 
         var rows = await ReadTrackingTableAsync(connStr);
-        rows.Should().HaveCount(4);
-        rows.Select(r => r.Version).Should().Equal(1, 2, 3, 4);
+        rows.Should().HaveCount(5);
+        rows.Select(r => r.Version).Should().Equal(1, 2, 3, 4, 5);
         rows.Select(r => r.Name).Should().Equal(
-            "initial_event_store", "add_outbox", "add_command_idempotency", "add_delayed_commands");
+            "initial_event_store", "add_outbox", "add_command_idempotency", "add_delayed_commands",
+            "add_outbox_event_version");
         rows.Should().OnlyContain(r => System.Text.RegularExpressions.Regex.IsMatch(
             r.Checksum, "^[0-9a-f]{64}$"));
     }
@@ -68,7 +70,7 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
             CancellationToken.None);
 
         log.Should().Contain("No pending migrations.");
-        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(4);
+        (await ReadTrackingTableAsync(connStr)).Should().HaveCount(5);
     }
 
     [Fact]

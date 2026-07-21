@@ -177,7 +177,7 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
     {
         await using var cmd = new SqlCommand(
             "SELECT TOP (@batch_size) outbox_id, event_id, event_type, payload, metadata, " +
-            "attempt_count, global_position " +
+            "attempt_count, global_position, event_version " +
             "FROM event_store.outbox WITH (UPDLOCK, READPAST, ROWLOCK) " +
             "WHERE sent_utc IS NULL " +
             "  AND (next_attempt_at IS NULL OR next_attempt_at <= @now) " +
@@ -198,7 +198,8 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
                 PayloadJson: reader.GetString(3),
                 MetadataJson: reader.GetString(4),
                 AttemptCount: reader.GetInt32(5),
-                GlobalPosition: reader.GetInt64(6)));
+                GlobalPosition: reader.GetInt64(6),
+                EventVersion: reader.GetInt16(7)));
         }
         return rows;
     }
@@ -213,6 +214,7 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
             OutboxId: row.OutboxId,
             EventId: row.EventId,
             EventType: row.EventType,
+            EventVersion: row.EventVersion,
             Event: payload,
             Metadata: metadata,
             GlobalPosition: row.GlobalPosition,
@@ -273,12 +275,12 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
     {
         await using var cmd = new SqlCommand(
             "DELETE FROM event_store.outbox " +
-            "OUTPUT DELETED.outbox_id, DELETED.event_id, DELETED.event_type, DELETED.payload, " +
-            "       DELETED.metadata, DELETED.occurred_utc, DELETED.attempt_count, " +
-            "       DELETED.last_error, @now " +
+            "OUTPUT DELETED.outbox_id, DELETED.event_id, DELETED.event_type, " +
+            "       DELETED.event_version, DELETED.payload, DELETED.metadata, " +
+            "       DELETED.occurred_utc, DELETED.attempt_count, DELETED.last_error, @now " +
             "  INTO event_store.outbox_quarantine " +
-            "       (outbox_id, event_id, event_type, payload, metadata, occurred_utc, " +
-            "        attempt_count, final_error, quarantined_at) " +
+            "       (outbox_id, event_id, event_type, event_version, payload, metadata, " +
+            "        occurred_utc, attempt_count, final_error, quarantined_at) " +
             "WHERE outbox_id = @outbox_id",
             connection,
             transaction);
@@ -309,5 +311,6 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         string PayloadJson,
         string MetadataJson,
         int AttemptCount,
-        long GlobalPosition);
+        long GlobalPosition,
+        int EventVersion);
 }

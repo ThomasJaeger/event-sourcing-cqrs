@@ -71,6 +71,7 @@ internal static class KurrentEventHydration
             OutboxId: globalPosition,
             EventId: record.EventId.ToGuid(),
             EventType: record.EventType,
+            EventVersion: stored.EventVersion,
             Event: DeserializeDomainEvent(record.EventType, record.Data, streamId, registry, jsonOptions),
             Metadata: stored.Metadata,
             GlobalPosition: globalPosition,

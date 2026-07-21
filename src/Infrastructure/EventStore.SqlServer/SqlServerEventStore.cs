@@ -114,13 +114,15 @@ public sealed class SqlServerEventStore : IEventStore
                 // attempt_count defaults to 0. Only the NOT NULL columns appear here.
                 await using var insertOutbox = new SqlCommand(
                     "INSERT INTO event_store.outbox " +
-                    "(event_id, event_type, payload, metadata, occurred_utc, global_position) " +
-                    "VALUES (@event_id, @event_type, @payload, @metadata, @occurred_utc, " +
-                    "@global_position)",
+                    "(event_id, event_type, event_version, payload, metadata, occurred_utc, " +
+                    "global_position) " +
+                    "VALUES (@event_id, @event_type, @event_version, @payload, @metadata, " +
+                    "@occurred_utc, @global_position)",
                     connection,
                     transaction);
                 AddUuid(insertOutbox, "event_id", envelope.EventId);
                 AddIdentifier(insertOutbox, "event_type", eventTypeName);
+                AddSmallInt(insertOutbox, "event_version", (short)envelope.EventVersion);
                 AddJson(insertOutbox, "payload", payloadJson);
                 AddJson(insertOutbox, "metadata", metadataJson);
                 AddDateTimeOffset(insertOutbox, "occurred_utc", envelope.OccurredUtc);

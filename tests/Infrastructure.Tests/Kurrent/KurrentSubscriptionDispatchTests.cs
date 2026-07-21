@@ -196,6 +196,35 @@ public class KurrentSubscriptionDispatchTests
         }
     }
 
+    // Reach: pure ResolvedEvent construction has no precedent on disk (EventRecord is constructed
+    // nowhere in src or tests, so the Kurrent adapter's own tests are all container-backed). Per
+    // TDD_RULES section 3 the reach is option 1, the existing injected harness: the subscription
+    // service calls ToOutboxMessage, and the recording dispatcher observes the carry-through.
+    [Fact]
+    public async Task Dispatched_message_carries_the_stored_event_version()
+    {
+        await using var harness = await KurrentSubscriptionHarness.CreateAsync(_kurrent, _postgres);
+        var stream = ContractEnvelopes.NewStreamId();
+        await harness.Store.AppendAsync(stream, 0,
+            [ContractEnvelopes.Build(stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 1m))],
+            CancellationToken.None);
+
+        var dispatcher = new KurrentRecordingDispatcher();
+        var service = harness.CreateService(dispatcher);
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        try
+        {
+            var received = await PollForDispatchedAsync(dispatcher, 1);
+            received.Should().ContainSingle();
+            received[0].EventVersion.Should().Be(1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task<IReadOnlyList<OutboxMessage>> PollForDispatchedAsync(
         KurrentRecordingDispatcher dispatcher, int expected)
     {

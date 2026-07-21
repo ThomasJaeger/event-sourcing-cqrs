@@ -144,6 +144,7 @@ public class AdminConsoleThroughputRebuildCompositionTests : IClassFixture<Admin
             OutboxId: envelope.GlobalPosition,
             EventId: envelope.EventId,
             EventType: envelope.EventType,
+            EventVersion: envelope.EventVersion,
             Event: envelope.Payload,
             Metadata: envelope.Metadata,
             GlobalPosition: envelope.GlobalPosition,

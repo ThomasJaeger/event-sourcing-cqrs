@@ -284,6 +284,19 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         (await ReadOutboxAsync(connStr))[0].SentUtc.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task Dispatched_message_carries_the_stored_event_version()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await AppendOneAsync(connStr);
+        var dispatcher = new SqlServerRecordingDispatcher();
+
+        await NewProcessor(connStr, dispatcher).ProcessBatchAsync(CancellationToken.None);
+
+        dispatcher.Received.Should().ContainSingle();
+        dispatcher.Received[0].EventVersion.Should().Be(1);
+    }
+
     private static SqlServerEventStore NewStore(string connStr)
         => new(
             new SqlServerConnectionFactory(connStr),

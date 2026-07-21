@@ -322,7 +322,7 @@ public sealed class OutboxProcessor : BackgroundService
         cmd.Transaction = transaction;
         cmd.CommandText =
             "SELECT outbox_id, event_id, event_type, payload, metadata, attempt_count, " +
-            "global_position " +
+            "global_position, event_version " +
             "FROM event_store.outbox " +
             "WHERE sent_utc IS NULL " +
             "  AND (next_attempt_at IS NULL OR next_attempt_at <= @now) " +
@@ -343,7 +343,8 @@ public sealed class OutboxProcessor : BackgroundService
                 PayloadJson: reader.GetString(3),
                 MetadataJson: reader.GetString(4),
                 AttemptCount: reader.GetInt32(5),
-                GlobalPosition: reader.GetInt64(6)));
+                GlobalPosition: reader.GetInt64(6),
+                EventVersion: reader.GetInt16(7)));
         }
         return rows;
     }
@@ -358,6 +359,7 @@ public sealed class OutboxProcessor : BackgroundService
             OutboxId: row.OutboxId,
             EventId: row.EventId,
             EventType: row.EventType,
+            EventVersion: row.EventVersion,
             Event: payload,
             Metadata: metadata,
             GlobalPosition: row.GlobalPosition,
@@ -427,13 +429,13 @@ public sealed class OutboxProcessor : BackgroundService
             "WITH moved AS ( " +
             "  DELETE FROM event_store.outbox " +
             "  WHERE outbox_id = @outbox_id " +
-            "  RETURNING outbox_id, event_id, event_type, payload, metadata, " +
+            "  RETURNING outbox_id, event_id, event_type, event_version, payload, metadata, " +
             "            occurred_utc, attempt_count, last_error " +
             ") " +
             "INSERT INTO event_store.outbox_quarantine " +
-            "  (outbox_id, event_id, event_type, payload, metadata, " +
+            "  (outbox_id, event_id, event_type, event_version, payload, metadata, " +
             "   occurred_utc, attempt_count, final_error, quarantined_at) " +
-            "SELECT outbox_id, event_id, event_type, payload, metadata, " +
+            "SELECT outbox_id, event_id, event_type, event_version, payload, metadata, " +
             "       occurred_utc, attempt_count, last_error, @now " +
             "FROM moved";
         AddBigInt(cmd, "outbox_id", outboxId);
@@ -468,5 +470,6 @@ public sealed class OutboxProcessor : BackgroundService
         string PayloadJson,
         string MetadataJson,
         int AttemptCount,
-        long GlobalPosition);
+        long GlobalPosition,
+        int EventVersion);
 }

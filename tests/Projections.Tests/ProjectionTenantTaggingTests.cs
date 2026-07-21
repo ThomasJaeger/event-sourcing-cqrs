@@ -435,6 +435,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             OutboxId: envelope.GlobalPosition,
             EventId: envelope.EventId,
             EventType: envelope.EventType,
+            EventVersion: envelope.EventVersion,
             Event: envelope.Payload,
             Metadata: envelope.Metadata,
             GlobalPosition: envelope.GlobalPosition,
