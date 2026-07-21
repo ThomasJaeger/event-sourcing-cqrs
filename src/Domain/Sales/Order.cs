@@ -4,7 +4,7 @@ using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Domain.Sales;
 
-public sealed class Order : AggregateRoot
+public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
 {
     private readonly List<OrderLine> _lines = [];
     private OrderStatus _status;
@@ -165,5 +165,24 @@ public sealed class Order : AggregateRoot
                 throw new InvalidOperationException(
                     $"Order does not handle event type {@event.GetType().Name}.");
         }
+    }
+
+    // The snapshot seam (Chapter 12). Capture takes a defensive copy of the lines, so the memento does
+    // not alias the live list and a later command on this order leaves the snapshot alone.
+    public OrderSnapshot ToSnapshot()
+        => new(Id, _customerId, _status, [.. _lines], _shippingAddress);
+
+    // Restore seats a pristine order at the snapshot's state and version. RestoreVersion runs first and
+    // guards against a non-pristine instance, so a rejected restore mutates nothing; the lines copy
+    // into this order's own list rather than aliasing the snapshot's.
+    public void RestoreFrom(OrderSnapshot snapshot, int version)
+    {
+        RestoreVersion(version);
+        Id = snapshot.OrderId;
+        _customerId = snapshot.CustomerId;
+        _status = snapshot.Status;
+        _lines.Clear();
+        _lines.AddRange(snapshot.Lines);
+        _shippingAddress = snapshot.ShippingAddress;
     }
 }
