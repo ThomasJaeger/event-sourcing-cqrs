@@ -169,7 +169,6 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
     /EventStore.DynamoDb
     /ReadModels.Postgres
     /Outbox
-    /Snapshots
     /Versioning
   /Hosts
     /Web                // Blazor Server
