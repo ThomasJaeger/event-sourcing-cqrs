@@ -1,0 +1,49 @@
+# Chapter 18 migration-patterns demo. Local development only, and standalone from
+# docker/docker-compose.yml: this file stands up its own PostgreSQL so the demo can run
+# beside the reference system rather than inside it.
+#
+# The credentials below are dev-only defaults baked into this compose file, matching the
+# convention in docker/docker-compose.yml. Do not reuse this configuration for any other
+# environment. Production deployment is out of scope for this repository.
+#
+# Host port 5433 keeps this instance clear of the main compose's 5432, so both can be up
+# at once.
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: esrcq-migration-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: esrcq
+      POSTGRES_PASSWORD: esrcq
+      POSTGRES_DB: legacy
+    volumes:
+      - migration-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esrcq -d legacy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  demo:
+    # Build context is the repository root, not this directory. Migration.Demo references
+    # src/Domain, src/Application, and src/Infrastructure/EventStore.Postgres, so the SDK
+    # build stage needs the whole src tree in scope. The Dockerfile path is therefore
+    # repo-relative.
+    build:
+      context: ../..
+      dockerfile: src/Migration/Dockerfile
+    container_name: esrcq-migration-demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Two databases on one instance: the CRUD-shaped source and the event store the
+      # patterns write into. POSTGRES_DB creates only the first, so the eventstore
+      # database is created by the demo when the scenario code lands.
+      LEGACY_CONNECTION_STRING: "Host=postgres;Port=5432;Database=legacy;Username=esrcq;Password=esrcq"
+      EVENT_STORE_CONNECTION_STRING: "Host=postgres;Port=5432;Database=eventstore;Username=esrcq;Password=esrcq"
+
+volumes:
+  migration-postgres-data:

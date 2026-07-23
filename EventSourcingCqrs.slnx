@@ -20,6 +20,7 @@
     <Project Path="src/Hosts/Api/Hosts.Api.csproj" />
     <Project Path="src/Hosts/Web/Hosts.Web.csproj" />
     <Project Path="src/Hosts/AdminConsole/Hosts.AdminConsole.csproj" />
+    <Project Path="src/Migration/Migration.Demo/Migration.Demo.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Application.Tests/Application.Tests.csproj" />
@@ -34,5 +35,6 @@
     <Project Path="tests/Hosts.Web.Tests/Hosts.Web.Tests.csproj" />
     <Project Path="tests/Hosts.AdminConsole.Tests/Hosts.AdminConsole.Tests.csproj" />
     <Project Path="tests/PropertyTests/PropertyTests.csproj" />
+    <Project Path="tests/Migration.Tests/Migration.Tests.csproj" />
   </Folder>
 </Solution>
