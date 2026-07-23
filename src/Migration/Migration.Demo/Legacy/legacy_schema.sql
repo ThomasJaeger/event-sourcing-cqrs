@@ -63,3 +63,18 @@ DROP TRIGGER IF EXISTS trg_orders_record_change ON legacy.orders;
 CREATE TRIGGER trg_orders_record_change
     AFTER INSERT OR UPDATE OR DELETE ON legacy.orders
     FOR EACH ROW EXECUTE FUNCTION legacy.record_change();
+
+-- The CDC reader's cursor: the highest change_id it has processed. One row, pinned to id = 1 by the
+-- check, holds the high-water mark. The reader is at-least-once: it advances this only after the
+-- events for a batch are appended, so a crash between the two replays the batch rather than dropping
+-- it, and the append side does not dedupe a replay.
+CREATE TABLE IF NOT EXISTS legacy.cdc_checkpoint (
+    id             INT     NOT NULL,
+    last_change_id BIGINT  NOT NULL,
+    CONSTRAINT pk_cdc_checkpoint       PRIMARY KEY (id),
+    CONSTRAINT ck_cdc_checkpoint_row   CHECK (id = 1)
+);
+
+INSERT INTO legacy.cdc_checkpoint (id, last_change_id)
+VALUES (1, 0)
+ON CONFLICT (id) DO NOTHING;

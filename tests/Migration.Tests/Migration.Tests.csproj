@@ -8,10 +8,12 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Infrastructure\Migrations.Postgres\Migrations.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Migration\Migration.Demo\Migration.Demo.csproj" />
   </ItemGroup>
 </Project>
