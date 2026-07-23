@@ -4,6 +4,9 @@
     <RootNamespace>EventSourcingCqrs.Migration.Demo</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Legacy\legacy_schema.sql" LogicalName="Migration.Demo.Legacy.%(FileName)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\Domain\Domain.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />
