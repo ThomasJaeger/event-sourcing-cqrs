@@ -1,7 +1,9 @@
+using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Migration.Demo.Legacy;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -66,7 +68,9 @@ public sealed class CdcDatabaseFixture : IAsyncLifetime
         return new CdcTestContext(
             legacyConnectionString,
             provider.GetRequiredService<IEventStore>(),
-            provider.GetRequiredService<ICurrentEventSchemaVersions>());
+            provider.GetRequiredService<ICurrentEventSchemaVersions>(),
+            provider.GetRequiredService<EventTypeRegistry>(),
+            provider.GetRequiredService<JsonSerializerOptions>());
     }
 
     private async Task<string> CreateDatabaseAsync(string databaseName)
@@ -87,4 +91,6 @@ public sealed class CdcDatabaseFixture : IAsyncLifetime
 public sealed record CdcTestContext(
     string LegacyConnectionString,
     IEventStore EventStore,
-    ICurrentEventSchemaVersions SchemaVersions);
+    ICurrentEventSchemaVersions SchemaVersions,
+    EventTypeRegistry EventTypes,
+    JsonSerializerOptions JsonOptions);

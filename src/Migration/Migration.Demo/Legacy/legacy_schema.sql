@@ -78,3 +78,18 @@ CREATE TABLE IF NOT EXISTS legacy.cdc_checkpoint (
 INSERT INTO legacy.cdc_checkpoint (id, last_change_id)
 VALUES (1, 0)
 ON CONFLICT (id) DO NOTHING;
+
+-- The legacy outbox. Unlike legacy_changes, which a trigger fills from the row image after the fact,
+-- the application writes here on purpose inside its own CRUD transaction: it already knows the
+-- business event, so it stores the serialized domain event rather than the raw row. The emitter
+-- drains this into the event store. emitted_utc NULL means pending; the emitter stamps it after the
+-- append, so the drain is at-least-once (a crash between append and stamp redrains and re-appends).
+CREATE TABLE IF NOT EXISTS legacy.legacy_outbox (
+    outbox_id    BIGSERIAL    NOT NULL,
+    aggregate_id UUID         NOT NULL,
+    type_name    TEXT         NOT NULL,
+    payload      JSONB        NOT NULL,
+    occurred_utc TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    emitted_utc  TIMESTAMPTZ  NULL,
+    CONSTRAINT pk_legacy_outbox PRIMARY KEY (outbox_id)
+);

@@ -5,10 +5,11 @@ using Npgsql;
 namespace EventSourcingCqrs.Migration.Demo.Cdc;
 
 // Chapter 18: the CDC reader. It reads pending rows from legacy.legacy_changes past its checkpoint,
-// translates each to domain events, appends them to the event store keyed by the order's stream, and
-// then advances the checkpoint. It is at-least-once: the checkpoint advances only after the appends
-// commit, so a crash between the two replays the batch. The append side does not dedupe, so a replay
-// re-emits, which the demo accepts as the cost of the simpler cursor.
+// translates each to domain events, appends them to the event store keyed by the order's stream
+// through the shared EventStreamAppender, and then advances the checkpoint. It is at-least-once: the
+// checkpoint advances only after the appends commit, so a crash between the two replays the batch. The
+// append side does not dedupe, so a replay re-emits, which the demo accepts as the cost of the simpler
+// cursor.
 public sealed class CdcReader
 {
     // Lands in EventMetadata.Source so a stored event names the CDC reader as its writer.
@@ -40,9 +41,16 @@ public sealed class CdcReader
             return;
         }
 
+        var appender = new EventStreamAppender(_eventStore, _schemaVersions);
         foreach (var group in Translate(changes).GroupBy(e => e.OrderId))
         {
-            await AppendStreamAsync(group.Key, group.ToList(), cancellationToken);
+            var streamId = StreamId.ForAggregate<Order>(
+                WellKnownTenants.Default, LegacyChangeTranslator.OrderIdFor(group.Key));
+            var events = group
+                .Select(p => new AppendedEvent(p.Event, p.CorrelationId, p.OccurredUtc))
+                .ToList();
+            await appender.AppendAsync(
+                streamId, events, Source, LegacyChangeTranslator.SystemActorId, cancellationToken);
         }
 
         // After the appends, not before: a crash here replays the batch rather than skipping it.
@@ -72,50 +80,6 @@ public sealed class CdcReader
         }
 
         return pending;
-    }
-
-    private async Task AppendStreamAsync(
-        long legacyOrderId, IReadOnlyList<PendingEvent> events, CancellationToken ct)
-    {
-        var streamId = StreamId.ForAggregate<Order>(
-            WellKnownTenants.Default, LegacyChangeTranslator.OrderIdFor(legacyOrderId));
-
-        // The append contract enforces optimistic concurrency on (stream_id, stream_version), so the
-        // caller numbers versions off the stream's current tail and passes it as the expected version.
-        var existing = await _eventStore.ReadStreamAsync(streamId, 0, ct);
-        var baseVersion = existing.Count == 0 ? 0 : existing[^1].StreamVersion;
-
-        var envelopes = new List<EventEnvelope>(events.Count);
-        for (var i = 0; i < events.Count; i++)
-        {
-            envelopes.Add(BuildEnvelope(streamId, baseVersion + i + 1, events[i]));
-        }
-
-        await _eventStore.AppendAsync(streamId, baseVersion, envelopes, ct);
-    }
-
-    private EventEnvelope BuildEnvelope(StreamId streamId, int streamVersion, PendingEvent pending)
-    {
-        var metadata = new EventMetadata(
-            EventId: Guid.NewGuid(),
-            CorrelationId: pending.CorrelationId,
-            CausationId: Guid.Empty,
-            ActorId: LegacyChangeTranslator.SystemActorId,
-            Source: Source,
-            SchemaVersion: 1,
-            OccurredUtc: pending.OccurredUtc,
-            Tenant: WellKnownTenants.Default);
-
-        return new EventEnvelope(
-            StreamId: streamId,
-            StreamVersion: streamVersion,
-            EventId: metadata.EventId,
-            EventType: pending.Event.GetType().Name,
-            EventVersion: _schemaVersions.CurrentVersionFor(pending.Event.GetType().Name),
-            Payload: pending.Event,
-            Metadata: metadata,
-            OccurredUtc: metadata.OccurredUtc,
-            GlobalPosition: 0);
     }
 
     private static async Task<long> ReadCheckpointAsync(NpgsqlConnection connection, CancellationToken ct)
