@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Domain.Abstractions\Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Versioning\Versioning.csproj" />
+    <ProjectReference Include="..\..\src\Migration\Migration.Demo\Migration.Demo.csproj" />
   </ItemGroup>
 </Project>
