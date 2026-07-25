@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
@@ -6,6 +7,8 @@ using EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Migration.Demo.Legacy;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -59,9 +62,19 @@ public sealed class CdcDatabaseFixture : IAsyncLifetime
                 new MigrationRunnerOptions { ConnectionString = eventStoreConnectionString },
                 CancellationToken.None);
 
+        // The demo's composition root, arriving early: this is the event-sourced application side the
+        // strangler routes to (Option A), and S6's Program.cs reuses the shape. AddApplication brings
+        // the command bus, pipeline, handlers, and the Order snapshotting repository; the snapshot and
+        // idempotency stores are the two ports that repository and the pipeline need beyond the event
+        // store, both against the same event-store database, which already carries their tables. Logging
+        // resolves to NullLogger since only Logging.Abstractions is on the pin.
         var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
         services.AddPostgresEventStore(options => options.ConnectionString = eventStoreConnectionString);
+        services.AddPostgresSnapshotStore(eventStoreConnectionString);
+        services.AddPostgresIdempotencyStore(eventStoreConnectionString);
+        services.AddApplication();
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 
@@ -70,7 +83,8 @@ public sealed class CdcDatabaseFixture : IAsyncLifetime
             provider.GetRequiredService<IEventStore>(),
             provider.GetRequiredService<ICurrentEventSchemaVersions>(),
             provider.GetRequiredService<EventTypeRegistry>(),
-            provider.GetRequiredService<JsonSerializerOptions>());
+            provider.GetRequiredService<JsonSerializerOptions>(),
+            provider.GetRequiredService<ICommandBus>());
     }
 
     private async Task<string> CreateDatabaseAsync(string databaseName)
@@ -93,4 +107,5 @@ public sealed record CdcTestContext(
     IEventStore EventStore,
     ICurrentEventSchemaVersions SchemaVersions,
     EventTypeRegistry EventTypes,
-    JsonSerializerOptions JsonOptions);
+    JsonSerializerOptions JsonOptions,
+    ICommandBus CommandBus);
