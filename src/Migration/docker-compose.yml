@@ -35,13 +35,15 @@ services:
       context: ../..
       dockerfile: src/Migration/Dockerfile
     container_name: esrcq-migration-demo
+    # No argument runs all four scenarios in sequence; pass cdc, outbox, strangler, or shadow to run one.
+    command: ["all"]
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       # Two databases on one instance: the CRUD-shaped source and the event store the
-      # patterns write into. POSTGRES_DB creates only the first, so the eventstore
-      # database is created by the demo when the scenario code lands.
+      # patterns write into. POSTGRES_DB creates only the first, so the demo creates the
+      # eventstore database at startup (check-then-create against pg_database).
       LEGACY_CONNECTION_STRING: "Host=postgres;Port=5432;Database=legacy;Username=esrcq;Password=esrcq"
       EVENT_STORE_CONNECTION_STRING: "Host=postgres;Port=5432;Database=eventstore;Username=esrcq;Password=esrcq"
 
