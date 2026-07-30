@@ -21,6 +21,9 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
 // within the 2-second poll budget can only be the notification.
 public class OutboxNotificationTests : IClassFixture<PostgresFixture>
 {
+    // The channel OutboxProcessorOptions defaults to; BuildProcessor does not override it.
+    private const string ChannelName = "outbox_pending";
+
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan PollBudget = TimeSpan.FromSeconds(2);
 
@@ -72,18 +75,21 @@ public class OutboxNotificationTests : IClassFixture<PostgresFixture>
         await processor.StartAsync(cts.Token);
         try
         {
-            // Let the listener settle into pg_stat_activity before
-            // pg_terminate_backend looks for it.
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            // Observe the listener's backend rather than sleeping until it is probably
+            // there. Its pid is what makes the reconnect observable below.
+            var originalPids = await PostgresListenerProbe.WaitForListenersAsync(
+                connStr, ChannelName);
 
-            var terminatedCount = await TerminateListenerSessionsAsync(connStr);
-            terminatedCount.Should().BeGreaterThan(
-                0, "the listener session must be visible to pg_terminate_backend");
+            var terminatedCount = await PostgresListenerProbe.TerminateAsync(
+                connStr, originalPids);
+            terminatedCount.Should().Be(
+                originalPids.Count,
+                "the listener session must be visible to pg_terminate_backend");
 
-            // ListenerReconnectDelay is 1 second; allow 2.5 seconds for the
-            // dispose-delay-reopen cycle to complete and the new LISTEN to
-            // register before we trigger the next notification.
-            await Task.Delay(TimeSpan.FromMilliseconds(2500));
+            // Wait for a listener that is not the one just killed, so the wait cannot
+            // be satisfied by the session that was supposed to have died.
+            await PostgresListenerProbe.WaitForListenersAsync(
+                connStr, ChannelName, excluding: originalPids);
 
             var outboxId = await SeedOutboxRowAsync(
                 dataSource, Guid.NewGuid(), new TestPayload(Guid.NewGuid(), 2m));
@@ -144,26 +150,6 @@ public class OutboxNotificationTests : IClassFixture<PostgresFixture>
         var result = await cmd.ExecuteScalarAsync();
         if (result is null or DBNull) return null;
         return DateTime.SpecifyKind((DateTime)result, DateTimeKind.Utc);
-    }
-
-    // pg_stat_activity.query records the connection's most-recent query, so
-    // the listener's row carries "LISTEN \"outbox_pending\"" while it sits
-    // parked in WaitAsync (state = 'idle'). The filter is loose because a
-    // future Npgsql keepalive could wrap the bare LISTEN in another query
-    // text; matching either form keeps the test honest if that lands.
-    private static async Task<int> TerminateListenerSessionsAsync(string connStr)
-    {
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "SELECT count(*) FROM (" +
-            "  SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
-            "  WHERE state = 'idle' " +
-            "    AND (query LIKE 'LISTEN%' OR query LIKE '%LISTEN%')" +
-            ") s";
-        var result = await cmd.ExecuteScalarAsync();
-        return (int)(long)result!;
     }
 
     private static async Task<long> SeedOutboxRowAsync(

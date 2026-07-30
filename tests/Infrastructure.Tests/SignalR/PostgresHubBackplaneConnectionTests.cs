@@ -38,8 +38,10 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             return null;
         }, cts.Token);
 
-        // Allow the listener to attach before publishing.
-        await Task.Delay(500, cts.Token);
+        // pg_notify does not queue for absent listeners, so the publish below is lost
+        // unless the listener has attached. Wait on the observation, not a duration.
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName, ct: cts.Token);
 
         var sent = new NotificationEnvelope(
             ProjectionName: "OrderDetail",
@@ -71,7 +73,8 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             return null;
         }, cts.Token);
 
-        await Task.Delay(500, cts.Token);
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName, ct: cts.Token);
 
         var sent = new NotificationEnvelope(
             ProjectionName: "InventoryDashboard",
@@ -112,8 +115,11 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             }
         });
 
-        // Let the listener attach, then cancel.
-        await Task.Delay(500);
+        // Let the listener attach, then cancel. Cancelling before the attach would
+        // still end the iteration, so the fact would pass without covering the case
+        // it names: a listener already parked when cancellation arrives.
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName);
         await cts.CancelAsync();
 
         // Iteration should complete cleanly without hanging.
@@ -139,7 +145,11 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             }
         }, cts.Token);
 
-        await Task.Delay(500, cts.Token);
+        // The malformed payload below is the one this fact is about, and it is the one
+        // a late attach loses: the valid payload still arrives, the count assertion
+        // still passes, and only the logger assertion notices. Wait on the attach.
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName, ct: cts.Token);
 
         // Send a malformed payload first, then a valid one. The malformed
         // payload is logged and skipped; the valid payload arrives normally.
@@ -191,17 +201,28 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
             }
         }, cts.Token);
 
-        // Give the listener time to attach and issue its LISTEN command.
-        await Task.Delay(1000, cts.Token);
+        // Observe the listener's backend before terminating it. Its pid is what makes
+        // the reconnect observable further down: the replacement session gets a new
+        // pid, so excluding this one distinguishes a listener that came back from a
+        // listener that never left.
+        var originalPids = await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName, ct: cts.Token);
 
-        // Terminate the listener connection from the database side. The query
-        // identifies the listener by its outstanding LISTEN command on the
-        // channel; the test connection issuing the terminate is excluded by
-        // pg_backend_pid().
-        await TerminateListenerConnectionAsync(connStr);
+        // Terminate that backend by pid, and assert it died. Without the count
+        // this fact passes vacuously when the terminate misses: the original listener
+        // survives, the publish below reaches it, and the reconnect path this fact
+        // exists to cover never runs.
+        var terminated = await PostgresListenerProbe.TerminateAsync(connStr, originalPids);
+        terminated.Should().Be(
+            originalPids.Count,
+            "the listener backend must be terminated for the reconnect path to run");
 
-        // Allow the reconnect-on-drop loop to re-attach.
-        await Task.Delay(2000, cts.Token);
+        // Wait for a listener that is not the one just killed.
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr,
+            NotificationContract.ChannelName,
+            excluding: originalPids,
+            ct: cts.Token);
 
         // Publish through a fresh connection; the reconnected listener should
         // observe the notification.
@@ -249,22 +270,6 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
         cmd.Parameters.AddWithValue(
             "channel", NpgsqlDbType.Text, NotificationContract.ChannelName);
         cmd.Parameters.AddWithValue("payload", NpgsqlDbType.Text, payload);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static async Task TerminateListenerConnectionAsync(string connStr)
-    {
-        // Identifies the listener PID by its outstanding LISTEN command and
-        // terminates it specifically. Excludes pg_backend_pid() so this query
-        // does not target the connection running it.
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
-            "WHERE pid <> pg_backend_pid() " +
-            "  AND datname = current_database() " +
-            "  AND (query ILIKE '%LISTEN%' OR state = 'idle')";
         await cmd.ExecuteNonQueryAsync();
     }
 
