@@ -5,6 +5,7 @@ using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.SharedKernel;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Projections.OrderDetail;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -245,7 +246,7 @@ public class OrderDetailProjectionTests
         await projection.HandleAsync(Context(placed, position: 1), CancellationToken.None);
 
         var entry = (await store.GetTimelineAsync(orderId, CancellationToken.None)).Single();
-        JsonSerializer.Deserialize<OrderPlaced>(entry.Payload, JsonOptions).Should().Be(placed);
+        JsonSerializer.Deserialize<OrderPlaced>(entry.Payload, EventStoreJsonOptions.Create()).Should().Be(placed);
     }
 
     [Fact]
@@ -702,13 +703,7 @@ public class OrderDetailProjectionTests
     }
 
     private static OrderDetailProjection Projection(InMemoryOrderDetailStore store)
-        => new(store, JsonOptions, NullLogger<OrderDetailProjection>.Instance);
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
+        => new(store, EventStoreJsonOptions.Create(), NullLogger<OrderDetailProjection>.Instance);
 
     private static EventContext<TEvent> Context<TEvent>(
         TEvent @event, long position, DateTime? occurredUtc = null)

@@ -150,6 +150,13 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
     // Inserts a pre-tenancy events row whose metadata blob carries the usual keys
     // but no tenant. tenantIdJson null omits the key entirely; "null" writes an
     // explicit JSON null. Both are the legacy shapes the read seam tolerates.
+    //
+    // The literal proves a second tolerance, and its schema_version key is what does it.
+    // EventMetadata no longer declares that member, so this is a real unmapped member in a
+    // real column, read back through the type that dropped it. Removing the key from this
+    // literal would take with it the only end-to-end proof that the retirement reads
+    // forward-compatibly against a live database; EventStoreJsonOptionsTests pins the same
+    // tolerance in memory with a synthetic probe.
     private static async Task InsertLegacyEventAsync(string connStr, StreamId streamId, string? tenantIdJson)
     {
         var tenantEntry = tenantIdJson is null ? "" : $",\"tenant_id\":{tenantIdJson}";
