@@ -45,6 +45,10 @@ public class SqlServerOutboxEncodingTests : IClassFixture<SqlServerFixture>
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
 
+        // Deliberately not EventStoreJsonOptions.Create(). This fixture suspends the factory's
+        // encoder pin, which is the thing under test, so consolidating this construction onto the
+        // factory voids the fact: under the factory the payload is pure ASCII and the sanity
+        // assertions below stop distinguishing a byte-correct binding from a lucky one.
         // The relaxed encoder is the whole point: it sends RAW UTF-8 to the driver instead of
         // \uXXXX escapes, so the parameter binding is the only thing protecting the payload.
         var relaxed = new JsonSerializerOptions

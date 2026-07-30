@@ -19,9 +19,9 @@ namespace EventSourcingCqrs.Infrastructure.Versioning;
 // different contract and pins its shape independently.
 //
 // Internal, as it was in every adapter that carried it. No adapter names this type: they
-// reach the converter through EventStoreJsonOptions.Create(), which is the seam. The test
-// grants in the csproj exist because the rebuild and encoding tests construct it directly
-// to build options matching the stored shape.
+// reach the converter through EventStoreJsonOptions.Create(), which is the seam. The one
+// test grant in the csproj exists because the outbox encoding fixture constructs it
+// directly, to assemble the stored shape with the encoder relaxed.
 internal sealed class TenantIdJsonConverter : JsonConverter<TenantId>
 {
     public override TenantId Read(

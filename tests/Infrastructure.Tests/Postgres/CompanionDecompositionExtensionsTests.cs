@@ -103,6 +103,9 @@ public class CompanionDecompositionExtensionsTests : IClassFixture<PostgresFixtu
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         var services = new ServiceCollection();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        // Deliberately not EventStoreJsonOptions.Create(). The planted options have to carry the
+        // wrong shape for this fact to tell capture from resolve, so consolidating this
+        // construction onto the factory voids it.
         // The Kurrent-host situation: a foreign bare JsonSerializerOptions is already in the
         // container, with default (PascalCase) naming and no TenantIdJsonConverter. If the extension
         // resolved this instead of capturing the Postgres shape, the stored command_payload would
