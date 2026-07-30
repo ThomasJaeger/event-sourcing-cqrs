@@ -1,5 +1,4 @@
 using System.Data;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.EventStore.ContractTests;
@@ -123,16 +122,11 @@ internal sealed class SqlServerContractBackend : IHeldWriterContractBackend, IUp
         return new SqlServerContractBackend(connectionString, store);
     }
 
-    // The adapter's serialization seam: snake_case so the PERSISTED computed columns can read the
-    // metadata, and TenantIdJsonConverter so tenant_id lands as a flat scalar they can convert.
+    // Delegates to the one event-store serialization seam (ADR 0048). The naming policy's stake in
+    // this engine's PERSISTED computed columns, and the flat tenant scalar those columns convert,
+    // are both recorded where they hold: on the factory and on TenantIdJsonConverter.
     internal static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-            Encoder = JavaScriptEncoder.Default,
-        };
+        => EventStoreJsonOptions.Create();
 
     public async Task<IHeldWriter> StartHeldWriterAsync(StreamId streamId)
         => await SqlServerHeldWriter.StartAsync(_connectionString, streamId);

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Domain.Fulfillment;
@@ -75,11 +74,4 @@ public class SkuToInventoryIdProjectionTenantTests : IClassFixture<PostgresFixtu
         return rows;
     }
 
-    internal static JsonSerializerOptions JsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
 }

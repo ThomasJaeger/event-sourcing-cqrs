@@ -1,5 +1,4 @@
 using System.Data.Common;
-using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.Versioning;
@@ -134,7 +133,7 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
     }
 
     private static PostgresEventStore CreateEventStore(NpgsqlDataSource dataSource)
-        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
+        => new(new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), EventStoreJsonOptions.Create(), new EventUpcasterPipeline(CreateRegistry(), []));
 
     private static Task<long> HeadAsync(NpgsqlDataSource dataSource)
         => new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource))
@@ -193,13 +192,6 @@ public class ProjectionLagReaderTests : IClassFixture<PostgresFixture>
     private static ProcessManagerEventTypeRegistry CreatePmRegistry()
         => new();
 
-    private static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
 
     private static IProjectionRoster Roster(params string[] names) => new StubRoster(names);
 

@@ -10,13 +10,10 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
 // Each test class owns its container, data source, and store instances.
 internal static class PostgresEventStoreTestKit
 {
+    // Delegates to the one event-store serialization seam (ADR 0048) rather than rebuilding its
+    // shape. The helper stays because the call sites across this directory name it.
     public static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
+        => EventStoreJsonOptions.Create();
 
     public static EventTypeRegistry CreateRegistry()
         => new EventTypeRegistry()

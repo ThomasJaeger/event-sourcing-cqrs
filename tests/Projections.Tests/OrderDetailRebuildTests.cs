@@ -131,12 +131,12 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await using var dataSource = NpgsqlDataSource.Create(connStr);
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), EventStoreJsonOptions.Create(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var store = new PostgresOrderDetailStore(
             readModelFactory, new PostgresCheckpointStore(readModelFactory), TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var projection = new OrderDetailProjection(
-            store, CreateJsonOptions(), NullLogger<OrderDetailProjection>.Instance);
+            store, EventStoreJsonOptions.Create(), NullLogger<OrderDetailProjection>.Instance);
 
         var orderId = Guid.NewGuid();
         var customerId = Guid.NewGuid();
@@ -159,11 +159,11 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
         // PostgreSQL canonicalises jsonb, so compare parsed nodes, not strings.
         JsonNode.DeepEquals(
             JsonNode.Parse(entry.Payload),
-            JsonNode.Parse(JsonSerializer.Serialize(placed, CreateJsonOptions())))
+            JsonNode.Parse(JsonSerializer.Serialize(placed, EventStoreJsonOptions.Create())))
             .Should().BeTrue();
         // And the payload deserialises back to the original event, proving the
         // type-token plus serialisation shape end to end.
-        JsonSerializer.Deserialize<OrderPlaced>(entry.Payload, CreateJsonOptions()).Should().Be(placed);
+        JsonSerializer.Deserialize<OrderPlaced>(entry.Payload, EventStoreJsonOptions.Create()).Should().Be(placed);
     }
 
     // Order A (completed): drafted, line a1 added then removed, line a2 added,
@@ -175,13 +175,13 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), EventStoreJsonOptions.Create(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var store = new PostgresOrderDetailStore(
             readModelFactory, checkpointStore, TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
         var projection = new OrderDetailProjection(
-            store, CreateJsonOptions(), NullLogger<OrderDetailProjection>.Instance);
+            store, EventStoreJsonOptions.Create(), NullLogger<OrderDetailProjection>.Instance);
 
         var custA = Guid.NewGuid();
         var orderA = Guid.NewGuid();
@@ -401,13 +401,6 @@ public class OrderDetailRebuildTests : IClassFixture<PostgresFixture>
     private static ProcessManagerEventTypeRegistry CreatePmRegistry()
         => new();
 
-    private static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
 
     private sealed record RebuildContext(
         PostgresEventStore EventStore,

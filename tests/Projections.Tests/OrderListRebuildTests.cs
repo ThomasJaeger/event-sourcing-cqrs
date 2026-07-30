@@ -1,4 +1,3 @@
-using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
@@ -136,7 +135,7 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
     private static async Task<RebuildContext> ArrangeAsync(NpgsqlDataSource dataSource)
     {
         var eventStore = new PostgresEventStore(
-            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), CreateJsonOptions(), new EventUpcasterPipeline(CreateRegistry(), []));
+            new NpgsqlConnectionFactory(dataSource), CreateRegistry(), CreatePmRegistry(), EventStoreJsonOptions.Create(), new EventUpcasterPipeline(CreateRegistry(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(dataSource);
         var checkpointStore = new PostgresCheckpointStore(readModelFactory);
         var orderListStore = new PostgresOrderListStore(
@@ -293,13 +292,6 @@ public class OrderListRebuildTests : IClassFixture<PostgresFixture>
     private static ProcessManagerEventTypeRegistry CreatePmRegistry()
         => new();
 
-    private static JsonSerializerOptions CreateJsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
 
     private sealed record RebuildContext(
         PostgresEventStore EventStore,

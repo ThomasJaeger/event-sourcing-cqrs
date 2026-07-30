@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using EventSourcingCqrs.Domain.Abstractions;
@@ -289,7 +288,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             new NpgsqlConnectionFactory(ds),
             new EventTypeRegistry().Register<OrderPlaced>(),
             new ProcessManagerEventTypeRegistry(),
-            JsonOptions(),
+            EventStoreJsonOptions.Create(),
             new EventUpcasterPipeline(new EventTypeRegistry().Register<OrderPlaced>(), []));
         var readModelFactory = new NpgsqlReadModelConnectionFactory(ds);
         // No manual tenant: the set-point under test must supply it from each event's metadata.
@@ -335,7 +334,7 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), stub);
         return (
             store,
-            new OrderDetailProjection(store, JsonOptions(), NullLogger<OrderDetailProjection>.Instance),
+            new OrderDetailProjection(store, EventStoreJsonOptions.Create(), NullLogger<OrderDetailProjection>.Instance),
             stub);
     }
 
@@ -389,13 +388,6 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
 
     private static Address SampleAddress() => new("1 Main St", "Smalltown", "12345", "US");
 
-    private static JsonSerializerOptions JsonOptions()
-        => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Converters = { new TenantIdJsonConverter() },
-        };
 
     private static EventEnvelope Env(StreamId streamId, int version, IDomainEvent payload, TenantId tenant)
     {
