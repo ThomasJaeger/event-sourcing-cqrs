@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EventSourcingCqrs.Infrastructure.Versioning;
 
@@ -25,6 +26,17 @@ namespace EventSourcingCqrs.Infrastructure.Versioning;
 // proves it on the raw stored bytes, which the engine-agnostic contract suite cannot: its
 // payloads are ASCII by the time they leave the serializer. The pin keeps the escaping a
 // deliberate choice on every engine rather than the thing quietly holding the roof up.
+//
+// Unmapped-member handling is pinned rather than inherited. A stored document carrying a member the
+// target type does not declare reads without fault, and every declared member still binds, which is
+// what lets a member retire from the type without rewriting the corpus behind it. That is already the
+// framework default; naming it makes it a decision the next person has to argue with rather than a
+// default they can flip without noticing.
+//
+// What the pin protects: the strict setting rejects the whole document on the first unknown member,
+// so flipping it turns every row written before a member retired into a read failure.
+// EventStoreJsonOptionsTests characterizes the permissive behavior on both read shapes, the shared
+// metadata reader and the KurrentDB wrapper, so a flip fails there rather than in production.
 public static class EventStoreJsonOptions
 {
     public static JsonSerializerOptions Create()
@@ -34,5 +46,6 @@ public static class EventStoreJsonOptions
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
             Converters = { new TenantIdJsonConverter() },
             Encoder = JavaScriptEncoder.Default,
+            UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
         };
 }
