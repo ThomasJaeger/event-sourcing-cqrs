@@ -5,7 +5,7 @@ using FluentAssertions;
 using Xunit;
 using static EventSourcingCqrs.Infrastructure.Tests.Postgres.PostgresEventStoreTestKit;
 
-namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
+namespace EventSourcingCqrs.Infrastructure.Tests.Versioning;
 
 // Unit coverage for the tenant on EventMetadata: the flat-scalar wire shape the
 // next commit's generated column depends on, and the tolerant read that maps a

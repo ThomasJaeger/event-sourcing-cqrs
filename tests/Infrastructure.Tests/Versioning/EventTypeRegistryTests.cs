@@ -3,7 +3,7 @@ using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Xunit;
 
-namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
+namespace EventSourcingCqrs.Infrastructure.Tests.Versioning;
 
 public class EventTypeRegistryTests
 {
