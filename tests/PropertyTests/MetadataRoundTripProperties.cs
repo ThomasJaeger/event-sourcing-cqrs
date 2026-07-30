@@ -63,7 +63,6 @@ public class MetadataRoundTripProperties
         from causationId in AnyGuid
         from actorId in AnyGuid
         from source in AnySource
-        from schemaVersion in FG.Choose(int.MinValue, int.MaxValue)
         from occurredUtc in AnyUtcDateTime
         from tenantGuid in NonEmptyGuid
         from tenantPresent in FG.Elements(true, false)
@@ -74,7 +73,6 @@ public class MetadataRoundTripProperties
                 causationId,
                 actorId,
                 source,
-                schemaVersion,
                 occurredUtc,
                 tenantPresent ? TenantId.From(tenantGuid) : WellKnownTenants.Default),
             tenantPresent);

@@ -17,7 +17,6 @@ public sealed class CausedCommandBusTests
             CausationId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Source: "Sales",
-            SchemaVersion: 1,
             OccurredUtc: new DateTime(2026, 5, 20, 12, 0, 0, DateTimeKind.Utc),
             Tenant: WellKnownTenants.Default);
 

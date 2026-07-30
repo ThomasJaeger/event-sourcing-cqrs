@@ -246,7 +246,6 @@ public class CorrelationIdTracerTests : BunitContext
                 CausationId: causationId ?? Guid.NewGuid(),
                 ActorId: actorId ?? Guid.NewGuid(),
                 Source: "trace-source",
-                SchemaVersion: 1,
                 OccurredUtc: AnyTime,
                 Tenant: tenant ?? WellKnownTenants.Default));
 

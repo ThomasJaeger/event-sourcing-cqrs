@@ -295,7 +295,6 @@ public class CorrelationTracerTests : IClassFixture<AdminConsoleAdmitFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Source: SeedSource,
-            SchemaVersion: 1,
             OccurredUtc: occurredUtc,
             Tenant: tenant);
 

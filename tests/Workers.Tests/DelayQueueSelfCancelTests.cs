@@ -262,7 +262,6 @@ public class DelayQueueSelfCancelTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "self-cancel-red",
-            SchemaVersion: 1,
             OccurredUtc: now,
             Tenant: WellKnownTenants.Default);
         return new EventEnvelope(

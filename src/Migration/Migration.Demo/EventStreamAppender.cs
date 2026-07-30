@@ -47,9 +47,6 @@ public sealed class EventStreamAppender
             CausationId: Guid.Empty,
             ActorId: actorId,
             Source: source,
-            // SchemaVersion stays at the literal-1 convention; ADR 0050 records its deferred disposition
-            // as a dormant second version carrier, inert while it reads 1.
-            SchemaVersion: 1,
             OccurredUtc: appended.OccurredUtc,
             Tenant: WellKnownTenants.Default);
 

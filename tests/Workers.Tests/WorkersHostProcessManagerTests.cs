@@ -231,7 +231,6 @@ public class WorkersHostProcessManagerTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "integration-test",
-            SchemaVersion: 1,
             OccurredUtc: now,
             Tenant: WellKnownTenants.Default);
         return new EventEnvelope(

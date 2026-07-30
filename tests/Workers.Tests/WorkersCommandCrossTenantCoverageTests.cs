@@ -290,7 +290,6 @@ public class WorkersCommandCrossTenantCoverageTests : IClassFixture<PostgresFixt
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "workers-cross-tenant-coverage",
-            SchemaVersion: 1,
             OccurredUtc: SeededAt,
             Tenant: tenant);
         return new EventEnvelope(

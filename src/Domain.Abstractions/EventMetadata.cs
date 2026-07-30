@@ -8,7 +8,6 @@ public sealed record EventMetadata(
     Guid CausationId,
     Guid ActorId,
     string Source,
-    int SchemaVersion,
     DateTime OccurredUtc,
     [property: JsonPropertyName("tenant_id")] TenantId Tenant)
 {
@@ -18,14 +17,13 @@ public sealed record EventMetadata(
     // tenant is supplied by the caller, which on the command path reads it from
     // the current-tenant accessor; one resolved tenant feeds both the stream id
     // and the metadata so the two cannot disagree.
-    public static EventMetadata ForCommand(ICommandContext context, TenantId tenant, int schemaVersion = 1)
+    public static EventMetadata ForCommand(ICommandContext context, TenantId tenant)
         => new(
             EventId: Guid.NewGuid(),
             CorrelationId: context.CorrelationId,
             CausationId: context.CausationCommandId,
             ActorId: context.ActorId,
             Source: context.ServiceName,
-            SchemaVersion: schemaVersion,
             OccurredUtc: context.UtcNow().UtcDateTime,
             Tenant: tenant);
 
@@ -33,14 +31,13 @@ public sealed record EventMetadata(
     // SaveAsync batch (Ch 8 line 1066). CausationId points to the prior event's
     // EventId; CorrelationId, ActorId, Source, and the tenant carry forward (a
     // caused event belongs to the same tenant as the event that caused it).
-    public EventMetadata ForCausedEvent(DateTime occurredUtc, int schemaVersion = 1)
+    public EventMetadata ForCausedEvent(DateTime occurredUtc)
         => new(
             EventId: Guid.NewGuid(),
             CorrelationId: CorrelationId,
             CausationId: EventId,
             ActorId: ActorId,
             Source: Source,
-            SchemaVersion: schemaVersion,
             OccurredUtc: occurredUtc,
             Tenant: Tenant);
 }

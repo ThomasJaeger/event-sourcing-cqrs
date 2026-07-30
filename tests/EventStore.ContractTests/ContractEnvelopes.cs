@@ -71,7 +71,6 @@ public static class ContractEnvelopes
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: source ?? "contract-suite",
-            SchemaVersion: 1,
             OccurredUtc: FrozenOccurredUtc,
             Tenant: tenant ?? WellKnownTenants.Default);
 }

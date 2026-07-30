@@ -135,7 +135,6 @@ public class EventStoreBrowserTests : BunitContext
             CausationId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
             Tenant: TenantId.From(Guid.NewGuid()));
         var inspected = new InspectedEvent(
@@ -149,8 +148,8 @@ public class EventStoreBrowserTests : BunitContext
         return new StreamInspectionResult(StreamInspectionOutcome.Found, new[] { inspected });
     }
 
-    // The Found helper above pins StreamVersion at 1, which the schema version and the event version also
-    // carry, so it cannot tell a rendered version from a coincidence. This one takes the version.
+    // The Found helper above pins StreamVersion at 1, which the event version also carries, so it
+    // cannot tell a rendered version from a coincidence. This one takes the version.
     private static StreamInspectionResult FoundAtStreamVersion(int streamVersion)
     {
         var metadata = new EventMetadata(
@@ -159,7 +158,6 @@ public class EventStoreBrowserTests : BunitContext
             CausationId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
             Tenant: TenantId.From(Guid.NewGuid()));
         var inspected = new InspectedEvent(

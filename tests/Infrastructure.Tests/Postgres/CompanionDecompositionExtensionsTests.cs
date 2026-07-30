@@ -137,7 +137,6 @@ public class CompanionDecompositionExtensionsTests : IClassFixture<PostgresFixtu
             CausationId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Source: "Sales",
-            SchemaVersion: 1,
             OccurredUtc: new DateTime(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc),
             Tenant: WellKnownTenants.Default);
 

@@ -271,7 +271,6 @@ public class CustomerSummaryProjectionTests
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: occurredUtc,
             Tenant: WellKnownTenants.Default);
 }

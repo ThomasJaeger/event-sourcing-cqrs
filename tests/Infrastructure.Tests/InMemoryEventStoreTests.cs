@@ -95,7 +95,6 @@ public class InMemoryEventStoreTests
                 CausationId: Guid.Empty,
                 ActorId: Guid.Empty,
                 Source: "test",
-                SchemaVersion: 1,
                 OccurredUtc: At,
                 Tenant: WellKnownTenants.Default);
             envelopes[i] = new EventEnvelope(

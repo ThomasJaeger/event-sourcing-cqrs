@@ -51,7 +51,6 @@ internal static class PostgresEventStoreTestKit
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: when,
             Tenant: tenant ?? WellKnownTenants.Default);
         return new EventEnvelope(
@@ -86,7 +85,6 @@ internal static class PostgresEventStoreTestKit
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: when,
             Tenant: tenant ?? WellKnownTenants.Default);
         return new ProcessManagerEventEnvelope(

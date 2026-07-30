@@ -234,7 +234,6 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: BaseTime,
             Tenant: tenant);
         return new EventEnvelope(
@@ -258,7 +257,6 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: BaseTime,
             Tenant: WellKnownTenants.Default);
         return new ProcessManagerEventEnvelope(

@@ -80,12 +80,11 @@ public sealed class ProcessManagerRepository<TPm> : IProcessManagerRepository<TP
             {
                 metadata = EventMetadata.ForCommand(
                     context,
-                    _tenantAccessor.Current ?? throw new MissingTenantContextException(),
-                    schemaVersion: 1);
+                    _tenantAccessor.Current ?? throw new MissingTenantContextException());
             }
             else
             {
-                metadata = previous.ForCausedEvent(context.UtcNow().UtcDateTime, schemaVersion: 1);
+                metadata = previous.ForCausedEvent(context.UtcNow().UtcDateTime);
             }
             envelopes[i] = new ProcessManagerEventEnvelope(
                 StreamId: streamId,

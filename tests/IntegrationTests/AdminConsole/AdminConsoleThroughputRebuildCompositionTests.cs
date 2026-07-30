@@ -124,7 +124,6 @@ public class AdminConsoleThroughputRebuildCompositionTests : IClassFixture<Admin
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: BaseTime,
             Tenant: tenant);
         return new EventEnvelope(

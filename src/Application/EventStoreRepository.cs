@@ -101,12 +101,12 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
             {
                 metadata = context is null
                     ? BuildFallbackMetadata()
-                    : EventMetadata.ForCommand(context, tenant, schemaVersion: 1);
+                    : EventMetadata.ForCommand(context, tenant);
             }
             else
             {
                 var occurredUtc = context?.UtcNow().UtcDateTime ?? DateTime.UtcNow;
-                metadata = previous.ForCausedEvent(occurredUtc, schemaVersion: 1);
+                metadata = previous.ForCausedEvent(occurredUtc);
             }
             envelopes[i] = new EventEnvelope(
                 StreamId: streamId,
@@ -133,7 +133,6 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
             CausationId: Guid.Empty,
             ActorId: Guid.Empty,
             Source: "Workers",
-            SchemaVersion: 1,
             OccurredUtc: DateTime.UtcNow,
             Tenant: WellKnownTenants.Default);
 }

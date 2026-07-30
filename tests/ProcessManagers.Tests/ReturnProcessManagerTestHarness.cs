@@ -96,7 +96,6 @@ internal sealed class ReturnProcessManagerTestHarness
         CausationId: Guid.NewGuid(),
         ActorId: Guid.NewGuid(),
         Source: "test",
-        SchemaVersion: 1,
         OccurredUtc: DateTime.UtcNow,
         Tenant: WellKnownTenants.Default);
 }

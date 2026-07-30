@@ -100,7 +100,6 @@ public class ProjectionReplayerTests
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: At,
             Tenant: WellKnownTenants.Default);
 

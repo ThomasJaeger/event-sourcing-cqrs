@@ -332,7 +332,6 @@ public sealed class DelayQueueProcessor : BackgroundService
             CausationId: Guid.Empty,
             ActorId: row.ActorId,
             Source: row.ServiceName,
-            SchemaVersion: 1,
             OccurredUtc: nowUtc,
             Tenant: row.Tenant);
         var actor = new SystemActor(row.ActorId, row.ServiceName);

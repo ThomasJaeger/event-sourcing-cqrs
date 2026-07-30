@@ -170,7 +170,6 @@ public class CustomerSummaryRebuildTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: BaseTime,
             Tenant: WellKnownTenants.Default);
         return new EventEnvelope(

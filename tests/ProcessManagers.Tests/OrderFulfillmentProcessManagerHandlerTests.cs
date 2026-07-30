@@ -475,7 +475,6 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
         CausationId: Guid.NewGuid(),
         ActorId: Guid.NewGuid(),
         Source: "test",
-        SchemaVersion: 1,
         OccurredUtc: Now,
         Tenant: tenant);
 }

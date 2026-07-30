@@ -148,7 +148,7 @@ public class InMemoryEventStore_ProcessManager_Tests
     }
 
     private static EventMetadata Meta(Guid eventId)
-        => new(eventId, Guid.Empty, Guid.Empty, Guid.Empty, "test", 1, At, WellKnownTenants.Default);
+        => new(eventId, Guid.Empty, Guid.Empty, Guid.Empty, "test", At, WellKnownTenants.Default);
 
     private sealed record PmTestEvent : IProcessManagerEvent;
     private sealed record AggregateTestEvent : IDomainEvent;

@@ -382,7 +382,6 @@ public class OrderListProjectionTests
                 CausationId: Guid.NewGuid(),
                 ActorId: Guid.Empty,
                 Source: "test",
-                SchemaVersion: 1,
                 OccurredUtc: SystemAt,
                 Tenant: tenant),
             GlobalPosition: 1);
@@ -599,7 +598,6 @@ public class OrderListProjectionTests
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: occurredUtc,
             Tenant: WellKnownTenants.Default);
 }

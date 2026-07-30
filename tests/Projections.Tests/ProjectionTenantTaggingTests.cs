@@ -381,7 +381,6 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
                 CausationId: Guid.NewGuid(),
                 ActorId: Guid.Empty,
                 Source: "test",
-                SchemaVersion: 1,
                 OccurredUtc: At,
                 Tenant: tenant ?? Default),
             position);
@@ -398,7 +397,6 @@ public sealed class ProjectionTenantTaggingTests : IClassFixture<PostgresFixture
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: At,
             Tenant: tenant);
         return new EventEnvelope(

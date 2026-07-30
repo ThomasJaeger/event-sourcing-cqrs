@@ -233,7 +233,6 @@ public class SqlServerDelayQueueProcessorTests : IClassFixture<SqlServerFixture>
                 CausationId: Guid.NewGuid(),
                 ActorId: Guid.NewGuid(),
                 Source: "Sales",
-                SchemaVersion: 1,
                 OccurredUtc: new DateTime(2026, 5, 21, 11, 0, 0, DateTimeKind.Utc),
                 Tenant: tenant ?? WellKnownTenants.Default),
             Pm,

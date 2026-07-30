@@ -217,7 +217,6 @@ public sealed class SqlServerDelayQueueProcessor : BackgroundService
             CausationId: Guid.Empty,
             ActorId: row.ActorId,
             Source: row.ServiceName,
-            SchemaVersion: 1,
             OccurredUtc: now.UtcDateTime,
             Tenant: row.Tenant);
         var actor = new SystemActor(row.ActorId, row.ServiceName);

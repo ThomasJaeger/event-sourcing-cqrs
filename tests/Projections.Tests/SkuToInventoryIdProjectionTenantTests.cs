@@ -40,7 +40,6 @@ public class SkuToInventoryIdProjectionTenantTests : IClassFixture<PostgresFixtu
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: At,
             Tenant: tenant);
         return new EventEnvelope(

@@ -104,7 +104,6 @@ public class PostgresEventStore_Tenant_Tests : IClassFixture<PostgresFixture>
                 CausationId: Guid.NewGuid(),
                 ActorId: Guid.Empty,
                 Source: "test",
-                SchemaVersion: 1,
                 OccurredUtc: At,
                 Tenant: OtherTenant),
             OccurredUtc: At,

@@ -128,7 +128,6 @@ public class OrderDraftedChannelUpcastTests : IClassFixture<PostgresFixture>
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "test",
-            SchemaVersion: 1,
             OccurredUtc: when,
             Tenant: WellKnownTenants.Default);
         var metadataJson = JsonSerializer.Serialize(metadata, jsonOptions);

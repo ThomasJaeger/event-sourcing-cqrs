@@ -20,7 +20,6 @@ public class ProcessManagerRepositoryTests
         CausationId: Guid.NewGuid(),
         ActorId: Guid.NewGuid(),
         Source: "test",
-        SchemaVersion: 1,
         OccurredUtc: new DateTime(2026, 7, 12, 9, 0, 0, DateTimeKind.Utc),
         Tenant: WellKnownTenants.Default);
 

@@ -73,3 +73,20 @@ Two events reopen this.
 A consumer that needs typed payloads out of a trace, rather than text for display. Nothing in Phase 12 does, and a consumer that did would be doing work the Browser already covers.
 
 A legitimate metadata schema evolution. The fail-closed metadata posture holds because metadata has one shape and one tolerated legacy form. A second real form would make per-row metadata tolerance a question worth asking again, and the answer would be born at the consumer that needs it.
+
+## Amendment (July 2026)
+
+The rendering endorsement above is overtaken. Its premise was that `SchemaVersion` was the
+event's version, which it never became: ADR 0050 shipped the version as
+`EventEnvelope.EventVersion`, derived from chain topology, and left the metadata field inert
+at 1. The field is removed as of Phase 17.
+
+The browser already rendered the live version. `EventStoreBrowser.razor` shows
+`schema @evt.EventVersion` on every event row unconditionally, while the metadata detail
+block showed the inert field under the label "Schema version" only for an event whose
+metadata an operator had expanded. The second render was a strict subset of the first, so no
+operator ever saw the inert value without the live one already above it.
+
+The row is deleted with no replacement. The live version stays on the row header where it
+always was, and the metadata block no longer offers a second number that reads like a version
+and is not one.

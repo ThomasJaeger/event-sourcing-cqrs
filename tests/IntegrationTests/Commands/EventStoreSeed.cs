@@ -42,7 +42,6 @@ internal static class EventStoreSeed
             CausationId: Guid.NewGuid(),
             ActorId: Guid.Empty,
             Source: "integration-test-seed",
-            SchemaVersion: 1,
             OccurredUtc: SeedUtc,
             Tenant: tenant);
         return new EventEnvelope(

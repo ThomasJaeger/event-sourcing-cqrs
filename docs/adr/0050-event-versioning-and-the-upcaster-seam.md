@@ -158,3 +158,23 @@ field.
 `EventMetadata.SchemaVersion`'s disposition reopens the moment it is written anything
 but 1, the point at which the deferred hazard becomes a live second carrier and the
 delete-versus-keep question has to be answered.
+
+## Amendment (July 2026)
+
+The deferred disposition is resolved: `EventMetadata.SchemaVersion` is removed. The
+grounding was an enumeration rather than a judgment. Sixty-nine sites constructed or
+stamped the carrier across the solution, and exactly one site read it, a rendered row in
+the AdminConsole event-store browser. A field written in sixty-nine places and read in one,
+where that one read is a display, was never carrying anything.
+
+The mechanism is unchanged. Versions still derive from chain topology through
+`ICurrentEventSchemaVersions.CurrentVersionFor`, stamped onto `EventEnvelope.EventVersion`
+on the write path and resolved through the upcaster pipeline on the read path. Nothing that
+resolves a stored shape consulted the removed field, so nothing about resolution moves.
+
+Reading a stored document that still carries the member is safe, and safe by a stated
+decision rather than by a framework default. `EventStoreJsonOptions.Create()` pins
+`UnmappedMemberHandling` to `Skip`, landed at d779e2b alongside the characterization facts
+in `EventStoreJsonOptionsTests` that fail if the setting is ever narrowed. Every row written
+before this commit carries `schema_version` in its metadata document, and every read of one
+now skips it.

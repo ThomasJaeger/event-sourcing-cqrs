@@ -16,11 +16,10 @@ namespace EventSourcingCqrs.Infrastructure.Tests.Versioning;
 // facts describe what already held rather than driving new code. They exist so that narrowing the
 // setting later fails here instead of quietly changing what a stored document is allowed to contain.
 //
-// The probe member is synthetic, and the first fact is what keeps it so. EventMetadata gained its
-// tenant at dd52e92 and has never lost a member, so every shape the store has written is a subset of
-// the current one and a key absent from a fully populated current document is absent from all of
-// them. The schema-version member would prove nothing here: the type still declares it, so a reader
-// binds it rather than skipping it.
+// The probe member is synthetic, and the first fact is what keeps it so: a key absent from a fully
+// populated current document is a key no reader binds. The type has since lost a member, the
+// schema-version carrier retired in Phase 17, so a document written before that retirement carries a
+// real unmapped member and the tolerance these facts pin is what lets it read.
 //
 // The options come from EventStoreJsonOptions.Create() and never from a locally built object. A local
 // object pins the test's own configuration instead of the one the four adapters resolve, which is the
@@ -39,7 +38,6 @@ public class EventStoreJsonOptionsTests
             CausationId: Guid.Parse("cccccccc-0000-0000-0000-000000000003"),
             ActorId: Guid.Parse("dddddddd-0000-0000-0000-000000000004"),
             Source: "characterization",
-            SchemaVersion: 1,
             OccurredUtc: At,
             Tenant: TenantId.From(Guid.Parse("eeeeeeee-0000-0000-0000-000000000005")));
 
@@ -67,7 +65,7 @@ public class EventStoreJsonOptionsTests
 
         var read = EventMetadataReader.Read(document.ToJsonString(options), options);
 
-        // EventMetadata is a record, so one equality covers all eight declared members.
+        // EventMetadata is a record, so one equality covers all seven declared members.
         read.Should().Be(original);
     }
 
