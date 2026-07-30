@@ -3,13 +3,12 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.Versioning;
 using FluentAssertions;
 using Xunit;
-using static EventSourcingCqrs.Infrastructure.Tests.Postgres.PostgresEventStoreTestKit;
 
 namespace EventSourcingCqrs.Infrastructure.Tests.Versioning;
 
 // Unit coverage for the tenant on EventMetadata: the flat-scalar wire shape the
-// next commit's generated column depends on, and the tolerant read that maps a
-// pre-tenancy row (absent key or explicit null) to the default tenant.
+// events table's generated tenant_id column depends on, and the tolerant read that
+// maps a pre-tenancy row (absent key or explicit null) to the default tenant.
 public class EventMetadataTenantTests
 {
     private static readonly DateTime At = new(2026, 5, 21, 12, 0, 0, DateTimeKind.Utc);
@@ -29,10 +28,10 @@ public class EventMetadataTenantTests
     {
         var tenant = TenantId.From(Guid.Parse("11111111-1111-1111-1111-111111111111"));
 
-        var json = JsonSerializer.Serialize(Metadata(tenant), CreateJsonOptions());
+        var json = JsonSerializer.Serialize(Metadata(tenant), EventStoreJsonOptions.Create());
 
-        // The generated column the next commit adds reads metadata->>'tenant_id'
-        // and casts ::uuid, so the value must be a bare string, never a nested
+        // The generated column reads metadata->>'tenant_id' and casts ::uuid
+        // (migration 0016), so the value must be a bare string, never a nested
         // { "value": ... } object.
         json.Should().Contain("\"tenant_id\":\"11111111-1111-1111-1111-111111111111\"");
         json.Should().NotContain("\"tenant_id\":{");
@@ -44,7 +43,7 @@ public class EventMetadataTenantTests
         var json =
             $"{{\"correlation_id\":\"{Guid.NewGuid()}\",\"causation_id\":\"{Guid.NewGuid()}\"}}";
 
-        var metadata = EventMetadataReader.Read(json, CreateJsonOptions());
+        var metadata = EventMetadataReader.Read(json, EventStoreJsonOptions.Create());
 
         metadata.Tenant.Should().Be(WellKnownTenants.Default);
     }
@@ -55,7 +54,7 @@ public class EventMetadataTenantTests
         var json =
             $"{{\"correlation_id\":\"{Guid.NewGuid()}\",\"tenant_id\":null}}";
 
-        var metadata = EventMetadataReader.Read(json, CreateJsonOptions());
+        var metadata = EventMetadataReader.Read(json, EventStoreJsonOptions.Create());
 
         metadata.Tenant.Should().Be(WellKnownTenants.Default);
     }
@@ -66,8 +65,8 @@ public class EventMetadataTenantTests
         var tenant = TenantId.From(Guid.NewGuid());
         var original = Metadata(tenant);
 
-        var json = JsonSerializer.Serialize(original, CreateJsonOptions());
-        var read = EventMetadataReader.Read(json, CreateJsonOptions());
+        var json = JsonSerializer.Serialize(original, EventStoreJsonOptions.Create());
+        var read = EventMetadataReader.Read(json, EventStoreJsonOptions.Create());
 
         read.Tenant.Should().Be(tenant);
         read.EventId.Should().Be(original.EventId);
