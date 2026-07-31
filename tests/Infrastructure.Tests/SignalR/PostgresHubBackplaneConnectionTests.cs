@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Infrastructure.SignalR;
@@ -237,6 +238,72 @@ public class PostgresHubBackplaneConnectionTests : IClassFixture<PostgresFixture
         await collectTask;
         receivedEnvelopes.Should().HaveCount(1);
         receivedEnvelopes[0].Should().BeEquivalentTo(envelope);
+    }
+
+    // A consumer that stops iterating before its token is cancelled has its enumerator disposed
+    // promptly. The listener parks until cancelled, so the iterator's finally cancels the token it
+    // owns before awaiting the listener. Awaiting first is what used to block: the listener ran on
+    // the caller's token, and an early break waited out the caller's whole budget.
+    //
+    // The two budgets sit far apart on purpose. The token gets 30 seconds and the disposal gets
+    // 2, a 15:1 ratio, so a pass cannot be manufactured by the token firing inside the disposal
+    // wait: at the moment the verdict is taken, 28 of the token's 30 seconds are still unspent.
+    [Fact]
+    public async Task Disposing_the_enumerator_after_an_early_break_does_not_wait_for_cancellation()
+    {
+        var tokenBudget = TimeSpan.FromSeconds(30);
+        var disposalBudget = TimeSpan.FromSeconds(2);
+
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var backplane = BuildBackplane(connStr);
+
+        using var cts = new CancellationTokenSource(tokenBudget);
+
+        // GetAsyncEnumerator(default) is what await-foreach emits; the token rides the method
+        // argument. The iterator body does not run, and no LISTEN is issued, until the first
+        // MoveNextAsync, so that call starts before the attach probe and is awaited after it.
+        var enumerator = backplane.SubscribeAsync(cts.Token).GetAsyncEnumerator(default);
+        var firstMove = enumerator.MoveNextAsync().AsTask();
+
+        await PostgresListenerProbe.WaitForListenersAsync(
+            connStr, NotificationContract.ChannelName, ct: cts.Token);
+
+        var sent = new NotificationEnvelope(
+            ProjectionName: "OrderDetail",
+            ResourceId: "order-early-break",
+            EventName: "OrderShipped",
+            Widgets: new[] { "status" },
+            Tenant: WellKnownTenants.Default);
+        await PublishNotificationAsync(connStr, sent);
+
+        // A real envelope arrives through the real notification path before the break, so this
+        // covers a consumer that stops partway rather than one that never started.
+        (await firstMove).Should().BeTrue("the subscription must yield before a break means anything");
+        var received = enumerator.Current;
+        received.Should().BeEquivalentTo(sent);
+
+        // Disposing the enumerator is what breaking out of an await-foreach does.
+        var elapsed = Stopwatch.StartNew();
+        var disposal = enumerator.DisposeAsync().AsTask();
+        var winner = await Task.WhenAny(disposal, Task.Delay(disposalBudget, CancellationToken.None));
+        elapsed.Stop();
+        var disposedInTime = ReferenceEquals(winner, disposal);
+
+        // Read for the failure message, so a regression says which await is blocking rather than
+        // reporting a bare timeout. A listener that exited disposed its connection in its own
+        // finally and leaves no backend; a backend still parked on the channel is a listener the
+        // teardown failed to release. Empty is the passing shape.
+        var pidsAfterBudget = await PostgresListenerProbe.ListeningPidsAsync(
+            connStr, NotificationContract.ChannelName);
+
+        disposedInTime.Should().BeTrue(
+            "an early break must dispose the enumerator within {0}, but it was still blocked after "
+            + "that budget with the consumer's token uncancelled ({1} of {2} unspent) and the "
+            + "listener backend still parked on the channel (pids [{3}])",
+            disposalBudget,
+            tokenBudget - elapsed.Elapsed,
+            tokenBudget,
+            string.Join(",", pidsAfterBudget));
     }
 
     private static PostgresHubBackplaneConnection BuildBackplane(

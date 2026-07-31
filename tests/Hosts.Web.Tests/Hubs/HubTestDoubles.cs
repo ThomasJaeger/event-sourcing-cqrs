@@ -8,7 +8,11 @@ using Microsoft.Extensions.Logging;
 namespace EventSourcingCqrs.Hosts.Web.Tests.Hubs;
 
 // Yields a fixed sequence of envelopes then parks until the stopping token
-// cancels, mirroring the real backplane's open-ended subscription.
+// cancels, mirroring the real backplane's open-ended subscription. It mirrors the
+// yielding and not the teardown: the real connection owns a listener that its
+// enumerator cancels and awaits on disposal, and this double holds nothing to
+// release. No test needs that, and a double that grew one would be harder to read
+// for no coverage gained.
 internal sealed class StubBackplane(params NotificationEnvelope[] envelopes) : IHubBackplaneConnection
 {
     public async IAsyncEnumerable<NotificationEnvelope> SubscribeAsync(

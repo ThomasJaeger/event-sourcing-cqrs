@@ -63,7 +63,16 @@ public sealed class PostgresHubBackplaneConnection : IHubBackplaneConnection, IA
         var channel = Channel.CreateUnbounded<NotificationEnvelope>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
-        var listenerTask = Task.Run(() => RunListenerAsync(channel.Writer, ct), ct);
+        // The subscription owns the token its listener runs on, linked to the caller's so
+        // caller cancellation still propagates. Running the listener on the caller's token
+        // directly makes the teardown below hostage to it: the listener parks in WaitAsync
+        // until cancelled, so a consumer that stops iterating without cancelling waits out
+        // its own token before DisposeAsync returns. Owning the token is the outbox
+        // processor's teardown shape, adapted to a per-call subscription.
+        using var listenerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var listenerToken = listenerCts.Token;
+        var listenerTask = Task.Run(
+            () => RunListenerAsync(channel.Writer, listenerToken), listenerToken);
 
         try
         {
@@ -78,8 +87,13 @@ public sealed class PostgresHubBackplaneConnection : IHubBackplaneConnection, IA
             // belt-and-suspenders to handle the case where the consumer stops
             // iterating before the listener exits.
             channel.Writer.TryComplete();
+            // Cancel before awaiting. The listener exits only on cancellation, so awaiting
+            // first is what blocked. The catch is unfiltered because the cancellation this
+            // teardown just requested is a normal shutdown whether or not the caller ever
+            // cancelled, and the filtered form would rethrow on exactly that path.
+            await listenerCts.CancelAsync();
             try { await listenerTask; }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (OperationCanceledException) { }
         }
     }
 
