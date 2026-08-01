@@ -89,7 +89,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Aggregates reconstruct via an `Apply(IDomainEvent)` method. This method is the only way state changes inside the aggregate.
 * No public setters on aggregate state. Properties are private set or init-only.
 * Aggregate boundaries are tight. If a command needs two aggregates, use a process manager instead.
-* Five aggregates ship in v1: Order, Inventory, Shipment, Payment, plus Customer reference data, across four bounded contexts (Sales, Fulfillment, Billing, Customer Support).
+* Five aggregates ship in v1, each a subclass of `AggregateRoot`: Order (Sales), Inventory and Shipment (Fulfillment), Payment (Billing), and UserRoles (Access). They sit across five bounded contexts: those four plus Customer Support, which owns no aggregate and reads from other contexts' projections.
 
 ### Command handlers
 
@@ -97,11 +97,11 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Persistence goes through `IEventStore`, never directly to a database.
 * Optimistic concurrency is enforced on the expected version. Conflicts throw `ConcurrencyException`.
 * Command handlers do not call other command handlers. Cross-aggregate work happens via process managers.
-* Cross-cutting middleware: logging (with correlation IDs), validation, idempotency-key enforcement.
+* Cross-cutting middleware, in the order `AddApplication` registers it: logging (with correlation IDs), authorization, idempotency-key enforcement, validation. Authorization sits inside logging and before idempotency per ADR 0028, so an unauthorized attempt is logged and consumes no idempotency storage.
 
 ### Event store abstraction
 
-* `IEventStore` defined in Domain.Abstractions. Four implementations: `EventStore.Postgres`, `EventStore.SqlServer`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
+* `IEventStore` defined in Domain.Abstractions. Four shipped peers, and the four values `EventStoreProvider` offers: `EventStore.Postgres`, `EventStore.SqlServer`, `EventStore.Kurrent`, `EventStore.DynamoDb`. A fifth type implements the interface, `InMemoryEventStore`, which no host composes; it serves tests and the migration demo.
 * Switching between them is a configuration change, not a code change. The abstraction is real, not aspirational.
 * PostgreSQL adapter: hand-rolled SQL via Npgsql. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
 * SQL Server adapter: hand-rolled SQL via Microsoft.Data.SqlClient. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
@@ -237,7 +237,7 @@ Software product names (PostgreSQL, SQL Server, KurrentDB, DynamoDB, Marten) and
 
 Do not introduce dependencies without asking. Every new NuGet package is a decision that affects the book.
 
-Do not generate generic abstractions ahead of need. A type parameter earns its place when more than one concrete case already needs it, never when one might later. `EventStoreRepository<TAggregate>` is generic because four aggregates and four event stores already share a single load-and-save path; an `IRepository<TAggregate, TId, TVersion>` with one implementation and no second caller is the shape to refuse.
+Do not generate generic abstractions ahead of need. A type parameter earns its place when more than one concrete case already needs it, never when one might later. `EventStoreRepository<TAggregate>` is generic because five aggregates and four event stores already share a single load-and-save path; an `IRepository<TAggregate, TId, TVersion>` with one implementation and no second caller is the shape to refuse.
 
 Do not add CQRS-shaped CRUD. A command that just sets fields and emits a `FieldsUpdated` event is CRUD with extra steps. Commands should represent business intent.
 
