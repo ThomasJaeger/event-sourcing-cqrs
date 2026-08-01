@@ -288,7 +288,7 @@ When starting a session, the relevant context lives in:
 3. `docs/ai-writing-style-source.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript), and it is the only source: no bullet-form restatement of the rules exists in this repository.
 4. This file (CLAUDE.md) for repo-wide rules.
 5. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
-6. `docs/ARCHITECTURE.md` (when written) for cross-cutting decisions.
+6. `docs/ARCHITECTURE.md` for the cross-cutting decisions: what they are, how they compose, and which ADR owns each one. It routes rather than restates, so the ADR it points at is always the authority.
 7. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
 
 Always check the plan before starting work. The plan defines what is in scope for the current phase. The chapter defines the patterns to implement.
