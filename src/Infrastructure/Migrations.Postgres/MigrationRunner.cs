@@ -42,7 +42,7 @@ public sealed class MigrationRunner
         if (options.DryRun)
         {
             var applied = await ReadAppliedAsync(connection, ct);
-            VerifyChecksums(migrations, applied);
+            VerifyAgainstApplied(migrations, applied);
             var pending = migrations.Where(m => !applied.ContainsKey(m.Version)).ToList();
             log($"Dry run: {pending.Count} migration(s) pending.");
             foreach (var migration in pending)
@@ -62,7 +62,7 @@ public sealed class MigrationRunner
         try
         {
             var applied = await ReadAppliedAsync(connection, ct);
-            VerifyChecksums(migrations, applied);
+            VerifyAgainstApplied(migrations, applied);
             var pending = migrations.Where(m => !applied.ContainsKey(m.Version)).ToList();
             if (pending.Count == 0)
             {
@@ -131,6 +131,20 @@ public sealed class MigrationRunner
         return applied;
     }
 
+    // Both checks measure the embedded set against what the tracking table reports, and both
+    // branches of RunPendingAsync need both. One call site each keeps them that way: a branch
+    // cannot pick up one check and miss the other.
+    //
+    // Checksums run first so that every state which raises a checksum mismatch today still
+    // raises one. A set that is both tampered and back-filled reports the tampering, which is
+    // the narrower fault and the one already pinned.
+    private static void VerifyAgainstApplied(
+        IReadOnlyList<MigrationFile> migrations, IReadOnlyDictionary<int, string> applied)
+    {
+        VerifyChecksums(migrations, applied);
+        VerifyPendingFollowsApplied(migrations, applied);
+    }
+
     private static void VerifyChecksums(
         IReadOnlyList<MigrationFile> migrations, IReadOnlyDictionary<int, string> applied)
     {
@@ -141,6 +155,36 @@ public sealed class MigrationRunner
             {
                 throw new MigrationChecksumMismatchException(
                     migration.Version, migration.Name, stored, migration.Checksum);
+            }
+        }
+    }
+
+    // A migration back-filled into a gap is absent from the tracking table, so the pending
+    // selection picks it up like any other and the ascending sort then runs it first, against
+    // a schema every higher-numbered migration has already shaped. That is a silent
+    // data-corruption path, and refusing the run is the only safe answer: the operator
+    // renumbers the file above the highest applied version and runs again.
+    //
+    // An empty applied set has no highest version, so the check does not fire and a first run
+    // against a fresh database proceeds.
+    private static void VerifyPendingFollowsApplied(
+        IReadOnlyList<MigrationFile> migrations, IReadOnlyDictionary<int, string> applied)
+    {
+        if (applied.Count == 0)
+        {
+            return;
+        }
+
+        var highestApplied = applied.Keys.Max();
+
+        // migrations is sorted ascending, so the first violator is the lowest-numbered one,
+        // which is also the one that would have run first.
+        foreach (var migration in migrations)
+        {
+            if (!applied.ContainsKey(migration.Version) && migration.Version < highestApplied)
+            {
+                throw new MigrationOutOfOrderException(
+                    migration.Version, migration.Name, highestApplied);
             }
         }
     }
