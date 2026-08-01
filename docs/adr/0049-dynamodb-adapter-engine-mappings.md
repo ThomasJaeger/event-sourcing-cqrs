@@ -16,7 +16,8 @@ throwaway spike against LocalStack 4.14.0 (TDD_RULES section 1) established the
 engine's real contract before authoring, and several session spikes across the
 arc refuted things reading alone had gotten wrong. This ADR records the mappings
 and the decisions they forced, on the model of ADR 0047. The run posture is
-LocalStack only (PLAN.md:472); real AWS is out of scope.
+LocalStack only, per PLAN.md's Phase 14 out-of-scope entry "Real AWS deployment.
+Local-only via LocalStack."
 
 ## Decisions
 
@@ -231,8 +232,8 @@ cannot deterministically produce.
 ## Trigger for revisiting
 
 A deployment needing more write throughput than one counter row serializes
-reopens the ordering guarantee, not this cap. Real AWS, out of scope at
-PLAN.md:472, reopens every fidelity claim here and the credential chain's boot
+reopens the ordering guarantee, not this cap. Real AWS, which PLAN.md's Phase 14
+out-of-scope list excludes, reopens every fidelity claim here and the credential chain's boot
 posture with it. An engine-native correlation index, or a dedicated correlation
 projection, would reopen the tracer's unavailable state and be its own ADR. A
 filtered head becomes affordable if the table ever grows a key that separates the

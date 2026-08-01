@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (June 2026). Records the authorization posture for the first admin-scoped Web-host page. Superseded for gated pages when the AdminConsole declarative gate lands (Phase 12).
+Accepted (June 2026). Records the authorization posture for the first admin-scoped Web-host page. Superseded for gated pages by ADR 0040 (June 2026): the AdminConsole declarative gate landed in Phase 12 as a deny-by-default fallback policy, and pages behind it take that posture instead of this one.
 
 ## Context
 
