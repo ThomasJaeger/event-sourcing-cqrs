@@ -55,3 +55,43 @@ The type-hierarchy separation is reversible. Conditions that would justify reope
 
 - The behavioral differences between aggregates and process managers narrow to the point where a single hierarchy with convention-based distinction (a marker interface on top of `AggregateRoot`) carries enough information for production tooling, snapshot infrastructure, and operational observability. The current roadmap through Phase 15 doesn't approach this threshold; a hypothetical future shape change might.
 - The parallel-machinery cost (separate repository, separate registry, separate test harness) becomes a maintenance burden that the type-system signal doesn't justify. The cost is bounded by the count of consumer-side abstractions in the codebase, which is small and stable; this trigger is unlikely to fire absent a substantial codebase expansion.
+
+## Amendment (August 2026)
+
+The pedagogical-transparency justification is replaced. ADR 0025 established that production
+quality wins on every axis and named this ADR as one whose grounds it reframes, deferring the
+reframe to the next change touching this file. This amendment discharges that deferral. The
+decision is unchanged, the status is unchanged, and the type hierarchy stays exactly as the
+Decision section states it.
+
+The Context section closed its rejection of the single-hierarchy alternative on teaching
+grounds, that the reference implementation's pedagogical value depends on showing the
+distinction cleanly rather than papering over it. That argument is withdrawn as the rule's
+basis. The separation earns its place on what it prevents at runtime, not on what it shows a
+reader.
+
+The type system carries the separation, and it carries it to the storage boundary.
+`IProcessManagerEvent` is declared bare, deriving from nothing, so it is not assignable to
+`IDomainEvent` and no conversion exists between the two families. `IEventStore` takes that
+distinction into its own signatures: `AppendAsync` accepts aggregate envelopes and
+`AppendProcessManagerEventsAsync` accepts `IReadOnlyList<ProcessManagerEventEnvelope>`, so a
+process-manager event cannot reach the aggregate append path by any route the compiler
+permits. Two registries resolve the two families separately. Under a convention-based
+single hierarchy, every one of those boundaries would be a code review rather than a compile
+error, and the failure mode is a process-manager event published to outbox subscribers as
+though it were an integration contract, which ADR 0013 exists to prevent.
+
+The buffer split is the second production reason, and it is a data-loss guard. `ProcessManager`
+exposes `GetUncommittedEvents` and `MarkCommitted` as two calls, against `AggregateRoot`'s
+single `DequeueUncommittedEvents` that returns and clears together. `ProcessManagerRepository.
+SaveAsync` reads the buffer, appends, and calls `MarkCommitted` only after the append returns.
+An append that throws leaves the in-memory process manager holding its events, and a retry
+sends the same buffer. The aggregate's dequeue-on-read would have cleared them before the
+append was known to have succeeded.
+
+The scale is two process managers and seventeen process-manager event types, which is where
+this decision has sat since Phase 5. That is small, and it is the honest reading: the
+separation is not paying for itself in volume. It is paying for itself in the two failure
+modes above, both of which are silent in production and neither of which a convention catches.
+
+The triggers below are unchanged.

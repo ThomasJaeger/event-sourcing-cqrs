@@ -30,3 +30,39 @@ This applies symmetrically to KurrentDB and DynamoDB adapters, which use native 
 If a future change requires touching identical code in three or more adapters, the session making that change evaluates whether to factor the shared concern at that point. Two-adapter duplication is fine and expected under this ADR. Three-adapter duplication is the threshold for reconsideration. The reconsideration is not automatic refactoring; it is an evaluation step where the alternatives are weighed in light of the specific change driving the question.
 
 KurrentDB and DynamoDB do not have outboxes, so the relational outbox abstraction would only become a three-consumer question if a third relational adapter is added to the implementation. No such addition is currently planned.
+
+## Amendment (August 2026)
+
+The pedagogical-transparency justification is replaced. ADR 0025 established that production
+quality wins on every axis and named this ADR as one whose grounds it reframes, deferring the
+reframe to the next change touching this file. Four adapters have landed since. This amendment
+discharges that deferral. The decision is unchanged, the status is unchanged, and the
+self-contained rule stays exactly as the Decision section states it.
+
+The first Consequences bullet argued the rule on teaching grounds, that each adapter reads
+end-to-end as a teaching artifact and that the reference implementation's pedagogical purpose
+is served by the transparency. That argument is withdrawn as the rule's basis. It was never
+the reason a production team would take this shape.
+
+The production grounds are what the four adapters show. Their engine-specific mechanics are
+not variations on one algorithm, they are different algorithms reaching the same contract.
+Optimistic concurrency alone translates from four unrelated failure signals: a SQLSTATE on
+PostgreSQL, error numbers 2627 and 2601 on SQL Server, a `WrongExpectedVersionException` from
+the KurrentDB client, and a conditional-write rejection on DynamoDB. Two of the four carry an
+outbox and two dispatch natively, through catch-up subscriptions and Streams. A shared layer
+spanning these would hold the union of four engines' failure modes behind one signature, and
+every adapter would pay for the three engines it is not.
+
+The duplication cost is measured rather than estimated, and it is higher than this ADR said.
+The Consequences section put it at 30 to 50 lines. ADR 0045 corrected that to roughly 234 for
+the SQL Server adapter's dedicated seam files, noting the original count omitted the type
+registries and the JSON seam. ADR 0048 then corrected the scope of that figure and collapsed
+the versioning seam where the duplication had become shared in fact. The rule survived both
+corrections because the revisit trigger did its work: the seam that reached three consumers
+was factored, and the engine-specific mechanics that did not were left alone. A rule that
+absorbs a fivefold cost correction without changing is resting on something other than the
+cost estimate.
+
+The trigger below is unchanged and remains the mechanism. Two-adapter duplication is expected;
+three adapters touching identical code is the point at which factoring is evaluated. That
+threshold, not pedagogical transparency, is what keeps this decision honest.

@@ -44,7 +44,7 @@ Concretely:
 * Error handling is intentional. `catch (Exception)` either rethrows, translates to a named exception type, or surfaces a documented failure mode. None of them swallow.
 * Tests assert on real behavior the production caller depends on. Integration tests exercise the wire format. Unit tests exercise the contract, not the incidental implementation.
 
-Two architectural decisions on disk (the self-contained event-store-adapter rule and the process-manager type-hierarchy rule) were originally justified on pedagogical-transparency grounds. The decisions themselves survive on production-quality reasoning. The justifications get updated at the next ADR touching them, or at an explicit supersession ADR; the architectural rules stay in force in the meantime.
+Two architectural decisions on disk (the self-contained event-store-adapter rule and the process-manager type-hierarchy rule) were originally justified on pedagogical-transparency grounds. Both decisions survive, and both now carry amendments stating their production grounds: ADR 0004 on the four adapters' unrelated failure modes and its measured duplication cost, ADR 0012 on the type-system boundary that keeps process-manager events off the outbox and the buffer split that survives a failed append. Neither rule changed.
 
 ## Stack and constraints
 

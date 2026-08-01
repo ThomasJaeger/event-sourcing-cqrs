@@ -237,3 +237,23 @@ The general form, for a later reader judging a type parameter: count the concret
 exist today. A parameter earns its place on cases already on disk, and not on cases a design
 anticipates. That is the same test ADR 0004 applies when it refuses a shared relational layer
 for adapters that do not yet need one.
+
+## Amendment (August 2026): the ADR 0004 and 0012 reframes are discharged
+
+The Decision section above defers the ADR 0004 and 0012 reframes to the next ADR-touching
+change to those files, or to an explicit supersession ADR. That deferral is discharged. Both
+ADRs now carry their own amendments replacing the pedagogical-transparency justification with
+production grounds derived from the code, and both decisions survive unchanged, as this ADR
+predicted they would.
+
+The deferral was the wrong mechanism, which is worth recording alongside its discharge. Four
+event-store adapters landed between this ADR and now without the ADR 0004 trigger firing,
+because adding an adapter is not an ADR-touching change to ADR 0004. A condition that waits on
+an event nobody is scheduled to perform does not arrive. What it left standing was two ADRs
+justifying live architectural rules on grounds this one overrides, readable by anyone who
+opened them and correct in neither.
+
+Nothing else about this decision changes. The clause deferring the reframe is now satisfied
+rather than pending, and no further reframe is owed anywhere in the ADR corpus: the two ADRs
+this decision named are the two it affected concretely, and the paragraph declining to chase
+the reframe retroactively across the rest of the corpus still governs.
