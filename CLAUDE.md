@@ -285,7 +285,7 @@ When starting a session, the relevant context lives in:
 
 1. `CLAUDE_CODE_PREAMBLE.md` for the working pattern Claude Code should follow in every session (propose before writing, stop and ask before deviating, log cross-track flags, commit per logical unit).
 2. `docs/TDD_RULES.md` for the test-first discipline (the RED-before-production-code cycle, the anti-theater enforcement, the scope where TDD is mandatory versus spike-then-stabilize versus judgment). It extends the working pattern; it does not override it.
-3. `docs/ai-writing-style-source.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript); the working bullet form of the rules lives in `docs/session_setup.md`.
+3. `docs/ai-writing-style-source.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript), and it is the only source: no bullet-form restatement of the rules exists in this repository.
 4. This file (CLAUDE.md) for repo-wide rules.
 5. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
 6. `docs/ARCHITECTURE.md` (when written) for cross-cutting decisions.
