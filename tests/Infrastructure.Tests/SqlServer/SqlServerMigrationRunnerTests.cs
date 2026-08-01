@@ -75,6 +75,46 @@ public class SqlServerMigrationRunnerTests : IClassFixture<SqlServerFixture>
     }
 
     [Fact]
+    // The twin of PostgresMigrationRunnerTests' dry-run fact. Under ADR 0004 the adapters keep
+    // separate runners, and the defect that posture predicts is the copy nobody pinned: this
+    // branch worked and no fact held it, so a regression here would have surfaced against an
+    // operator rather than against CI.
+    //
+    // An empty database is an ordinary pending set. Nothing is applied, so the ordering guard
+    // does not fire and no checksum is compared, and what runs is the reporting path. The
+    // refusal path under dry run belongs to SqlServerMigrationRunnerOrderingTests.
+    public async Task Dry_run_reports_pending_without_touching_the_database()
+    {
+        var connStr = await _fixture.CreateDatabaseAsync();
+        var log = new List<string>();
+
+        await NewRunner().RunPendingAsync(
+            new SqlServerMigrationRunnerOptions
+            {
+                ConnectionString = connStr,
+                DryRun = true,
+                Log = log.Add,
+            },
+            CancellationToken.None);
+
+        log.Should().Contain("Dry run: 6 migration(s) pending.");
+        log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
+        log.Should().Contain(m => m.EndsWith("0002 add_outbox"));
+        log.Should().Contain(m => m.EndsWith("0003 add_command_idempotency"));
+        log.Should().Contain(m => m.EndsWith("0004 add_delayed_commands"));
+        log.Should().Contain(m => m.EndsWith("0005 add_outbox_event_version"));
+        log.Should().Contain(m => m.EndsWith("0006 add_snapshots"));
+
+        // Nothing was written. The PostgreSQL twin probes for the first migration's events
+        // table and for the tracking table with to_regclass; sys.tables covers both of those
+        // and every other object the six migrations would have created, so an empty result is
+        // the same standard read through SQL Server's own catalog.
+        var eventStoreTables = await QueryNamesAsync(connStr,
+            "SELECT name FROM sys.tables WHERE schema_id = SCHEMA_ID('event_store')");
+        eventStoreTables.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task The_companion_tables_carry_their_named_constraints_and_filtered_indexes()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
