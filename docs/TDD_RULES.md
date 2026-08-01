@@ -62,6 +62,18 @@ breath and present a green bar that never went red.
 - **Show the RED.** Run the new test and paste the actual failure output *before* writing
   production code. Confirm it fails **for the intended reason** (the asserted behavior is
   missing), not because it didn't compile, threw an unrelated error, or the test is wrong.
+- **A characterization's non-vacuity is proven by a scratch break.** Behavior that already
+  works has no RED to show. The fact passes the moment it compiles, and a fact that cannot
+  fail proves nothing. Break the production path in the working tree so the fact fails, run
+  it, and confirm it fails at its assertions rather than at arrangement or at compile. Then
+  discard the break and re-run green against the restored tree, so the green verdict is
+  against what ships rather than against the memory of a run. The break is reported in the
+  turn with its exact shape and its verbatim failure, it never reaches the index, and the
+  restored file is verified byte-identical before the commit. If the strict build turns the
+  break into a compile error rather than a failing assertion, relax the scratch build enough
+  to reach assertion level and say so. Ruled at the SQL Server dry-run branch, which was
+  correct and unpinned: the break applied each pending migration inside the dry-run loop, and
+  the fact failed on its write-nothing assertion with the reporting assertions still passing.
 - **Minimal GREEN.** Implement the least code that turns this one test green. No
   speculative generality; no handling cases no test demands yet.
 - **Test through behavior, not internals.** Drive aggregates through commands and observe
