@@ -51,7 +51,7 @@ Two architectural decisions on disk (the self-contained event-store-adapter rule
 * .NET 10 LTS, C# 14. Pinned to .NET 10 via `global.json` at the repo root.
 * Four event-store implementations as first-class peers behind a common abstraction:
   - PostgreSQL 16 (hand-rolled, the relational path)
-  - SQL Server 2022 (hand-rolled, the relational path on the Microsoft stack)
+  - SQL Server (hand-rolled, the relational path on the Microsoft stack). 2019 is the version floor and what CI proves, because the schema depends on a UTF-8 collation that arrived in 2019; 2022 is the primary target.
   - KurrentDB (the specialized path)
   - DynamoDB (the managed-cloud path, via LocalStack for local dev and tests)
 * PostgreSQL 16 for read models, with a mix of relational tables and JSONB columns.
@@ -77,7 +77,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 
 * Events are immutable records. Use C# `record` types with init-only properties.
 * Events live in their own folder per bounded context: `Domain/Sales/Events`, `Domain/Fulfillment/Events`, etc.
-* Every event has metadata kept in an `EventEnvelope`: EventId, AggregateId, Version, OccurredAt, CorrelationId, CausationId, Actor. The metadata is a separate type from the event payload, as the manuscript Chapter 8 specifies.
+* Every event is stored in an `EventEnvelope`, which declares `StreamId`, `StreamVersion`, `EventId`, `EventType`, `EventVersion`, `Payload`, `Metadata`, `OccurredUtc`, and `GlobalPosition`. The `Metadata` member is its own record, `EventMetadata`, declaring `EventId`, `CorrelationId`, `CausationId`, `ActorId`, `Source`, `OccurredUtc`, and `Tenant`. The metadata is a separate type from the event payload, as the manuscript Chapter 8 specifies.
 * Events are serialized as JSON. Schema is enforced at the type level.
 * Never mutate an event. Never delete an event. Never rewrite history. If something needs correcting, append a compensating event.
 
@@ -143,16 +143,22 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 ```
 /src
   /Domain
-    /Sales              // Order aggregate, events, value objects
-    /Fulfillment        // Inventory, Shipment aggregates
-    /Billing            // Payment aggregate
-    /CustomerSupport    // Read-only context
-    /SharedKernel       // Money, Address, identifiers
-  /Domain.Abstractions  // ports: IEventStore, IRepository, etc.
+    /Sales                    // Order aggregate, events, value objects
+    /Fulfillment              // Inventory, Shipment aggregates
+    /Billing                  // Payment aggregate
+    /CustomerSupport          // Read-only context
+    /Access                   // Event-sourced user-to-role assignments
+    /SharedKernel             // Money, Address, identifiers
+  /Domain.Abstractions        // ports: IEventStore, IEventStoreRepository, etc.
   /Application
     /Commands
     /Queries
     /Middleware
+    /Pipelines                // command and query pipeline behaviors
+    /Authentication
+    /Authorization
+    /Context                  // ambient command, query, and tenant context
+    /SignalR                  // IHubBackplaneConnection
   /ProcessManagers
     /OrderFulfillment
     /Returns
@@ -161,21 +167,29 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
     /OrderDetail
     /CustomerSummary
     /InventoryDashboard
-    /Infrastructure
+    /CurrentRoles             // RBAC current-roles read model
+    /SkuToInventoryId         // projection-private lookup (ADR 0020)
+    /OrderIdToPaymentId       // projection-private lookup (ADR 0020)
+    /OrderThroughput          // order-throughput meter
+    /Infrastructure           // checkpointing, batched catch-up, failure handling
   /Infrastructure
     /EventStore.Postgres
+    /EventStore.Postgres.Cli  // migrate entry point
     /EventStore.SqlServer
     /EventStore.Kurrent
     /EventStore.DynamoDb
+    /EventStore.InMemory      // test and demo adapter
+    /Migrations.Postgres      // engine-agnostic migration runner (ADR 0004)
     /ReadModels.Postgres
     /Outbox
+    /SignalR
     /Versioning
   /Hosts
-    /Web                // Blazor Server
-    /Api                // JSON API
-    /Workers            // hosted services
-    /AdminConsole       // operational tools
-  /Migration            // standalone Chapter 18 example
+    /Web                      // Blazor Server
+    /Api                      // JSON API
+    /Workers                  // hosted services
+    /AdminConsole             // operational tools
+  /Migration                  // standalone Chapter 18 example
 /tests
   /Domain.Tests
   /Application.Tests
@@ -184,9 +198,16 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
   /Infrastructure.Tests
   /IntegrationTests
   /PropertyTests
+  /Workers.Tests
+  /Hosts.Web.Tests
+  /Hosts.AdminConsole.Tests
+  /Migration.Tests
+  /EventStore.ContractTests   // the one suite all four adapters pass
+  /TestInfrastructure         // shared fixtures, no facts of its own
 /migrations
 /docs
 /docker
+/scripts
 ```
 
 The folder structure maps to chapters. Domain shows Chapters 7 and 9. Application shows Chapters 8 and 13. ProcessManagers shows Chapter 10. Projections shows Chapter 13. Infrastructure shows Chapter 8 plus parts of 11, 12, 17. AdminConsole shows Chapter 17. Migration shows Chapter 18.
@@ -198,8 +219,8 @@ The folder structure maps to chapters. Domain shows Chapters 7 and 9. Applicatio
 * Aggregates are nouns: `Order`, `Inventory`, `Payment`.
 * Process managers end in `ProcessManager`: `OrderFulfillmentProcessManager`, `ReturnProcessManager`.
 * Projections end in `Projection`: `OrderListProjection`, `InventoryDashboardProjection`.
-* Read models end in `ReadModel`: `OrderListReadModel`, `OrderDetailReadModel`.
-* Repositories end in `Repository`: `OrderRepository`, `InventoryRepository`.
+* Read-model rows end in `Row`: `OrderListRow`, `OrderDetailRow`. Their read ports end in `Store`: `IOrderListStore`, `IOrderDetailStore`. The write ports a projection batches through end in `UnitOfWork`: `IOrderListUnitOfWork`. All three live under `Domain/{Context}/ReadModels/`.
+* Repositories end in `Repository` and are generic over what they load: `EventStoreRepository<TAggregate>`, `SnapshottingEventStoreRepository<TAggregate, TSnapshot>`, `ProcessManagerRepository<TPm>`. No per-aggregate repository type exists, because loading by replay is identical across aggregates and all four event stores sit behind one port.
 * Adapters are named for what they adapt: `EventStore.Postgres`, `EventStore.SqlServer`, `EventStore.Kurrent`, `EventStore.DynamoDb`.
 * Test classes are named for the type under test, suffixed `Tests`.
 * Test method names read as sentences with underscores: `Cancelling_a_shipped_order_throws`.
@@ -216,7 +237,7 @@ Software product names (PostgreSQL, SQL Server, KurrentDB, DynamoDB, Marten) and
 
 Do not introduce dependencies without asking. Every new NuGet package is a decision that affects the book.
 
-Do not generate generic abstractions ahead of need. The book teaches concrete patterns. A reader who sees `OrderRepository` learns more than one who sees `IRepository<TAggregate, TId, TVersion>`.
+Do not generate generic abstractions ahead of need. A type parameter earns its place when more than one concrete case already needs it, never when one might later. `EventStoreRepository<TAggregate>` is generic because four aggregates and four event stores already share a single load-and-save path; an `IRepository<TAggregate, TId, TVersion>` with one implementation and no second caller is the shape to refuse.
 
 Do not add CQRS-shaped CRUD. A command that just sets fields and emits a `FieldsUpdated` event is CRUD with extra steps. Commands should represent business intent.
 
