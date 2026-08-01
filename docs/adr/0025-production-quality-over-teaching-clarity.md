@@ -201,3 +201,39 @@ this one.
   manuscript-side framing becomes the secondary concern, an amendment to
   CLAUDE.md may follow that further narrows the teaching-friendly framing
   in the repository.
+
+## Amendment (August 2026)
+
+An application of this decision, recorded because its reasoning lived only in a commit
+message. The decision above is unchanged, its status is unchanged, and nothing here
+supersedes anything.
+
+CLAUDE.md's rule against generic abstractions ahead of need carried a justification this ADR
+already overrides. It argued the concrete shape on teaching grounds, that a reader learns
+more from a per-aggregate repository than from a generic one, which is the axis the Decision
+above says does not win. The rule survives. The argument that had been offered for it does
+not.
+
+The illustration was the weaker half. It named `OrderRepository` as the shape to prefer and a
+three-parameter generic repository as the shape to avoid, and this repository has declared
+neither type at any point in its history. A rule whose positive example does not exist cannot
+be checked against the code it governs, and a reader following it would have written a type
+the codebase would then have had to reject.
+
+The rule now rests on need, and need is countable here. Five aggregates sit behind
+`IEventStoreRepository<TAggregate>`, which is every `AggregateRoot` subclass on disk: Order in
+Sales, Inventory and Shipment in Fulfillment, Payment in Billing, and UserRoles in Access.
+Each appears as a concrete type argument at a command handler or a host service. Under them
+sit four shipped event stores, the four values `EventStoreProvider` offers, alongside a fifth
+implementation of `IEventStore` that serves tests and the migration demo and that no host
+composes. One load-and-save path carries every pairing of the five with the four.
+
+That count also corrects the direction the earlier framing implied. The generic is the
+production-quality choice here, and the per-aggregate duplication it would have replaced is
+what a teaching-friendly reading would have produced. This ADR's priority selects the shape
+the code already has rather than arguing against it.
+
+The general form, for a later reader judging a type parameter: count the concrete cases that
+exist today. A parameter earns its place on cases already on disk, and not on cases a design
+anticipates. That is the same test ADR 0004 applies when it refuses a shared relational layer
+for adapters that do not yet need one.
