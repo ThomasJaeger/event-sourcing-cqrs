@@ -22,6 +22,11 @@
 #   citation repaired first: ADR 0048 cites ADR 0004 by line number.
 #   docs/sessions/ is excluded, because session logs are immutable history and a
 #   citation inside one records what was true when it was written.
+#   This file is excluded too, and the exclusion is the file rather than any line in
+#   it. A checker that documents the pattern it matches carries example citations in
+#   its own comments, so it reports itself; exempting the one line that trips it today
+#   leaves the next example someone writes to trip it again. Nothing else leaves scope,
+#   and the price is that a real citation written here would be missed.
 #
 # Exit codes
 #   0  No line-number citations into docs/PLAN.md.
@@ -37,7 +42,9 @@ cd "$(git rev-parse --show-toplevel)"
 # Matches PLAN.md:123 and docs/PLAN.md:123. A bare :123 continuing an earlier
 # citation on the same line rides along with its explicit anchor, so anchoring on
 # the explicit form finds every offending line.
-if hits=$(git grep -nE '(docs/)?PLAN\.md:[0-9]+' -- . ':!docs/sessions' 2>/dev/null); then
+# Those two example citations are why the second exclusion names this file.
+if hits=$(git grep -nE '(docs/)?PLAN\.md:[0-9]+' \
+    -- . ':!docs/sessions' ':!scripts/check-plan-citations.sh' 2>/dev/null); then
     printf '%s\n' "docs/PLAN.md is cited by line number. Cite it by content instead:" >&2
     printf '%s\n' "  name the phase and the clause, as in \"PLAN.md's Phase 2 provider-switch done-when\"." >&2
     printf '\n%s\n' "$hits" >&2
