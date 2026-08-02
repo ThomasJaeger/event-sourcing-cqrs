@@ -106,3 +106,33 @@ warrant reopening:
   None observed; the scope creation is cheap and the dispatch volume
   per host is modest. Recorded here as a non-trigger absent
   measurement.
+
+## Amendment (August 2026)
+
+The caused-command-bus adapter this decision anticipated arrived, and it satisfies the rule by
+a different route than the Decision above predicted. The rule is unchanged and the status is
+unchanged; what is recorded here is how the second entry point ended up holding it.
+
+The Decision says future dispatchers, naming the Phase 9 caused-command-bus adapter, "follow
+the same shape," which reads as an instruction to repeat the pattern at a second site. ADR 0014
+then decided something stronger: no parallel dispatcher at all, on the grounds that one would
+diverge from the user path on pipeline application and accessor scoping. So `CausedCommandBus`
+opens no scope of its own. It translates a causing event's metadata into a dispatch fragment
+and calls `CommandBus`'s internal `SendWithContextAsync` seam, which routes into the same
+`DispatchAsync` the user path runs, and that method opens the scope.
+
+The result is that scope-per-dispatch holds for process-manager dispatch structurally rather
+than by conformance. `CommandBus.DispatchAsync` describes itself as "the one dispatch loop both
+entry points run," and sharing it makes behaviors-run-once and accessor-scope-holds properties
+of either caller rather than discipline repeated at two sites.
+
+What breaks if the sharing is dropped is worth stating, because the failure is quiet. A rewrite
+that gave the caused path its own dispatch loop without a scope would resolve scoped handlers
+from the root provider. Under a validating provider that throws, which is the failure this ADR
+was written after; under a non-validating one it silently produces captive dependencies, so a
+process-manager-originated command would share a handler instance and its scoped dependencies
+across dispatches. The user path would keep working, so the defect would present as
+process-manager-only corruption.
+
+This amendment records a consequence of ADR 0014's no-parallel-dispatcher decision, not a
+change to this one. Both decisions stand as written.

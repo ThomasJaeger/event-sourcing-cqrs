@@ -210,12 +210,11 @@ Each relational adapter carries its own migration runner, self-contained per ADR
 structurally twins and share no code, because the lock primitive, the existence probe, and the
 batch handling are all engine-specific.
 
-Both guarantee the same four things. A migration file matches `NNNN_description.sql` or the
-load fails. No two files share a version. A file edited after being applied fails a checksum
-comparison rather than running. And a pending migration numbered below the highest applied
-version is refused, naming both versions, so a back-filled file cannot run against a schema
-that later migrations have already shaped. That last guarantee is the newest and has no ADR of
-its own; it is recorded in the commit that landed it.
+Both refuse rather than proceed on three conditions: a file edited after being applied, two
+files claiming one version, and a pending migration numbered below the highest applied version
+(ADR 0053, Migration Runner Refusal Guarantees). That ADR also records which of the three each
+runner has a fact for, which is not all of them, and why contiguity and hole detection were
+declined.
 
 ## Where decisions interact
 
@@ -238,11 +237,13 @@ foreign identifier through a private lookup. That lookup is itself a projection 
 checkpoint, so whether it has seen the event the consuming projection needs is a question about
 relative positions, which is ADR 0044's subject. Neither cites the other.
 
-**Scope-per-dispatch and the caused command bus.** ADR 0024 requires a scope per dispatch; ADR
-0014 routes process-manager commands through a parallel entry point. That entry point must also
-open a scope, or process-manager dispatch resolves scoped services from the wrong lifetime.
-`CausedCommandBus` does honor it, and says so in its own header comment, but neither ADR
-records the requirement.
+**Scope-per-dispatch and the caused command bus.** ADR 0024 requires a scope per dispatch and
+names the caused-command-bus adapter as a future dispatcher that must follow the same shape.
+ADR 0014 then forbade a parallel dispatcher outright, so the caused path opens no scope of its
+own and instead runs the one dispatch loop the user path runs. Scope-per-dispatch therefore
+holds for process-manager dispatch structurally rather than by conformance, and dropping the
+sharing would produce captive dependencies on the process-manager path alone. ADR 0024's
+amendment records it.
 
 ## Reading the corpus
 
