@@ -17,7 +17,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 //        partition that carries global ordering.
 //   sk = the stream version for an event row, the position for a log row.
 //
-// No Global Secondary Index. PLAN.md:463 proposed a GSI for global ordering and replay, and a
+// No Global Secondary Index. PLAN.md's Phase 14 GSI goal proposed a GSI for global ordering and replay, and a
 // spike against the live engine refuted it: DynamoDB rejects ConsistentRead against a GSI with
 // "Consistent reads are not supported on global secondary indexes" (ValidationException). A
 // GSI-backed global position cannot serve the strongly-consistent ordered read ADR 0044's
@@ -60,7 +60,7 @@ public sealed class DynamoDbTableProvisioner
                             new KeySchemaElement(DynamoDbSchema.SortKeyAttribute, KeyType.RANGE),
                         ],
                         BillingMode = BillingMode.PAY_PER_REQUEST,
-                        // The change feed the dispatch service wakes on (PLAN.md:465). KEYS_ONLY is
+                        // The change feed the dispatch service wakes on (PLAN.md's Phase 14 Streams goal). KEYS_ONLY is
                         // everything this system reads: the dispatcher treats a record as a wake
                         // signal and never parses it, then reads the envelope from the log
                         // partition, so an image would be carried across the wire and dropped.

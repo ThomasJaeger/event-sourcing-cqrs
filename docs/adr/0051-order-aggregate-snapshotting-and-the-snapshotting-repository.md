@@ -137,7 +137,7 @@ named the PM write-stamp as the twin the first PM upcaster forces.
   than shared, because that class is sealed with private helpers and sharing would widen its
   surface. The duplication is flagged for a later slice that extracts a shared envelope
   factory both repositories call.
-- The plan's snapshot-storage wording, "separate PostgreSQL table" (PLAN.md:488), under-specifies
+- The plan's snapshot-storage wording, "separate PostgreSQL table" (PLAN.md's Phase 15 snapshot-storage goal), under-specifies
   the shipped four-engine posture: snapshots live in `event_store.snapshots` on the relational
   engines' event-store database and on the read-model companion for the non-relational engines,
   not a single standalone PostgreSQL table. Per the source-of-truth hierarchy the code is

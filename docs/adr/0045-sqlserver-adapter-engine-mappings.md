@@ -53,7 +53,7 @@ payloads are ASCII after escaping and cannot detect the corruption.
 
 **Position readback and triggers.** The append reads global_position back with
 INSERT OUTPUT, which fails on tables carrying triggers. The events table
-therefore carries none, ever, and the outbox is polling-only per PLAN.md:245.
+therefore carries none, ever, and the outbox is polling-only per PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers.
 The notification-free processors have no listener connection, no re-entrant
 teardown surface, and no counterpart to the PostgreSQL processor's teardown
 repair: a strict reduction in bug surface.
@@ -110,12 +110,12 @@ revisit trigger remains three adapters touching identical code.
 **CI matrix.** The suite runs against the 2019 image only: the floor is what
 CI must prove, no version-conditional code exists in the adapter, and the
 single image already costs roughly 90 seconds of container tests per
-Infrastructure.Tests run at the time of writing; the PLAN.md:253 test adds one
+Infrastructure.Tests run at the time of writing; the PLAN.md's Phase 2 provider-switch done-when test adds one
 SQL Server container start to IntegrationTests.
 
 ## Consequences
 
-- The switching guarantee at PLAN.md:253 is made true for the hosts that
+- The switching guarantee at PLAN.md's Phase 2 provider-switch done-when is made true for the hosts that
   compose IEventStore for writes (Api, Workers) by EVENT_STORE_PROVIDER
   selection, defaulting to Postgres and failing loudly on unknown values.
   AdminConsole reads the key only to refuse non-Postgres values until its
@@ -130,7 +130,7 @@ SQL Server container start to IntegrationTests.
 - The message-substring translation filter is a weaker contract than a
   structured field; a constraint rename breaks translation, which the contract
   suite's concurrency facts would catch.
-- PLAN.md:235 (error 2627) and :236 (NVARCHAR(MAX)) are each incomplete or
+- PLAN.md's Phase 2 concurrency goal (error 2627) and its serialization goal (NVARCHAR(MAX)) are each incomplete or
   diverged against these decisions; both carry cross-track flags for Phase 17.
 
 ## Trigger for revisiting
@@ -138,4 +138,4 @@ SQL Server container start to IntegrationTests.
 Version-conditional adapter behavior reopens the CI matrix. A third relational
 adapter reopens ADR 0004's factoring question with the corrected cost figure.
 An engine-native outbox wake (Service Broker, Change Tracking) remains
-deferred per PLAN.md:245 and would be its own ADR.
+deferred per PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers and would be its own ADR.

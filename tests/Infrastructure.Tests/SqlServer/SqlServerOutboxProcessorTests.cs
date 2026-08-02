@@ -13,10 +13,10 @@ namespace EventSourcingCqrs.Infrastructure.Tests.SqlServer;
 
 // The SQL Server outbox, at the same seams as the PostgreSQL processor's tests. Every behavioral
 // fact there has a twin here except the two notification facts, which have nothing to test: this
-// engine has no LISTEN/NOTIFY and PLAN.md:245 scopes it to polling, so the wake path is the idle
+// engine has no LISTEN/NOTIFY and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes it to polling, so the wake path is the idle
 // timer and there is no listener to wake or to reconnect.
 //
-// The first fact carries Phase 2's atomic-write done-when (PLAN.md:238): the event row and its
+// The first fact carries Phase 2's atomic-write done-when (PLAN.md's Phase 2 atomic-write goal): the event row and its
 // outbox row land in one transaction or neither lands.
 public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
 {
@@ -262,7 +262,7 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
     [Fact]
     public async Task A_subscriber_failure_never_loses_the_event_from_the_outbox()
     {
-        // PLAN.md:251's done-when. The row survives a failing subscriber, stays unsent, and is
+        // PLAN.md's Phase 2 outbox-durability done-when. The row survives a failing subscriber, stays unsent, and is
         // still there to be dispatched once the subscriber recovers.
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         await AppendOneAsync(connStr);

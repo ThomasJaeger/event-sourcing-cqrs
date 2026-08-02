@@ -42,7 +42,7 @@ public class SnapshottingRepositoryEndToEndTests : IClassFixture<PostgresFixture
     // (a) Equivalence (green-on-write characterization; the mechanism was RED-proven at S2b unit level):
     // an order driven past the interval through the snapshotting repository against the real store, loaded
     // back through the snapshotting repository, equals the same stream full-replayed through a plain
-    // repository over the same store. Snapshot-plus-tail equals full replay (PLAN.md:489).
+    // repository over the same store. Snapshot-plus-tail equals full replay (PLAN.md's Phase 15 snapshot-tests goal).
     [Fact]
     public async Task Loading_through_the_snapshotting_repository_equals_a_full_replay()
     {
@@ -79,7 +79,7 @@ public class SnapshottingRepositoryEndToEndTests : IClassFixture<PostgresFixture
 
     // (b) Replay count, the speedup pin (green-on-write): after a snapshot exists past two boundaries, a
     // load reads only the tail from the snapshot's version, strictly fewer events than the full stream.
-    // The speedup is pinned as a replay count, not a wall clock (PLAN.md:489).
+    // The speedup is pinned as a replay count, not a wall clock (PLAN.md's Phase 15 snapshot-tests goal).
     [Fact]
     public async Task Loading_through_the_snapshotting_repository_reads_only_the_tail_after_the_snapshot()
     {
@@ -120,7 +120,7 @@ public class SnapshottingRepositoryEndToEndTests : IClassFixture<PostgresFixture
     // (c) Discard and rebuild (green-on-write): a snapshot captured at schema version 1 loads as null
     // for a repository configured at schema version 2 (full replay from version 0, state correct), and
     // the next boundary crossing captures a fresh snapshot stored at schema version 2. A snapshot shape
-    // change is a discard-and-rebuild, never an upcast (PLAN.md:490).
+    // change is a discard-and-rebuild, never an upcast (PLAN.md's Phase 15 snapshot-versioning goal).
     [Fact]
     public async Task A_schema_mismatched_snapshot_is_discarded_and_the_next_boundary_rebuilds_it()
     {

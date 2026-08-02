@@ -11,7 +11,7 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
 // Boots the Api host with its event store on SQL Server and its read models on PostgreSQL, the
-// composition PLAN.md:253 asks for: switching the configured event store is a configuration change,
+// composition PLAN.md's Phase 2 provider-switch done-when asks for: switching the configured event store is a configuration change,
 // not a code change.
 //
 // Two containers, because the split is real. The provider key selects the engine that holds events,

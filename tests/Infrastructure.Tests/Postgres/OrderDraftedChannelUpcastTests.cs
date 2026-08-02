@@ -16,7 +16,7 @@ using static EventSourcingCqrs.Infrastructure.Tests.Postgres.PostgresEventStoreT
 namespace EventSourcingCqrs.Infrastructure.Tests.Postgres;
 
 // Chapter 11's worked example: the OrderDrafted version-1-to-version-2 lineage. OrderDrafted gained a
-// Channel member, and rows written before it lack that member. The done-when (PLAN.md:495) is that a
+// Channel member, and rows written before it lack that member. The done-when (PLAN.md's Phase 15 upcasting done-when) is that a
 // stored version-1 row whose payload JSON carries no channel reads back as the current shape with
 // Channel set to the "unknown" default and the envelope stamped at the current version. The
 // OrderDraftedV1ToV2 upcaster in the pipeline lifts the older payload forward and derives the version

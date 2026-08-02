@@ -23,7 +23,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 // POLLING ONLY, and the absence is the design. The PostgreSQL processor carries a second wake
 // path: a long-lived listener connection parked in WaitAsync, woken by a pg_notify trigger, with
 // a TaskCompletionSource raced against the idle timer, plus reconnect handling and a re-entrant
-// teardown to take it all down safely. SQL Server has no LISTEN/NOTIFY and PLAN.md:245 scopes
+// teardown to take it all down safely. SQL Server has no LISTEN/NOTIFY and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes
 // this engine's trigger mechanism to polling in v1, so none of that machinery exists here. The
 // idle poll is the entire wake path and IdlePollInterval is the dispatch-latency bound.
 //

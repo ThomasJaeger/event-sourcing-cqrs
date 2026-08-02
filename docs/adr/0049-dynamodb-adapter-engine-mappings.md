@@ -67,7 +67,7 @@ gapless here, stronger than the contract requires, and a gap would be a defect
 rather than a tolerated engine behavior. The spike observed the same: 300
 appends, positions 1 to 300, none missing.
 
-**The dead GSI, and the log partition that replaced it.** PLAN.md:463 proposed a
+**The dead GSI, and the log partition that replaced it.** PLAN.md's Phase 14 GSI goal proposed a
 Global Secondary Index for global ordering and replay. The live engine refuses
 it: ConsistentRead against a GSI is rejected outright with "Consistent reads are
 not supported on global secondary indexes" (ValidationException). A GSI-backed
@@ -164,7 +164,7 @@ iterators before it drains, which closes the window where an event committed
 between the drain and the acquire would be missed by both. A drain is forced on
 that first pass rather than waited for, so a quiet stream with a backlog still
 catches up; after that a quiet stream costs no read of the event feed, which is
-the PLAN.md:475 reading: there is no interval polling of the event table, and the
+the PLAN.md's Phase 14 no-polling done-when reading: there is no interval polling of the event table, and the
 native feed is the trigger. Dispatch is at-least-once like every other path here,
 and a fault restarts the loop, which drains from the checkpoint again: redelivery
 absorbed by per-handler idempotency, and degraded-mode availability rather than a
@@ -209,7 +209,7 @@ cannot deterministically produce.
 
 ## Consequences
 
-- The switching guarantee at PLAN.md:253 now extends to four engines. The Api,
+- The switching guarantee at PLAN.md's Phase 2 provider-switch done-when now extends to four engines. The Api,
   Workers, and AdminConsole hosts each compose a DynamoDb arm, and the provider
   value carries the engine through the write path, the read-side ports, and the
   projection feed.

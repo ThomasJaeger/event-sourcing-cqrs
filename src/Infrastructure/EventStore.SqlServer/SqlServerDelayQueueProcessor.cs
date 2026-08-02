@@ -21,7 +21,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 // claimed_at column, and a crash releases the locks and reverts the rows to pending with no
 // cleanup code.
 //
-// POLLING ONLY, and the absence is the design. SQL Server has no LISTEN/NOTIFY and PLAN.md:245
+// POLLING ONLY, and the absence is the design. SQL Server has no LISTEN/NOTIFY and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers
 // scopes this engine to polling in v1, so the notification arm the PostgreSQL processor carries
 // (listener connection, TaskCompletionSource wake, reconnect handling, re-entrant teardown) does
 // not exist here. With no listener there is nothing for a re-entrant StopAsync to race over, so

@@ -14,7 +14,7 @@ using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.AdminConsole;
 
-// The browser done-when (PLAN.md:476, "The Event Store Browser works against DynamoDB"), the twin of
+// The browser done-when (PLAN.md's Phase 14 browser done-when, "The Event Store Browser works against DynamoDB"), the twin of
 // EventStoreBrowserOverKurrentTests. The browser's read seam, IStreamInspector, reads one aggregate
 // stream through IEventStore and re-serializes payloads; it is engine-agnostic over the port, so
 // composing it over a DynamoDb-composed IEventStore and reading back an appended stream is the

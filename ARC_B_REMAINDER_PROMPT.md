@@ -40,7 +40,7 @@ Three items:
    with no operator entry point. There is no `EventStore.SqlServer.Cli`, and only the Postgres CLI
    sets the flag.
 
-3. **TODO resolution**, per `docs/PLAN.md:527`.
+3. **TODO resolution**, per `PLAN.md's Phase 17 code-cleanup goal`.
 
 ## The fork this session rules
 

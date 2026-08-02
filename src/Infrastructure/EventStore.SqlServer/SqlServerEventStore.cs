@@ -12,7 +12,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 // depends on is engine-specific.
 //
 // AppendAsync writes the event row and its matching outbox row inside a single transaction:
-// either both land or neither does, which is Phase 2's atomic-write done-when (PLAN.md:238). The
+// either both land or neither does, which is Phase 2's atomic-write done-when (PLAN.md's Phase 2 atomic-write goal). The
 // outbox table is an implementation detail of this adapter; the public IEventStore surface does
 // not mention it. AppendProcessManagerEventsAsync writes no outbox row (ADR 0013).
 public sealed class SqlServerEventStore : IEventStore
@@ -109,7 +109,7 @@ public sealed class SqlServerEventStore : IEventStore
                 var globalPosition = (long)(await insertEvent.ExecuteScalarAsync(ct))!;
 
                 // The outbox row, in the SAME transaction as the event row. Either both land or
-                // neither does, which is Phase 2's atomic-write done-when (PLAN.md:238). The row
+                // neither does, which is Phase 2's atomic-write done-when (PLAN.md's Phase 2 atomic-write goal). The row
                 // is self-describing: it copies the event's type, payload, metadata, and time,
                 // and carries the position threaded out of the INSERT above, so the processor
                 // never joins back into event_store.events to assemble a dispatch.

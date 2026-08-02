@@ -19,7 +19,7 @@ using OrderThroughputRate = WebHost::EventSourcingCqrs.Hosts.Web.Components.Orde
 namespace EventSourcingCqrs.IntegrationTests.Metrics;
 
 // Phase 12's exit condition: "the admin dashboard shows live system metrics that match what the
-// AdminConsole tools show" (docs/PLAN.md:387, carried at :415, :417, :437). ADR 0039 puts operational
+// AdminConsole tools show" (PLAN.md's Phase 8 metrics-parity done-when, carried into Phase 11's done-when and status note and Phase 12's decision note). ADR 0039 puts operational
 // metrics in the AdminConsole and keeps them out of the Web meter, so the two sides render disjoint
 // quantity families by decision and no single number appears on both. "Match" is therefore read as
 // consistency with the substrate rather than equality of rendered figures: the count the Web meter's

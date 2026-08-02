@@ -10,7 +10,7 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
 // The DynamoDb provider value, the DynamoDB analog of EventStoreProviderSwitchTests and
-// KurrentProviderSwitchTests, against PLAN.md:253: switching the configured event store is a
+// KurrentProviderSwitchTests, against PLAN.md's Phase 2 provider-switch done-when: switching the configured event store is a
 // configuration change, not a code change. The host under test is the Api composition every other
 // command test boots, the command is the one DraftOrderTests dispatches, and the only difference is
 // the provider key and the LocalStack service URL behind it.

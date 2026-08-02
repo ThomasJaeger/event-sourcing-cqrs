@@ -12,7 +12,7 @@ public sealed class DynamoDbStreamDispatchOptions
     // iterator returns empty pages between writes rather than blocking, so something has to decide
     // how eagerly to ask again.
     //
-    // This is not the projection trigger. PLAN.md:475 asks that Streams feed projections "without
+    // This is not the projection trigger. PLAN.md's Phase 14 no-polling done-when asks that Streams feed projections "without
     // polling", and what that forbids is polling the event table for new events, the way the
     // relational adapters' outbox processors do. The change feed is still the trigger. On a quiet
     // feed this interval costs one GetRecords per live shard and nothing else: no DescribeStream

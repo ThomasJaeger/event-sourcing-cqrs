@@ -7,7 +7,7 @@
 --
 -- NO TRIGGER ANYWHERE IN THIS FILE, and that is a decision rather than an omission. PostgreSQL
 -- migration 0005 puts an AFTER INSERT trigger on its outbox that fires pg_notify, which gives
--- its processor a sub-second wake. SQL Server has no LISTEN/NOTIFY, and PLAN.md:245 scopes the
+-- its processor a sub-second wake. SQL Server has no LISTEN/NOTIFY, and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes the
 -- SQL Server trigger mechanism to polling in v1. The processor's idle poll is the whole wake
 -- path here, so the trigger has nothing to signal and does not exist.
 --

@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
     //
     // Two hosts call this: the Api host directly, and the Workers host through
     // WorkersHostFactory. Both reach it from their EVENT_STORE_PROVIDER arm, so which engine
-    // holds the events is the configuration choice PLAN.md:253 promises. The registries this
+    // holds the events is the configuration choice PLAN.md's Phase 2 provider-switch done-when promises. The registries this
     // populates are the shared ones in Infrastructure/Versioning (ADR 0048), not copies owned
     // here.
     public static IServiceCollection AddSqlServerEventStore(

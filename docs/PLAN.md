@@ -84,8 +84,10 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 - CDC pattern reading legacy table changes and emitting events
 - Outbox-on-legacy pattern
 - Strangler pattern showing legacy and event-sourced code coexisting
+- Shadow mode emitting events in parallel with legacy writes and comparing them
+- A README in the migration folder explaining each pattern and its trade-offs
 
-**Infrastructure.** Docker Compose setup that brings up PostgreSQL, SQL Server, KurrentDB, LocalStack, and the application processes with one command. CI pipeline running the full test suite on every push.
+**Infrastructure.** Docker Compose setup that brings up PostgreSQL, SQL Server, KurrentDB, and LocalStack with one command. It stands up the backing stores; the hosts are run separately with `dotnet run`. CI pipeline running the full test suite on every push.
 
 **Documentation.** README that maps every chapter to its code. Architecture decision records (ADRs) for major choices. Cross-reference map between book chapters and code files at the front of each Part 4 chapter.
 
@@ -148,12 +150,18 @@ The solution layout reflects the manuscript's Part 4 description.
     /Fulfillment        // Inventory, Shipment aggregates
     /Billing            // Payment aggregate
     /CustomerSupport    // Read-only context
+    /Access             // Event-sourced user-to-role assignments
     /SharedKernel       // Money, Address, identifiers (Chapter 7 shared kernel)
-  /Domain.Abstractions  // IAggregateRoot, IDomainEvent, IRepository, ports
+  /Domain.Abstractions  // IEventStore, IEventStoreRepository, IDomainEvent, ports
   /Application
     /Commands           // Command types and handlers
     /Queries            // Query types and handlers
     /Middleware         // Logging, validation, idempotency
+    /Pipelines          // Command and query pipeline behaviors
+    /Authentication
+    /Authorization
+    /Context            // Ambient command, query, and tenant context
+    /SignalR            // IHubBackplaneConnection
   /ProcessManagers
     /OrderFulfillment   // OrderFulfillmentProcessManager and its tests
     /Returns            // ReturnProcessManager and its tests
@@ -162,15 +170,22 @@ The solution layout reflects the manuscript's Part 4 description.
     /OrderDetail
     /CustomerSummary
     /InventoryDashboard
+    /CurrentRoles       // RBAC current-roles read model
+    /SkuToInventoryId   // Projection-private lookup (ADR 0020)
+    /OrderIdToPaymentId // Projection-private lookup (ADR 0020)
+    /OrderThroughput    // Order-throughput meter
     /Infrastructure     // checkpointing, batched catch-up, failure handling
   /Infrastructure
     /EventStore.Postgres
+    /EventStore.Postgres.Cli  // migrate entry point
     /EventStore.SqlServer
     /EventStore.Kurrent
     /EventStore.DynamoDb
+    /EventStore.InMemory      // Test and demo adapter
+    /Migrations.Postgres      // Engine-agnostic migration runner (ADR 0004)
     /ReadModels.Postgres
     /Outbox             // OutboxProcessor (PostgreSQL-resident outbox)
-    /Snapshots
+    /SignalR
     /Versioning         // upcasting pipeline, schema registry stub
   /Hosts
     /Web                // Blazor Server task-based UI
@@ -186,12 +201,19 @@ The solution layout reflects the manuscript's Part 4 description.
   /Infrastructure.Tests
   /IntegrationTests
   /PropertyTests
+  /Workers.Tests
+  /Hosts.Web.Tests
+  /Hosts.AdminConsole.Tests
+  /Migration.Tests
+  /EventStore.ContractTests   // The one suite all four adapters pass
+  /TestInfrastructure         // Shared fixtures
 /migrations             // SQL migrations applied in order
 /docs                   // README, plan, build log, ADRs, chapter-to-code map
 /docker                 // docker-compose.yml, Dockerfiles
+/scripts                // manifest.sh
 ```
 
-The folder names map to chapters. Domain shows Chapter 9. Application shows Chapters 8 and 13. ProcessManagers shows Chapter 10. Projections shows Chapter 13. Infrastructure shows Chapter 8 and parts of Chapter 17. AdminConsole shows Chapter 17. Migration shows Chapter 18.
+The folder names map to chapters. Domain shows Chapters 7 and 9. Application shows Chapters 8 and 13. ProcessManagers shows Chapter 10. Projections shows Chapter 13. Infrastructure shows Chapter 8 plus parts of 11, 12, 17. AdminConsole shows Chapter 17. Migration shows Chapter 18.
 
 ---
 
@@ -218,11 +240,11 @@ Each phase has scope, out-of-scope items, and done-when criteria. Pad the timeli
 - UI. Phase 7.
 - KurrentDB and DynamoDB adapter implementation. Phases 13 and 14.
 - `ISnapshotStore` port. Phase 15, with the snapshot pattern.
-- `IProjectionCheckpoint` port. Phase 6, with the projection infrastructure.
+- The projection checkpoint port, which ships as `ICheckpointStore`. Phase 6, with the projection infrastructure.
 
 **Done when.**
 - `dotnet --version` inside the repo reports 10.0.x.
-- `docker compose up` brings up all four services healthy.
+- `docker compose -f docker/docker-compose.yml up` brings up all four backing stores healthy.
 - `dotnet test` runs and passes.
 - CI is green on a pull request.
 - The Domain.Abstractions interfaces are stable enough that the upcoming PostgreSQL adapter will fit them without redesign.
@@ -598,7 +620,7 @@ The reference implementation is done when:
 
 1. Every required component in the scope section is built and tested.
 2. CI is green on a clean clone.
-3. `docker compose up` followed by browser navigation produces a working UI within five minutes of clone.
+3. `docker compose -f docker/docker-compose.yml up`, then the hosts started per the README, followed by browser navigation produces a working UI within five minutes of clone.
 4. The README maps every chapter to its code.
 5. The chapter-to-code map document covers every pattern in the book.
 6. The manuscript and the code agree, including the chapters the book grows to teach access control and multi-tenancy; the parallel book-repo planning scopes that growth against the locked foundation design.

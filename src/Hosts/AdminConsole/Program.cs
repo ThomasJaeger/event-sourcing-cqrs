@@ -58,7 +58,7 @@ builder.Services.AddCurrentRolesReadModel(options => options.ConnectionString = 
 // above; the arm below adds only the head read and its connection, not the full event store;
 // AddProjectionRoster adds the name-only projection set.
 //
-// Which engine holds the events is a configuration choice (PLAN.md:253). The console reads it through
+// Which engine holds the events is a configuration choice (PLAN.md's Phase 2 provider-switch done-when). The console reads it through
 // the same twin the Api and Workers hosts use, retiring the earlier PostgreSQL-only inline guard, and
 // composes its three read-side event-store ports (head position, replay/browse IEventStore, correlation
 // trace) plus the correlation-tracer capability per arm. The read-model side below stays PostgreSQL

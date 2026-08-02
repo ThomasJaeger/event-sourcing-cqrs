@@ -14,7 +14,7 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
 // Boots the Api host with its event store on DynamoDB and its read models on PostgreSQL, the DynamoDB
-// analog of KurrentProviderApiFixture and of PLAN.md:253: switching the configured event store is a
+// analog of KurrentProviderApiFixture and of PLAN.md's Phase 2 provider-switch done-when: switching the configured event store is a
 // configuration change, not a code change.
 //
 // Two containers, because the split is real. The provider key selects the engine that holds events;
