@@ -127,11 +127,15 @@ lands in.
 
 ## Finding the code for a chapter
 
-Deferred. A chapter-to-code map is promised by `docs/PLAN.md` and is not written yet; its
-chapter side has to be grounded against the manuscript rather than against this repository,
-so it lands in the manuscript-reconciliation arc. Until then, source files name the chapter
-they demonstrate in a comment, and `docs/architecture/cross-context-vocabulary.md` is the
-bridge for Chapter 7's context mapping.
+`docs/chapter-to-code-map.md` is the map. It gives the files and folders for each chapter
+that has code, and says which chapters have none and why that is the intent rather than a
+gap. Its chapter side is grounded on the manuscript's generated table of contents rather
+than on anything in this repository, so regenerating that table there is what re-checks
+this map.
+
+It does not replace the two finer-grained pointers that were already here. Source files name
+the chapter they demonstrate in a comment, and `docs/architecture/cross-context-vocabulary.md`
+is the worked example for Chapter 7's context mapping.
 
 ## Where to read more
 
