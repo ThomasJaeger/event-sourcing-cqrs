@@ -2,7 +2,7 @@
 #
 # check-plan-citations.sh
 #
-# Fails if anything in the repository cites docs/PLAN.md by line number.
+# Fails if anything in the repository cites a document by line number.
 #
 # Why
 #   A line number pointing into another document goes stale the moment anything
@@ -24,9 +24,12 @@
 #   the unknown can say what went wrong.
 #
 # Scope
-#   docs/PLAN.md targets only, which is the obligation this check was written for.
-#   Widening it to every markdown target is the natural next step and needs one
-#   citation repaired first: ADR 0048 cites ADR 0004 by line number.
+#   Every markdown target, plus the `ADR NNNN:123` form, which names a document by
+#   its title rather than its path and which the earlier PLAN.md-only pattern could
+#   not see. Three of the four citations this widening had to clear used that form.
+#   Source files are out of scope. A line number into a .cs file goes stale the same
+#   way, but the working-pattern rule this script enforces is about documents, and
+#   several ADRs cite adapter code by line deliberately.
 #   docs/sessions/ is excluded, because session logs are immutable history and a
 #   citation inside one records what was true when it was written.
 #   This file is excluded too, and the exclusion is the file rather than any line in
@@ -36,7 +39,7 @@
 #   and the price is that a real citation written here would be missed.
 #
 # Exit codes
-#   0  Clean. git answered and found no line-number citations into docs/PLAN.md.
+#   0  Clean. git answered and found no line-number citations into any document.
 #   1  Violations. git answered and found citations; each is printed with its location.
 #   2  Unknown. git did not answer, so the check did not run. Whatever git reported is
 #      on stderr. Callers that treat every non-zero exit as a failed check still stop,
@@ -47,7 +50,24 @@
 
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+# The substitution runs before the cd, so a failed rev-parse yields an empty string
+# and `cd ""` succeeds without moving. set -e does not catch it, because cd's own
+# status is 0, and the check would then run against whatever tree the caller stood
+# in. The status is captured, the empty result is rejected, and the cd is guarded.
+# Every path that cannot establish the root exits 2, the code this script already
+# reserves for "the check did not run", rather than reporting a wrong tree as clean.
+if ! root=$(git rev-parse --show-toplevel); then
+    printf '%s\n' "Could not find the repository root: git rev-parse failed." >&2
+    exit 2
+fi
+if [ -z "$root" ]; then
+    printf '%s\n' "Could not find the repository root: git rev-parse returned nothing." >&2
+    exit 2
+fi
+if ! cd "$root"; then
+    printf '%s\n' "Could not enter the repository root at $root." >&2
+    exit 2
+fi
 
 # Matches PLAN.md:123 and docs/PLAN.md:123. A bare :123 continuing an earlier
 # citation on the same line rides along with its explicit anchor, so anchoring on
@@ -55,7 +75,7 @@ cd "$(git rev-parse --show-toplevel)"
 # Those two example citations are why the second exclusion names this file.
 # The status is captured rather than discarded. An if-condition is exempt from set -e,
 # so the capture needs no set +e around it and leaves no window where a failure passes.
-if hits=$(git grep -nE '(docs/)?PLAN\.md:[0-9]+' \
+if hits=$(git grep -nE '[A-Za-z0-9_./-]+\.md:[0-9]+|ADR [0-9]{4}:[0-9]+' \
     -- . ':!docs/sessions' ':!scripts/check-plan-citations.sh'); then
     status=0
 else
@@ -63,16 +83,17 @@ else
 fi
 
 if [ "$status" -gt 1 ]; then
-    printf '%s\n' "docs/PLAN.md could not be checked: git grep exited $status." >&2
+    printf '%s\n' "Citations could not be checked: git grep exited $status." >&2
     printf '%s\n' "Any message git produced is above. This is unknown, not clean." >&2
     exit 2
 fi
 
 if [ "$status" -eq 0 ]; then
-    printf '%s\n' "docs/PLAN.md is cited by line number. Cite it by content instead:" >&2
-    printf '%s\n' "  name the phase and the clause, as in \"PLAN.md's Phase 2 provider-switch done-when\"." >&2
+    printf '%s\n' "A document is cited by line number. Cite it by content instead:" >&2
+    printf '%s\n' "  name the section or quote the sentence, as in \"PLAN.md's Phase 2 provider-switch done-when\"" >&2
+    printf '%s\n' "  or \"ADR 0004's Trigger for revisiting section\"." >&2
     printf '\n%s\n' "$hits" >&2
     exit 1
 fi
 
-printf '%s\n' "No line-number citations into docs/PLAN.md."
+printf '%s\n' "No line-number citations into any document."

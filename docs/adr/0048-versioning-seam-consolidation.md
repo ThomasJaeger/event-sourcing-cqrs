@@ -8,8 +8,8 @@ Accepted (July 2026)
 
 ADR 0004 rules that event store adapters are self-contained: each carries its own
 row construction and translation, and no cross-adapter layer exists for them to
-share. The ADR accepts duplication as the cost and sets its own revisit trigger at
-`docs/adr/0004-self-contained-event-store-adapters.md:30`: "If a future change
+share. The ADR accepts duplication as the cost and sets its own revisit trigger in its
+"Trigger for revisiting" section: "If a future change
 requires touching identical code in three or more adapters, the session making that
 change evaluates whether to factor the shared concern at that point. Two-adapter
 duplication is fine and expected under this ADR. Three-adapter duplication is the
@@ -19,8 +19,8 @@ Phase 13's KurrentDB adapter landed the third copy of the type registries and th
 JSON seam, and ADR 0047 recorded the trigger as fired. This ADR is the evaluation
 step that wording calls for, taken before a fourth adapter lands rather than after.
 
-**The trigger fired on a case ADR 0004 argued could not arise.** ADR 0004:32
-reasons that "KurrentDB and DynamoDB do not have outboxes, so the relational outbox
+**The trigger fired on a case ADR 0004 argued could not arise.** ADR 0004's
+"Trigger for revisiting" section reasons that "KurrentDB and DynamoDB do not have outboxes, so the relational outbox
 abstraction would only become a three-consumer question if a third relational
 adapter is added to the implementation. No such addition is currently planned." That
 paragraph frames the shared concern as the outbox, and on the outbox it is still
@@ -31,7 +31,8 @@ seam, from a non-relational adapter, which is the path :32 argued away. ADR
 :30 governs and its threshold is met; the :32 analysis was scoped to one concern and
 did not anticipate this one.
 
-**The figures, measured from disk at this commit.** ADR 0045:103 records "roughly
+**The figures, measured from disk at this commit.** ADR 0045's Decisions section
+records "roughly
 234" duplicated lines "across the relational adapters." That figure reconciles
 exactly, and it is right about what it measured. 234 is the SQL Server adapter's five
 dedicated seam files: 77 + 77 + 24 + 27 + 29. It has been stable at 234 from a330f4a,
@@ -39,7 +40,8 @@ the commit that added ADR 0045, through HEAD. ADR 0045 is the SQL Server ADR and
 sentence says "the second adapter also duplicates," so a per-copy measure of that
 adapter is what the number was always describing.
 
-The correction this ADR makes is scope, not arithmetic. ADR 0047:138-143 cites the 234
+The correction this ADR makes is scope, not arithmetic. ADR 0047's Consequences
+section cites the 234
 as the figure the third copy is measured "against," which reads as a standing total for
 the seam. It is not: it is one adapter's dedicated files, and it excludes even that
 adapter's own 23-line inline JSON block. Measured whole, immediately before this
