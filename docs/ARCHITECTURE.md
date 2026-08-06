@@ -2,7 +2,7 @@
 
 The cross-cutting decisions: what they are, how they compose, and which ADR owns each one.
 
-**This document routes. It does not restate.** Fifty-two ADRs in `docs/adr/` carry the
+**This document routes. It does not restate.** Fifty-three ADRs in `docs/adr/` carry the
 decisions and the reasoning behind them. A summary that repeated them would become a second
 copy that drifts, and a drifted second copy is worse than no copy, because a reader cannot tell
 which one is current. So nothing here can go stale on its own: every sentence is either a
@@ -247,10 +247,18 @@ amendment records it.
 
 ## Reading the corpus
 
-ADRs are numbered and immutable. A decision that changes gets a new ADR that supersedes the old
-one, and the old one's status says so. A decision that gains detail without changing gets an
-appended `## Amendment` section on the original, and its status is left alone. Both forms are
-in use; ADR 0027 is the first shape and ADR 0025 the second.
+ADRs are numbered, and three things happen to them. A decision that changes gets a new ADR that
+supersedes the old one, and the old one's status says so. A decision that gains detail without
+changing gets an appended `## Amendment` section on the original, and its status is left alone.
+A stale fact inside an accepted ADR, a renumbered phase or a retired type name, is corrected in
+the body in place, because leaving a fact wrong to preserve the letter of immutability makes the
+corpus less true rather than more.
+
+All three are in use. ADR 0027 is the first shape and ADR 0025 the second. The third is not an
+exception but the common case: thirty-six of the fifty-three carry a post-creation body
+correction, across forty-eight commits, and commit `1045862` alone renumbered phases in twenty of
+them. Immutability here means the number is never reused and the decision is never quietly
+reversed, not that the text is frozen.
 
 `CLAUDE.md` carries the repo-wide rules and the folder layout. `docs/PLAN.md` carries the build
 sequence and what ships in v1. `docs/architecture/cross-context-vocabulary.md` is live

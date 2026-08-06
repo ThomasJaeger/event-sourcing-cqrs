@@ -10,7 +10,7 @@ FluentAssertions changed its license at v8.0, released in January 2025 in partne
 
 This repository is MIT-licensed. It exists for readers of the book to clone, run, study, and adapt for their own systems, including commercial systems. A test dependency that requires its own commercial license for commercial use would either restrict reader use or push readers to pay a per-developer license to follow along with the book. Neither is acceptable for a teaching artifact.
 
-The eleven test patterns in Chapter 16 use assertions extensively. The patterns themselves are framework-agnostic; the choice of assertion library affects only the readability of the test code, not the patterns.
+The test patterns in Chapter 16 use assertions extensively. The patterns themselves are framework-agnostic; the choice of assertion library affects only the readability of the test code, not the patterns.
 
 ## Decision
 

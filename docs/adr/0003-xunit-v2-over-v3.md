@@ -10,7 +10,7 @@ xUnit v3 is the current major line. It uses the Microsoft Testing Platform (MTP)
 
 Stryker GitHub issue #3117 documents that running Stryker against a v3 test project produces unreliable mutation results: the runner does not correctly interpret MTP output, and one reporter saw mutation scores collapse from 100% on v2 to 3.09% on v3. The issue is open as of April 2026 with no merged fix and no maintainer-confirmed timeline for one. Issue #3094 tracks the underlying work to add MTP support to Stryker, also unmerged.
 
-Chapter 16 includes mutation testing on the Domain project as one of the eleven test patterns. The pattern depends on Stryker producing accurate mutation scores, which currently requires xUnit v2.
+Chapter 16 includes mutation testing on the Domain project as one of its test patterns. The pattern depends on Stryker producing accurate mutation scores, which currently requires xUnit v2.
 
 ## Decision
 

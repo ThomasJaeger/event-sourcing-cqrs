@@ -2,7 +2,7 @@
 
 This document defines the scope, sequence, and weekly targets for building the reference implementation that accompanies *Event Sourcing & CQRS* by Thomas Jaeger.
 
-This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across four bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the eleven test patterns from Chapter 16.
+This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across five bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the test patterns from Chapter 16.
 
 This is a solo build with Claude Code on the Max plan, run as an ordered sequence of phases. The authentication-and-authorization and multi-tenancy foundation phases, and the live-dashboards-completion phase (net of the Phase 8 work already delivered), were inserted ahead of the original downstream phases (AdminConsole through documentation). That insertion expands the original plan and is a real impact on the submission timeline, stated rather than absorbed silently.
 
@@ -28,10 +28,11 @@ Configuration switches between them with no domain-code changes.
 - Native catch-up subscriptions for KurrentDB
 - DynamoDB Streams plus Lambda-equivalent for DynamoDB (LocalStack for local dev and integration tests)
 
-**Aggregates.** Five aggregates across four bounded contexts:
+**Aggregates.** Five aggregates across five bounded contexts:
 - Sales: Order
 - Fulfillment: Inventory, Shipment
 - Billing: Payment
+- Access: UserRoles
 - Customer Support: no own aggregates (reads from others' projections)
 
 **Process managers.** Two, both event-sourced themselves with their own streams:
@@ -62,7 +63,7 @@ Read models live in PostgreSQL with a mix of relational tables and JSONB columns
 
 Deliberately rough, because the book argues the cheapest tools that solve the problem are the right ones.
 
-**Test suite.** Eleven test patterns from Chapter 16:
+**Test suite.** Test patterns from Chapter 16:
 1. Given-When-Then aggregate tests
 2. Projection tests
 3. Process manager and saga tests
@@ -117,7 +118,7 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 
 | Decision | Choice | Source |
 | --- | --- | --- |
-| Domain | Order management retailer with four bounded contexts | Part 4, "The Domain" |
+| Domain | Order management retailer with five bounded contexts | Part 4, "The Domain" |
 | Architecture style | Hexagonal (ports and adapters) | Part 4, "Solution Structure" |
 | Event stores | PostgreSQL (hand-rolled), SQL Server (hand-rolled), KurrentDB, DynamoDB as peers | Part 4, "Technology Choices" |
 | Read store | PostgreSQL with relational tables and JSONB | Part 4, "Technology Choices" |
