@@ -71,7 +71,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 6. Replay tests against historical event streams
 7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
 8. Contract tests between layers
-9. Mutation testing on the domain (Stryker.NET)
+9. Mutation testing on the domain
 10. Performance smoke tests
 11. Chaos and failure injection tests
 
@@ -126,7 +126,6 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | Styling | Tailwind | Part 4, "Web and API" |
 | Test framework | xUnit + FluentAssertions + Testcontainers + LocalStack | Part 4, "Technology Choices" |
 | Property-based tests | FsCheck | Chapter 16 |
-| Mutation testing | Stryker.NET | Chapter 16 |
 | Containerization | Docker Compose | Part 4, "Technology Choices" |
 | .NET version | .NET 10 LTS, C# 14 (supported through November 10, 2028) | Part 4, "Technology Choices" |
 | License | MIT | Book commitment |

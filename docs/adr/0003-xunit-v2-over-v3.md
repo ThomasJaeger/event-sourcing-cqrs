@@ -16,13 +16,19 @@ Chapter 16 includes mutation testing on the Domain project as one of the eleven 
 
 Pin all test projects uniformly to xUnit v2 (currently 2.9.3) in `Directory.Packages.props`. The choice applies to:
 
-- `Domain.Tests`
 - `Application.Tests`
-- `ProcessManagers.Tests`
-- `Projections.Tests`
+- `Domain.Tests`
+- `EventStore.ContractTests`
 - `Infrastructure.Tests`
+- `Projections.Tests`
+- `ProcessManagers.Tests`
+- `TestInfrastructure`
+- `Workers.Tests`
 - `IntegrationTests`
+- `Hosts.Web.Tests`
+- `Hosts.AdminConsole.Tests`
 - `PropertyTests`
+- `Migration.Tests`
 
 Use `xunit.runner.visualstudio` for VSTest discovery, which works against both v2 and v3 hosts.
 
@@ -35,3 +41,42 @@ Use `xunit.runner.visualstudio` for VSTest discovery, which works against both v
   - A Stryker release exposes that runner as a stable, default option.
   - A spike on `Domain.Tests` shows mutation scores comparable to the current v2 baseline.
 - Migration is a single phase across all test projects, not phase-by-phase. Mixing v2 and v3 in one repo is a maintenance trap.
+
+## Amendment (August 2026): the reason of record is replaced
+
+This section replaces the reason this decision rests on. It does not add detail to the original
+reasoning, and it does not change the decision. The pin stands, the status stays Accepted, and
+nothing supersedes this ADR.
+
+**The Stryker justification is void.** The Context above rests on Stryker.NET throughout, and the
+tool exists in no configuration file, no package reference, no tool manifest, and no run target
+anywhere in this repository. Nothing depends on it, so nothing about mutation testing constrains
+the choice of test framework here.
+
+**The pin stands on a live constraint the original did not name.** `Directory.Packages.props`
+declares it beside the FsCheck versions:
+
+> Property-based tests (FsCheck). FsCheck.Xunit 3.3.3 is the latest FsCheck.Xunit and targets
+> xUnit v2 (xunit.extensibility.execution >= 2.4.1 && < 3.0.0), which the pinned xunit 2.9.3
+> satisfies; the separate FsCheck.Xunit.v3 package is the xUnit v3 integration and is not used.
+
+That constraint is live rather than notional. `tests/PropertyTests/PropertyTests.csproj`
+references `FsCheck.Xunit`, and five `[Property]` facts across three files in that project run
+through it.
+
+**Migrating is a package swap rather than a version bump.** Moving to xUnit v3 means replacing
+FsCheck.Xunit with FsCheck.Xunit.v3, a different package with its own surface, rather than taking
+a higher version of the one in use.
+
+**The upgrade trigger is void and nothing replaces it.** The three conditions in the Consequences
+above are all Stryker events, so they go with the tool they name. No trigger takes their place,
+because none currently applies: the v3 integration package exists today, which makes the
+constraint a cost rather than a block, and whether to pay that cost is a decision someone makes on
+its own merits rather than one this ADR pre-authorizes.
+
+**The project enumeration is corrected in place.** The Decision above listed seven test projects.
+The solution declares thirteen, and thirteen project files carry an `xunit` reference, derived both
+ways. The pin is central in `Directory.Packages.props`, so its effect always covered every test
+project as each one landed; only the enumeration lagged. The correction is made in the Decision
+itself rather than here, following commit `1045862`, which corrected stale phase numbers inside
+ADR 0025 in place while reasoning was appended as this section is.
