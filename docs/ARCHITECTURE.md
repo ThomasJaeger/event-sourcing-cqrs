@@ -257,6 +257,7 @@ them. Immutability here means the number is never reused and the decision is nev
 reversed, not that the text is frozen.
 
 `CLAUDE.md` carries the repo-wide rules and the folder layout. `docs/PLAN.md` carries the build
-sequence and what ships in v1. `docs/architecture/cross-context-vocabulary.md` is live
-documentation of the context boundaries; the four `phase-N-readiness.md` files beside it are
-historical records of phase-entry verifications, not current guidance.
+sequence and the scope v1 committed to, which is a record of intent rather than of what currently
+ships. `docs/architecture/cross-context-vocabulary.md` is live documentation of the context
+boundaries; the four `phase-N-readiness.md` files beside it are historical records of phase-entry
+verifications, not current guidance.

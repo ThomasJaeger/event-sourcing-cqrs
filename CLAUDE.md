@@ -287,7 +287,7 @@ When starting a session, the relevant context lives in:
 2. `docs/TDD_RULES.md` for the test-first discipline (the RED-before-production-code cycle, the anti-theater enforcement, the scope where TDD is mandatory versus spike-then-stabilize versus judgment). It extends the working pattern; it does not override it.
 3. `docs/ai-writing-style-source.txt` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript), and it is the only source: no bullet-form restatement of the rules exists in this repository.
 4. This file (CLAUDE.md) for repo-wide rules.
-5. `docs/PLAN.md` for the current phase's scope and out-of-scope items.
+5. `docs/PLAN.md` for the current phase's scope and out-of-scope items. Its phase sections record what each phase set out to build rather than what currently ships; the code is where current state is read.
 6. `docs/ARCHITECTURE.md` for the cross-cutting decisions: what they are, how they compose, and which ADR owns each one. It routes rather than restates, so the ADR it points at is always the authority.
 7. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
 

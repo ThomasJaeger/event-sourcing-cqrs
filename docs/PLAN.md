@@ -6,7 +6,9 @@ This is a Path 1 plan: the implementation matches the book's full Part 4 commitm
 
 This is a solo build with Claude Code on the Max plan, run as an ordered sequence of phases. The authentication-and-authorization and multi-tenancy foundation phases, and the live-dashboards-completion phase (net of the Phase 8 work already delivered), were inserted ahead of the original downstream phases (AdminConsole through documentation). That insertion expands the original plan and is a real impact on the submission timeline, stated rather than absorbed silently.
 
-This document is a living plan. Update it weekly with what was actually built, what changed, and what surprised you. By the end of the build it doubles as the build log, which is itself launch-period content.
+**How to read a phase section.** Each phase section records what that phase set out to build at the time it was written. A completed phase's goals are a record of intent rather than a description of what currently ships, and the two can diverge without either being wrong. What currently ships is read from the code, with `docs/ARCHITECTURE.md` as the routing document for finding it.
+
+This document is a living plan. Update the build log weekly with what was actually built, what changed, and what surprised you; the phase sections keep the intent they were written with. By the end of the build that log is itself launch-period content.
 
 ---
 
