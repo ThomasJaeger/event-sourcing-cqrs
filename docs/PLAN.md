@@ -74,8 +74,6 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 6. Replay tests against historical event streams
 7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
 8. Contract tests between layers
-9. Mutation testing on the domain
-10. Chaos and failure injection tests
 
 **Versioning.** One worked event-schema migration with a real upcaster (Chapter 11), demonstrating the upcasting pipeline and the migration playbook.
 
@@ -498,6 +496,8 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 - DynamoDB Streams feeds projections without polling.
 - The Event Store Browser works against DynamoDB.
 - The book's claim that switching event stores is a configuration change is now true.
+
+**Refutation note.** The Global Secondary Index goal above is refuted rather than merely diverged. DynamoDB rejects a consistent read against a GSI outright, so a GSI-backed position cannot serve the strongly-consistent ordered read the commit-order invariant requires. Ordering rides a log partition on the base table instead: one row per committed event under a single partition key, the position as its sort key, read in sort order. ADR 0049 records the refutation, including why LocalStack would not have surfaced it. The goal stays as written because it records what Phase 14 set out to build; this note records that the mechanism it names cannot work.
 
 ### Phase 15: Versioning and snapshots
 

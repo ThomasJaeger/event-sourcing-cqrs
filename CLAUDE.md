@@ -135,8 +135,6 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Property-based tests via FsCheck for invariants and serialization roundtrips.
 * Replay tests against historical event streams.
 * Integration tests use Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB). No mocking of these stores.
-* Mutation testing on the Domain project.
-* Chaos and failure injection tests for projections and the outbox.
 
 ## Folder layout
 
