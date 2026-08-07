@@ -13,10 +13,10 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 // NpgsqlTransaction. The outbox table is an implementation detail of
 // this adapter; the public IEventStore surface does not mention it.
 //
-// Self-contained per ADR 0004. The SQL Server adapter that ships in a
-// later Phase 2 session duplicates this structural shape in its own
-// project with its own engine-specific particulars (error 2627 for
-// unique violations, NVARCHAR(MAX) for JSON, filtered indexes).
+// Self-contained per ADR 0004. The SQL Server adapter duplicates this
+// structural shape in its own project with its own engine-specific
+// particulars (errors 2627 and 2601 for unique violations, VARCHAR(MAX)
+// under a UTF-8 collation for JSON, filtered indexes).
 public sealed class PostgresEventStore : IEventStore
 {
     // pg_advisory_xact_lock(bigint) key serializing global_position assignment against

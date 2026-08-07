@@ -43,8 +43,10 @@ The PostgreSQL adapter holds the invariant with a transaction-scoped exclusive
 advisory lock, pg_advisory_xact_lock on PostgresEventStore.AppendAdvisoryLockKey,
 acquired as the first statement inside the append transaction on both append paths,
 before any position-drawing INSERT, and released implicitly at commit or rollback.
-Commit 24932e1 lands the repair together with the two-fact behavioral test that
-pins it (PostgresEventStore_CommitVisibility_Tests, one fact per append path).
+Commit 24932e1 lands the repair together with a two-fact behavioral test that
+pins it, one fact per append path. That test was retired into the contract suite,
+where HeldWriterEventStoreContractTests carries the same two facts against every
+backend; the amendment below records the move.
 
 Every future adapter holds the same invariant through its engine's counterpart. On
 SQL Server that is sp_getapplock at transaction scope, since IDENTITY and SEQUENCE

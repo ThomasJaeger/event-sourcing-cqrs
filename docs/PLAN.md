@@ -1,6 +1,6 @@
 # Reference Implementation Build Plan
 
-This document defines the scope, sequence, and weekly targets for building the reference implementation that accompanies *Event Sourcing & CQRS* by Thomas Jaeger.
+This document defines the scope and sequence for building the reference implementation that accompanies *Event Sourcing & CQRS* by Thomas Jaeger.
 
 This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across five bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the test patterns from Chapter 16.
 
@@ -75,8 +75,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
 8. Contract tests between layers
 9. Mutation testing on the domain
-10. Performance smoke tests
-11. Chaos and failure injection tests
+10. Chaos and failure injection tests
 
 **Versioning.** One worked event-schema migration with a real upcaster (Chapter 11), demonstrating the upcasting pipeline and the migration playbook.
 
@@ -110,7 +109,7 @@ Access control and multi-tenancy are in scope; see the access-control and multi-
 
 External monitoring integrations (Prometheus, Grafana, CloudWatch). Metrics are exposed via simple endpoints, not pushed to external systems.
 
-Production load testing. A performance smoke test demonstrates the snapshot speedup; nothing beyond that.
+Production load testing, and performance testing of any kind. The snapshot mechanism's proof is a replay-count assertion rather than a timing one: a wall-clock budget on a shared CI runner is flaky by construction.
 
 ---
 
@@ -211,7 +210,7 @@ The solution layout reflects the manuscript's Part 4 description.
   /TestInfrastructure         // Shared fixtures
 /migrations             // SQL migrations applied in order
 /docs                   // README, plan, build log, ADRs, chapter-to-code map
-/docker                 // docker-compose.yml, Dockerfiles
+/docker                 // docker-compose.yml for the four backing services
 /scripts                // manifest.sh
 ```
 
@@ -585,13 +584,13 @@ The Max plan supports the work, but a few habits make sessions more productive.
 
 ## Build log
 
-### Phase 1, Weeks 1-2
+### Phase 1
 *To be filled in.*
 
-### Phase 2, Weeks 3-4
+### Phase 2
 *To be filled in.*
 
-### Phase 3, Weeks 5-6
+### Phase 3
 *To be filled in.*
 
 (Continue per phase.)

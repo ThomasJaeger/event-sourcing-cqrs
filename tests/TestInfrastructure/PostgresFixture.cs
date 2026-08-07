@@ -14,9 +14,9 @@ namespace EventSourcingCqrs.TestInfrastructure;
 //
 // xUnit fixture scoping is per-assembly, so each test assembly that uses
 // this fixture spins up its own container at the first IClassFixture
-// resolution. Three assemblies use it as of Session 0006: Infrastructure
-// .Tests, Projections.Tests, Workers.Tests. Containers do not cross
-// assembly boundaries.
+// resolution. Five assemblies use it: Application.Tests,
+// Infrastructure.Tests, IntegrationTests, Projections.Tests, and
+// Workers.Tests. Containers do not cross assembly boundaries.
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()

@@ -9,7 +9,7 @@ will be tagged v1.0.0 alongside the book.
 
 ## What it demonstrates
 
-An order-management domain across four bounded contexts, built event-sourced end to end.
+An order-management domain across five bounded contexts, built event-sourced end to end.
 
 **Four event stores as first-class peers behind one `IEventStore`.** Hand-rolled PostgreSQL
 via Npgsql, hand-rolled SQL Server via Microsoft.Data.SqlClient, KurrentDB over gRPC, and
@@ -25,7 +25,7 @@ in PostgreSQL over a mix of relational tables and JSONB.
 outbox, and an AdminConsole carrying the operational tools. Role-based authorization and
 tenant isolation run through all of them.
 
-Fifty-two architecture decision records in `docs/adr/` carry the reasoning, including the ones
+Fifty-three architecture decision records in `docs/adr/` carry the reasoning, including the ones
 that constrain the shape: adapters are self-contained (ADR 0004), production quality wins over
 teaching clarity (ADR 0025), and global position is commit-ordered (ADR 0044).
 
@@ -139,6 +139,8 @@ is the worked example for Chapter 7's context mapping.
 
 ## Where to read more
 
+- `docs/ARCHITECTURE.md` for the cross-cutting decisions and which ADR owns each one. It
+  routes into the code, which is where what currently ships is read.
 - `docs/adr/` for the decisions and their reasoning.
 - `docs/architecture/cross-context-vocabulary.md` for what crosses each bounded-context
   boundary, and what does not.
