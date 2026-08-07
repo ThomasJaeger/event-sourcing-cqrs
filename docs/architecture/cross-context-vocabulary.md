@@ -4,11 +4,11 @@ This document names what crosses each bounded-context boundary in the reference 
 
 ## Purpose
 
-The reference implementation has four bounded contexts that share information without sharing types. The shape is opinionated: identifiers travel as raw `Guid`, monetary amounts travel through a small shared kernel, and every context defines its own line types and aggregate state. The substantive decisions live in ADRs 0005 through 0008. This document gathers them into one place so a reader can see the cross-cutting picture in one read.
+The reference implementation has five bounded contexts that share information without sharing types. The shape is opinionated: identifiers travel as raw `Guid`, monetary amounts travel through a small shared kernel, and every context defines its own line types and aggregate state. The substantive decisions live in ADRs 0005 through 0008. This document gathers them into one place so a reader can see the cross-cutting picture in one read.
 
 The dominant pattern is Customer-Supplier from Chapter 7. Sales publishes events. Fulfillment and Billing consume them. The downstream contexts do not import Sales' types; they translate at the boundary. The boundary translation lives in the process managers, not in a shared kernel.
 
-## The four contexts
+## The five contexts
 
 **Sales** (`src/Domain/Sales/`). Owns `Order` and `OrderLine`. Publishes `OrderDrafted`, `OrderLineAdded`, `OrderLineRemoved`, `ShippingAddressSet`, `OrderPlaced`, `OrderShipped`, `OrderCancelled`, `OrderCompleted`. Sales is the source of order identity (`OrderId`), customer identity (`CustomerId`), and per-order pricing (`Money UnitPrice`).
 
@@ -17,6 +17,8 @@ The dominant pattern is Customer-Supplier from Chapter 7. Sales publishes events
 **Billing** (`src/Domain/Billing/`). Owns `Payment`. Publishes `PaymentAuthorized`, `PaymentCaptured`, `PaymentRefunded`, `PaymentVoided`. Billing cares about amounts and payment-method references. It does not care about line items or shipping.
 
 **Customer Support**. No own aggregates. Reads from the projections the other three contexts' events feed: the four Phase 6 read models (`OrderListProjection`, `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`) plus the two Session-0009 cross-PM lookups (`SkuToInventoryId`, `OrderIdToPaymentId`). Its model is a read-only composite view; it adds no write-side dependency.
+
+**Access** (`src/Domain/Access/`). Owns `UserRoles`. Publishes `RoleAssigned`, `RoleRevoked`. It records which roles a user holds and nothing else; what a role permits is static application policy rather than event-sourced state, per ADR 0028.
 
 ## The shared kernel
 
@@ -60,7 +62,17 @@ No direct flow: Fulfillment and Billing remain unaware of each other, and the pr
 
 Customer Support consumes the projections the other three contexts' events feed. Phase 6 shipped the four read models it reads: `OrderListProjection`, `OrderDetailProjection`, `CustomerSummaryProjection`, `InventoryDashboardProjection`. The read-side store interfaces follow ADR 0008: each store lives with the bounded context whose events it consumes, not in `Domain.Abstractions` (`IOrderListStore`, `IOrderDetailStore`, `ICustomerSummaryStore` in `Domain.Sales.ReadModels`; `IInventoryDashboardStore` in `Domain.Fulfillment.ReadModels`). Customer Support is a read-only composite, confirmed to add no write-side dependency.
 
-Phase 7 added the first Web render surface for Customer Support's read side. The page at `/customers/{id}` reads `CustomerSummaryRow` through `GetCustomerSummary` and surfaces the per-customer aggregates (order count, lifetime value, last-order date) as a read-only page in the Web host. The page composes Customer Support's existing read-side with no new domain types and no write-side dependency; the four bounded contexts continue to share no types beyond the existing shared kernel. The Web host's other dashboard pages render the same Customer-Support-shaped reads against the other three projections without any cross-context type sharing.
+Phase 7 added the first Web render surface for Customer Support's read side. The page at `/customers/{id}` reads `CustomerSummaryRow` through `GetCustomerSummary` and surfaces the per-customer aggregates (order count, lifetime value, last-order date) as a read-only page in the Web host. The page composes Customer Support's existing read-side with no new domain types and no write-side dependency; the five bounded contexts continue to share no types beyond the existing shared kernel. The Web host's other dashboard pages render the same Customer-Support-shaped reads against the other three projections without any cross-context type sharing.
+
+### Access → everything
+
+**What crosses:** nothing.
+
+**How:** Access publishes two events and no other context subscribes to either. It consumes no other context's events, references no other context's namespace, and no process manager observes or commands it. Its one outward-facing type is `Role`, which lives in `Domain.Abstractions` rather than in Access, because the event serializes it and the infrastructure adapter must see it without referencing Application (ADR 0028).
+
+**Pattern:** none. Access has no boundary with the other four contexts. What consumes it sits outside the domain layer entirely: the `CurrentRoles` projection feeds `CurrentUserRolesRow`, which an authentication factory turns into claims and an authorization handler reads. Access is written to by a bootstrap service in the Workers host and otherwise only by an operator action.
+
+See ADR 0028.
 
 ## What does NOT cross
 
@@ -75,7 +87,7 @@ The rule, generalized from ADR 0007: each context translates incoming references
 
 ## Process managers as the orchestration layer
 
-The four contexts do not call each other. What coordinates them is a thin orchestration layer that sits beside them rather than inside any one of them: the process managers. They are not a fifth bounded context. They own no domain aggregates and publish no domain events the contexts consume. They are event-sourced workflows (each on its own stream, ADR 0011 and 0012) that observe context events and issue context commands.
+The five contexts do not call each other. What coordinates them is a thin orchestration layer that sits beside them rather than inside any one of them: the process managers. They are not a sixth bounded context. They own no domain aggregates and publish no domain events the contexts consume. They are event-sourced workflows (each on its own stream, ADR 0011 and 0012) that observe context events and issue context commands.
 
 Two ship in Phase 5:
 
@@ -98,7 +110,7 @@ This document is the worked example for Chapter 7's context-mapping section. The
 
 - **Shared Kernel.** `Money`, `Currency`, `Address` in `Domain/SharedKernel/`. Jointly owned by Sales, Fulfillment, and Billing. See ADRs 0006 and 0009.
 - **Customer-Supplier.** Sales publishes events; Fulfillment and Billing consume them. Translation lives at the consumer side, in the process managers. See ADRs 0005 and 0007.
-- **Anti-Corruption Layer.** Phase 16 (Chapter 18's migration tooling) is where the ACL pattern appears for real, translating between a legacy CRUD system and the event-sourced domain. Phase 4's bounded-context boundaries do not need an ACL because all four contexts share the same teaching codebase and agree on the published event shapes directly. The book's emphasis on ACL for external integrations stays accurate; the reference implementation just doesn't have the legacy-system stress test until Phase 16.
+- **Anti-Corruption Layer.** Phase 16 (Chapter 18's migration tooling) is where the ACL pattern appears for real, translating between a legacy CRUD system and the event-sourced domain. Phase 4's bounded-context boundaries do not need an ACL because all five contexts share the same teaching codebase and agree on the published event shapes directly. The book's emphasis on ACL for external integrations stays accurate; the reference implementation just doesn't have the legacy-system stress test until Phase 16.
 - **Process-manager orchestration.** The two process managers in `src/ProcessManagers/` are Chapter 10's worked example: event-sourced workflows that coordinate the bounded contexts by observing their events and issuing their commands, with explicit compensation in `OrderFulfillmentProcessManager` and a single stuck terminal in `ReturnProcessManager`. The "Process managers as the orchestration layer" section above is the bridge from Chapter 10 to that code.
 
 If you are reading the book and looking for the code, this folder is the bridge.

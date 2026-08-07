@@ -9,10 +9,6 @@ which one is current. So nothing here can go stale on its own: every sentence is
 routing pointer or a statement about how two decisions compose, and either way it changes only
 when an ADR does.
 
-Thirty of the fifty-two are cross-cutting, meaning honoring them requires agreement between
-components that could otherwise change independently. The other twenty-two settle one
-component and are reachable from the corpus directly. This document covers the thirty.
-
 ## Layering
 
 Domain sits at the center with no I/O. Application depends on Domain and Domain.Abstractions
