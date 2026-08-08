@@ -73,7 +73,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 5. Property-based tests for serialization roundtrips
 6. Replay tests against historical event streams
 7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
-8. Contract tests between layers
+8. Contract tests over the `IEventStore` port: one shared suite that every adapter runs
 
 **Versioning.** One worked event-schema migration with a real upcaster (Chapter 11), demonstrating the upcasting pipeline and the migration playbook.
 
