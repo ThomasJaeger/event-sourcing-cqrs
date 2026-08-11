@@ -132,7 +132,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Aggregate tests use Given-When-Then: `Given(events).When(command).Then(expectedEvents)`.
 * Projection tests feed a known event stream and assert on the resulting read model.
 * Process manager tests feed events and assert on commands emitted plus internal state.
-* Property-based tests via FsCheck for invariants and serialization roundtrips.
+* Property-based tests via FsCheck over the upcaster pipeline's topology, the shadow comparator, and metadata serialization roundtrips. Aggregate invariants are pinned by the Given-When-Then facts above rather than by properties.
 * Replay tests against historical event streams.
 * Integration tests use Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB). No mocking of these stores.
 

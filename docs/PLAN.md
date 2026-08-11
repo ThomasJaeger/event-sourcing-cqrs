@@ -69,7 +69,7 @@ Deliberately rough, because the book argues the cheapest tools that solve the pr
 1. Given-When-Then aggregate tests
 2. Projection tests
 3. Process manager and saga tests
-4. Property-based tests for invariants (FsCheck)
+4. Property-based tests over the upcaster pipeline's topology and the shadow comparator (FsCheck)
 5. Property-based tests for serialization roundtrips
 6. Replay tests against historical event streams
 7. Integration tests with Testcontainers (PostgreSQL, SQL Server, KurrentDB) and LocalStack (DynamoDB)
