@@ -80,3 +80,14 @@ ways. The pin is central in `Directory.Packages.props`, so its effect always cov
 project as each one landed; only the enumeration lagged. The correction is made in the Decision
 itself rather than here, following commit `1045862`, which corrected stale phase numbers inside
 ADR 0025 in place while reasoning was appended as this section is.
+
+**The Context asserts a dependency that ran the other way.** Chapter 16 teaches mutation testing
+as a pattern a reader's team can adopt, and it teaches chaos testing the same way. The chapter
+does not mention the reference implementation anywhere, and it never claimed either pattern was
+demonstrated here. The citation ran from this repository to the chapter rather than from the
+chapter to this repository: `docs/PLAN.md`'s v1 test-suite list is headed "Test patterns from
+Chapter 16", and it was that list, not the chapter, that promised mutation testing on the domain.
+Commit `e79cba8` dropped that promise and the chaos-testing one from v1 scope at all four sites
+carrying them. The Context's sentence naming Chapter 16 therefore describes a dependency in a
+direction that did not exist. It stays as written, because it records the reasoning the decision
+was taken on rather than a claim about today.
