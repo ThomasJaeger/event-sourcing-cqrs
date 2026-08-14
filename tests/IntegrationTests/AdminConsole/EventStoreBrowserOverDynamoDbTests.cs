@@ -37,8 +37,7 @@ public sealed class EventStoreBrowserOverDynamoDbTests : IAsyncLifetime
 {
     private static readonly DateTime SeedTime = new(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly IContainer _localStack = new ContainerBuilder()
-        .WithImage("localstack/localstack:4.14.0")
+    private readonly IContainer _localStack = new ContainerBuilder("localstack/localstack:4.14.0")
         .WithPortBinding(4566, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())
         .Build();

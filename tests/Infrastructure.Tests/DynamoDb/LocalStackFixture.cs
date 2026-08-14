@@ -23,8 +23,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests.DynamoDb;
 // module, which keeps this to the Testcontainers package the repository already carries.
 public sealed class LocalStackFixture : IAsyncLifetime
 {
-    private readonly IContainer _container = new ContainerBuilder()
-        .WithImage("localstack/localstack:4.14.0")
+    private readonly IContainer _container = new ContainerBuilder("localstack/localstack:4.14.0")
         .WithPortBinding(4566, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())
         .Build();

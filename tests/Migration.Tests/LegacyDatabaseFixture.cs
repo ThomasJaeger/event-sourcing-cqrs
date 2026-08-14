@@ -11,8 +11,7 @@ namespace EventSourcingCqrs.Migration.Tests;
 // database comes up empty and the change-tracking test fails on the absent legacy.orders.
 public sealed class LegacyDatabaseFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16.6-alpine")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16.6-alpine")
         .WithUsername("esrcq")
         .WithPassword("esrcq")
         .WithDatabase("legacy")

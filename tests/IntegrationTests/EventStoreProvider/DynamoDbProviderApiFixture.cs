@@ -37,8 +37,7 @@ public sealed class DynamoDbProviderApiFixture : IAsyncLifetime
 {
     private readonly PostgresFixture _postgres = new();
 
-    private readonly IContainer _localStack = new ContainerBuilder()
-        .WithImage("localstack/localstack:4.14.0")
+    private readonly IContainer _localStack = new ContainerBuilder("localstack/localstack:4.14.0")
         .WithPortBinding(4566, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())
         .Build();

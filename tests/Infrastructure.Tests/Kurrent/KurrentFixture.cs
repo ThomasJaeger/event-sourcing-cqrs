@@ -16,8 +16,7 @@ public sealed class KurrentFixture
 {
     public async Task<IContainer> StartNodeAsync()
     {
-        var container = new ContainerBuilder()
-            .WithImage("kurrentplatform/kurrentdb:26.0.2")
+        var container = new ContainerBuilder("kurrentplatform/kurrentdb:26.0.2")
             .WithCommand("--insecure", "--mem-db")
             .WithPortBinding(2113, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())

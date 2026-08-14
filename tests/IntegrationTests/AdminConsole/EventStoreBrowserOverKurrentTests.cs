@@ -28,8 +28,7 @@ public sealed class EventStoreBrowserOverKurrentTests : IAsyncLifetime
 {
     private static readonly DateTime SeedTime = new(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly IContainer _kurrent = new ContainerBuilder()
-        .WithImage("kurrentplatform/kurrentdb:26.0.2")
+    private readonly IContainer _kurrent = new ContainerBuilder("kurrentplatform/kurrentdb:26.0.2")
         .WithCommand("--insecure", "--mem-db")
         .WithPortBinding(2113, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())

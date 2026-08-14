@@ -26,8 +26,7 @@ public sealed class KurrentProviderApiFixture : IAsyncLifetime
 {
     private readonly PostgresFixture _postgres = new();
 
-    private readonly IContainer _kurrent = new ContainerBuilder()
-        .WithImage("kurrentplatform/kurrentdb:26.0.2")
+    private readonly IContainer _kurrent = new ContainerBuilder("kurrentplatform/kurrentdb:26.0.2")
         .WithCommand("--insecure", "--mem-db")
         .WithPortBinding(2113, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilContainerIsHealthy())

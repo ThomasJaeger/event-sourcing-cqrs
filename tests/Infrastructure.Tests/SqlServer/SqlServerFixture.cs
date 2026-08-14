@@ -25,8 +25,7 @@ namespace EventSourcingCqrs.Infrastructure.Tests.SqlServer;
 // safer-looking default would prove nothing.
 public sealed class SqlServerFixture : IAsyncLifetime
 {
-    private readonly MsSqlContainer _container = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2019-latest")
+    private readonly MsSqlContainer _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest")
         .Build();
 
     // Measured once at container start, surfaced for the CI-matrix decision.

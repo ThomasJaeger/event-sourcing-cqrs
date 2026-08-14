@@ -32,8 +32,7 @@ public sealed class SqlServerProviderApiFixture : IAsyncLifetime
 {
     private readonly PostgresFixture _postgres = new();
 
-    private readonly MsSqlContainer _sqlServer = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2019-latest")
+    private readonly MsSqlContainer _sqlServer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest")
         .Build();
 
     public WebApplicationFactory<Program> Factory { get; private set; } = null!;

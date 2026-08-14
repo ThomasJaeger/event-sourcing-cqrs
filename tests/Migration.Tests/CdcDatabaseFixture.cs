@@ -27,8 +27,7 @@ namespace EventSourcingCqrs.Migration.Tests;
 // the class lifetime (IClassFixture) to amortize startup; the databases are per test.
 public sealed class CdcDatabaseFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16.6-alpine")
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16.6-alpine")
         .WithUsername("esrcq")
         .WithPassword("esrcq")
         .WithDatabase("esrcq")
