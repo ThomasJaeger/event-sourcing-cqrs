@@ -123,11 +123,34 @@ internal static class ScratchLineage
 
     // The N-1 linear links a length-N chain needs, oldest first. Fresh instances each call so a
     // duplicate defect can add a second instance of the same link type.
-    public static object[] LinksFor(int length)
+    public static object[] LinksFor(int length) => LinksBetween(1, length);
+
+    // The links a sub-chain needs, oldest first. Links are numbered by the version they consume, so a
+    // lift from version v to version n runs links v through n-1, and an empty range is a lift that
+    // runs nothing. This is what lets a property build a pipeline over part of the pool rather than
+    // all of it, which is how the split form reaches a decomposition the public API cannot express.
+    public static object[] LinksBetween(int fromVersion, int toVersion)
     {
         object[] all = [new L1(), new L2(), new L3(), new L4(), new L5()];
-        return [.. all[..(length - 1)]];
+        return [.. all[(fromVersion - 1)..(toVersion - 1)]];
     }
+
+    // Applies exactly one link: the one carrying the shape at fromVersion to the shape after it.
+    //
+    // This exists because EventUpcasterPipeline.Upcast lifts only to the terminal. There is no public
+    // way to ask the seam for a single hop, so a property comparing a chain against its hops applied
+    // one at a time has nothing to compare against without it. The links' own Upcast methods are
+    // already public, so the affordance is a test-side switch over types this assembly already sees,
+    // and nothing under src/ widens for it. Pattern from Chapter 11: Testing Upcasters.
+    public static IDomainEvent StepOnce(IDomainEvent from, int fromVersion) => fromVersion switch
+    {
+        1 => new L1().Upcast((V1)from),
+        2 => new L2().Upcast((V2)from),
+        3 => new L3().Upcast((V3)from),
+        4 => new L4().Upcast((V4)from),
+        5 => new L5().Upcast((V5)from),
+        _ => throw new ArgumentOutOfRangeException(nameof(fromVersion)),
+    };
 
     // A valid length-N chain mutated by exactly one defect: the registry and upcaster set that make
     // new EventUpcasterPipeline(...) reject the shape.
