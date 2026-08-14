@@ -55,6 +55,10 @@ public class EventUpcasterPipelineTests
         fromV1.Should().BeOfType<AV3>();
         ((AV3)fromV1).Id.Should().Be(id);
         ((AV3)fromV1).Revision.Should().Be(1);
+        // Name is the member the first link sets and the second carries forward untouched, so it is
+        // the one a two-hop lift can get wrong while Id and Revision still read correctly. Asserting
+        // it here is what makes this fact see the composition rather than only the endpoints.
+        ((AV3)fromV1).Name.Should().Be("");
 
         var fromV2 = pipeline.Upcast("a_event", 2, new AV2(id, "named"));
         fromV2.Should().BeOfType<AV3>();
@@ -194,6 +198,58 @@ public class EventUpcasterPipelineTests
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*String*");
+    }
+
+    // (i) Per-hop facts for the three links this file declares (Chapter 11: Testing Upcasters, Unit
+    // Tests). Every fact above drives the pipeline, which always lifts to the terminal, so a link that
+    // misread a member could be masked by the link after it. These drive each link on its own and
+    // assert every member of the output. The chapter's malformed-payload sample class is left out
+    // rather than invented: these are records with non-nullable members, so a malformed input cannot be
+    // constructed, and the links carry no defensive path.
+
+    [Theory]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("6f1c2d3e-4a5b-46c7-8d9e-0f1a2b3c4d5e")]
+    [InlineData("ffffffff-ffff-ffff-ffff-ffffffffffff")]
+    public void AV1ToV2_carries_the_id_and_defaults_the_added_name(string id)
+    {
+        var identifier = Guid.Parse(id);
+
+        var upcast = new AV1ToV2().Upcast(new AV1(identifier));
+
+        upcast.Id.Should().Be(identifier);
+        upcast.Name.Should().Be("");
+    }
+
+    // The link the two-link composition fact depends on: it carries Name forward rather than
+    // rebuilding it, which is the behavior a chain can hide.
+    [Theory]
+    [InlineData("")]
+    [InlineData("named")]
+    [InlineData("  spaced  name  ")]
+    public void AV2ToV3_carries_the_id_and_name_forward_and_defaults_the_added_revision(string name)
+    {
+        var identifier = Guid.NewGuid();
+
+        var upcast = new AV2ToV3().Upcast(new AV2(identifier, name));
+
+        upcast.Id.Should().Be(identifier);
+        upcast.Name.Should().Be(name);
+        upcast.Revision.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("1a2b3c4d-5e6f-4788-99aa-bbccddeeff00")]
+    [InlineData("ffffffff-ffff-ffff-ffff-ffffffffffff")]
+    public void BV1ToV2_carries_the_id_and_defaults_the_added_flag(string id)
+    {
+        var identifier = Guid.Parse(id);
+
+        var upcast = new BV1ToV2().Upcast(new BV1(identifier));
+
+        upcast.Id.Should().Be(identifier);
+        upcast.Flag.Should().BeFalse();
     }
 
     // Scratch lineages local to this file.
