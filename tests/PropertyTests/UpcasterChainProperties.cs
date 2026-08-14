@@ -39,6 +39,13 @@ public class UpcasterChainProperties
 
                 Assert.Equal(ScratchLineage.ShapeType(length), lifted.GetType());
                 Assert.Equal(((IScratchEvent)source).Id, ((IScratchEvent)lifted).Id);
+
+                // The Id proves the payload survived; the Trail proves which links produced it. A hop
+                // that dropped what it received or stamped the wrong mark leaves the same Id and a
+                // different Trail, so this is the assertion that can see a chain composing wrongly.
+                Assert.Equal(
+                    ScratchLineage.ExpectedTrail(version, length),
+                    ((IScratchEvent)lifted).Trail);
             }
 
             Assert.Throws<UnknownEventSchemaVersionException>(

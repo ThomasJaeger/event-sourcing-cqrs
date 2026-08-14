@@ -9,42 +9,52 @@ namespace EventSourcingCqrs.PropertyTests;
 // at run time: the pool is the type universe, and the generators pick a slice of it. Pattern from
 // Chapter 11: Upcasting.
 
-// Every scratch shape carries an Id so a lift can prove the payload survived the chain unchanged.
+// Every scratch shape carries an Id, which a lift proves survived the chain, and a Trail, which proves
+// how it got there. The Id alone cannot: every link copies it forward, so a hop that dropped its own
+// work or misread the hop before it produced the same Id as a correct chain and no assertion could see
+// the difference. The Trail is the field an intermediate hop sets and every later hop carries forward
+// untouched, so both failure modes surface at the terminal: a hop that drops what it received loses the
+// prefix, and a hop that stamps the wrong mark writes the wrong one.
 internal interface IScratchEvent : IDomainEvent
 {
     Guid Id { get; }
+
+    string Trail { get; }
 }
 
-internal sealed record V1(Guid Id) : IScratchEvent;
-internal sealed record V2(Guid Id) : IScratchEvent;
-internal sealed record V3(Guid Id) : IScratchEvent;
-internal sealed record V4(Guid Id) : IScratchEvent;
-internal sealed record V5(Guid Id) : IScratchEvent;
-internal sealed record V6(Guid Id) : IScratchEvent;
+internal sealed record V1(Guid Id, string Trail) : IScratchEvent;
+internal sealed record V2(Guid Id, string Trail) : IScratchEvent;
+internal sealed record V3(Guid Id, string Trail) : IScratchEvent;
+internal sealed record V4(Guid Id, string Trail) : IScratchEvent;
+internal sealed record V5(Guid Id, string Trail) : IScratchEvent;
+internal sealed record V6(Guid Id, string Trail) : IScratchEvent;
 
-// The linear links, one per adjacent pair. Each copies the Id forward, so version 1 lifted to the
-// terminal carries the same Id it started with.
-internal sealed class L1 : Upcaster<V1, V2> { public override V2 Upcast(V1 from) => new(from.Id); }
-internal sealed class L2 : Upcaster<V2, V3> { public override V3 Upcast(V2 from) => new(from.Id); }
-internal sealed class L3 : Upcaster<V3, V4> { public override V4 Upcast(V3 from) => new(from.Id); }
-internal sealed class L4 : Upcaster<V4, V5> { public override V5 Upcast(V4 from) => new(from.Id); }
-internal sealed class L5 : Upcaster<V5, V6> { public override V6 Upcast(V5 from) => new(from.Id); }
+// The linear links, one per adjacent pair. Each copies the Id forward and appends its own mark to the
+// Trail it received, so version 1 lifted to the terminal carries the same Id it started with and a
+// Trail naming every link that ran, in the order they ran.
+internal sealed class L1 : Upcaster<V1, V2> { public override V2 Upcast(V1 from) => new(from.Id, from.Trail + ScratchLineage.MarkFor(1)); }
+internal sealed class L2 : Upcaster<V2, V3> { public override V3 Upcast(V2 from) => new(from.Id, from.Trail + ScratchLineage.MarkFor(2)); }
+internal sealed class L3 : Upcaster<V3, V4> { public override V4 Upcast(V3 from) => new(from.Id, from.Trail + ScratchLineage.MarkFor(3)); }
+internal sealed class L4 : Upcaster<V4, V5> { public override V5 Upcast(V4 from) => new(from.Id, from.Trail + ScratchLineage.MarkFor(4)); }
+internal sealed class L5 : Upcaster<V5, V6> { public override V6 Upcast(V5 from) => new(from.Id, from.Trail + ScratchLineage.MarkFor(5)); }
 
-// Defect links, off the linear pool so they collide with it only in the one way each defect names.
+// Defect links, off the linear pool so they collide with it only in the one way each defect names. They
+// carry the Trail forward without marking it, because no property lifts through them: they exist to be
+// rejected at construction.
 // A branch adds a second link out of V1 to a target no chain produces (source collision, not target).
-internal sealed record BranchTarget(Guid Id) : IScratchEvent;
-internal sealed class BranchLink : Upcaster<V1, BranchTarget> { public override BranchTarget Upcast(V1 from) => new(from.Id); }
+internal sealed record BranchTarget(Guid Id, string Trail) : IScratchEvent;
+internal sealed class BranchLink : Upcaster<V1, BranchTarget> { public override BranchTarget Upcast(V1 from) => new(from.Id, from.Trail); }
 
 // A merge adds a second producer of V2 from a source no chain consumes (target collision, not source).
-internal sealed record MergeSource(Guid Id) : IScratchEvent;
-internal sealed class MergeLink : Upcaster<MergeSource, V2> { public override V2 Upcast(MergeSource from) => new(from.Id); }
+internal sealed record MergeSource(Guid Id, string Trail) : IScratchEvent;
+internal sealed class MergeLink : Upcaster<MergeSource, V2> { public override V2 Upcast(MergeSource from) => new(from.Id, from.Trail); }
 
 // A cycle is a self-contained two-shape loop, so it trips the topology walk's seen-set without
 // colliding on any source or target the linear chain uses.
-internal sealed record CycleA(Guid Id) : IScratchEvent;
-internal sealed record CycleB(Guid Id) : IScratchEvent;
-internal sealed class CycleAB : Upcaster<CycleA, CycleB> { public override CycleB Upcast(CycleA from) => new(from.Id); }
-internal sealed class CycleBA : Upcaster<CycleB, CycleA> { public override CycleA Upcast(CycleB from) => new(from.Id); }
+internal sealed record CycleA(Guid Id, string Trail) : IScratchEvent;
+internal sealed record CycleB(Guid Id, string Trail) : IScratchEvent;
+internal sealed class CycleAB : Upcaster<CycleA, CycleB> { public override CycleB Upcast(CycleA from) => new(from.Id, from.Trail); }
+internal sealed class CycleBA : Upcaster<CycleB, CycleA> { public override CycleA Upcast(CycleB from) => new(from.Id, from.Trail); }
 
 // The construction defects the pipeline rejects. Merge and cycle discharge the V1 deferral: the pipeline
 // shipped both guards in V1 with no dedicated fact, because the duplicate-link fact trips the co-located
@@ -72,16 +82,37 @@ internal static class ScratchLineage
     // The CLR type of the shape at a 1-based version.
     public static Type ShapeType(int version) => ShapeTypes[version - 1];
 
+    // The mark link N stamps on the Trail as it runs. Naming it once keeps the links, the expected
+    // Trail, and any per-hop fact reading from one definition rather than three spellings of it.
+    public static string MarkFor(int linkNumber) => $"L{linkNumber};";
+
+    // The Trail a shape carries after lifting from one version to another. Lifting from version v to
+    // version n runs links v through n-1, so the Trail names each of them in order. Lifting to the
+    // version it started at runs nothing and leaves the seed.
+    public static string ExpectedTrail(int fromVersion, int toVersion)
+    {
+        var trail = SeedTrail;
+        for (var link = fromVersion; link < toVersion; link++)
+        {
+            trail += MarkFor(link);
+        }
+        return trail;
+    }
+
+    // The Trail a freshly-instanced shape starts with, before any link has run.
+    public const string SeedTrail = "";
+
     // A fresh instance of the shape at a version, carrying a version-derived Id so the lift is
-    // deterministic under a fixed replay seed.
+    // deterministic under a fixed replay seed, and the seed Trail so every mark on it was stamped by a
+    // link that ran.
     public static IDomainEvent Instance(int version) => version switch
     {
-        1 => new V1(SeededGuid(version)),
-        2 => new V2(SeededGuid(version)),
-        3 => new V3(SeededGuid(version)),
-        4 => new V4(SeededGuid(version)),
-        5 => new V5(SeededGuid(version)),
-        6 => new V6(SeededGuid(version)),
+        1 => new V1(SeededGuid(version), SeedTrail),
+        2 => new V2(SeededGuid(version), SeedTrail),
+        3 => new V3(SeededGuid(version), SeedTrail),
+        4 => new V4(SeededGuid(version), SeedTrail),
+        5 => new V5(SeededGuid(version), SeedTrail),
+        6 => new V6(SeededGuid(version), SeedTrail),
         _ => throw new ArgumentOutOfRangeException(nameof(version)),
     };
 
