@@ -52,7 +52,7 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.CommandText =
             "INSERT INTO read_models.order_detail (order_id, customer_id, status, last_updated_utc, tenant_id) " +
             "VALUES (@order_id, @customer_id, @status, @last_updated_utc, @tenant_id) " +
-            "ON CONFLICT (order_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, OrderStatus.Draft.ToString());
@@ -66,12 +66,14 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.order_detail SET " +
             "shipping_address_street = @street, shipping_address_city = @city, " +
             "shipping_address_postal_code = @postal_code, shipping_address_country = @country, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id";
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         cmd.Parameters.AddWithValue("street", NpgsqlDbType.Text, shippingAddress.Street);
         cmd.Parameters.AddWithValue("city", NpgsqlDbType.Text, shippingAddress.City);
         cmd.Parameters.AddWithValue("postal_code", NpgsqlDbType.Text, shippingAddress.PostalCode);
@@ -87,7 +89,7 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         return ExecuteAsync(
             "UPDATE read_models.order_detail SET status = @status, placed_utc = @stamp, " +
             "total_amount = @total_amount, total_currency = @total_currency, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id",
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant",
             orderId, OrderStatus.Placed, placedUtc, lastUpdatedUtc, ct,
             cmd =>
             {
@@ -100,27 +102,29 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         Guid orderId, DateTime shippedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
         => ExecuteAsync(
             "UPDATE read_models.order_detail SET status = @status, shipped_utc = @stamp, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id",
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant",
             orderId, OrderStatus.Shipped, shippedUtc, lastUpdatedUtc, ct);
 
     public Task ApplyCancelledAsync(
         Guid orderId, DateTime cancelledUtc, DateTime lastUpdatedUtc, CancellationToken ct)
         => ExecuteAsync(
             "UPDATE read_models.order_detail SET status = @status, cancelled_utc = @stamp, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id",
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant",
             orderId, OrderStatus.Cancelled, cancelledUtc, lastUpdatedUtc, ct);
 
     public Task ApplyCompletedAsync(
         Guid orderId, DateTime completedUtc, DateTime lastUpdatedUtc, CancellationToken ct)
         => ExecuteAsync(
             "UPDATE read_models.order_detail SET status = @status, completed_utc = @stamp, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id",
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant",
             orderId, OrderStatus.Completed, completedUtc, lastUpdatedUtc, ct);
 
     // Shared body for the status transitions that write status, one *_utc column,
     // and last_updated_utc. Each owns a distinct *_utc column, so the SQL differs by
-    // one column name; the binding is identical. No row for orderId means the header
-    // was never created; the update touches zero rows, which is correct.
+    // one column name; the binding is identical, the tenant predicate included, so
+    // every caller's statement names @tenant. No row for orderId under this tenant
+    // means the header was never created; the update touches zero rows, which is
+    // correct.
     private async Task ExecuteAsync(
         string sql, Guid orderId, OrderStatus status, DateTime stamp, DateTime lastUpdatedUtc,
         CancellationToken ct, Action<NpgsqlCommand>? extraParameters = null)
@@ -129,6 +133,8 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.Transaction = _transaction;
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue(
+            "tenant", NpgsqlDbType.Uuid, ReadModelTenant.ResolveOrThrow(_tenantAccessor));
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, status.ToString());
         cmd.Parameters.AddWithValue("stamp", NpgsqlDbType.TimestampTz, stamp);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
@@ -142,11 +148,14 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
         // Sets returned_utc only; the Sales status stays as it was (D5). No row for
-        // orderId means the header was never created; the update touches zero rows.
+        // orderId under this tenant means the header was never created; the update
+        // touches zero rows.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.order_detail SET returned_utc = @returned_utc, " +
-            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id";
+            "last_updated_utc = @last_updated_utc WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         cmd.Parameters.AddWithValue("returned_utc", NpgsqlDbType.TimestampTz, returnedUtc);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
         await cmd.ExecuteNonQueryAsync(ct);
@@ -178,11 +187,13 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "DELETE FROM read_models.order_detail_lines " +
-            "WHERE order_id = @order_id AND line_id = @line_id";
+            "WHERE order_id = @order_id AND line_id = @line_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, lineId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -220,7 +231,7 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.CommandText =
             "INSERT INTO read_models.order_detail_shipments (shipment_id, order_id, scheduled_utc, tenant_id) " +
             "VALUES (@shipment_id, @order_id, @scheduled_utc, @tenant_id) " +
-            "ON CONFLICT (shipment_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, shipment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, row.ShipmentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("scheduled_utc", NpgsqlDbType.TimestampTz, row.ScheduledUtc);
@@ -254,7 +265,7 @@ internal sealed class PostgresOrderDetailUnitOfWork : IOrderDetailUnitOfWork
         cmd.CommandText =
             "INSERT INTO read_models.order_detail_payments (payment_id, order_id, authorized_utc, tenant_id) " +
             "VALUES (@payment_id, @order_id, @authorized_utc, @tenant_id) " +
-            "ON CONFLICT (payment_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, payment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("payment_id", NpgsqlDbType.Uuid, row.PaymentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("authorized_utc", NpgsqlDbType.TimestampTz, row.AuthorizedUtc);
