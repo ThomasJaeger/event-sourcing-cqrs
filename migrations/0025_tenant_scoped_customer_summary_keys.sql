@@ -1,0 +1,117 @@
+-- 0025_tenant_scoped_customer_summary_keys.sql
+-- Phase 10 (multi-tenancy): make the customer-summary family's keys tenant-scoped under the
+-- shared-schema isolation model. Migration 0017 added the tenant_id column to both tables but left
+-- both keys global; this migration swaps them to tenant-leading composites, the same order 0018,
+-- 0019, and 0024 used, so two tenants can each hold a row at the same caller-supplied id.
+--
+-- Customer ids and order ids are caller-supplied and tenants are not. DraftOrder carries both
+-- OrderId and CustomerId out of the request body, the Order aggregate carries the customer id into
+-- OrderPlaced, and the tenant is read from the loaded principal. So two tenants can present the
+-- same pair and neither can choose the other's tenant. The write side keeps them apart because
+-- StreamId composes the tenant into the stream. A read-model key on the caller-supplied ids alone
+-- has no such composition, so the second tenant's row lands on the first tenant's key. No predicate
+-- closes that: ON CONFLICT is decided by the key, and the row the clause hits is the row the key
+-- selects.
+--
+-- Two keys move:
+--
+--   customer_summary         pk (customer_id)            -> (tenant_id, customer_id)
+--   customer_summary_orders  pk (customer_id, order_id)  -> (tenant_id, customer_id, order_id)
+--
+-- This family's fold costs more than the order-detail family's, and the difference is the conflict
+-- branch rather than the key. Every fold 0024 closed resolved DO NOTHING, so the second tenant's
+-- row was discarded and the first tenant's rows were left as they were. ApplyPlacementAsync
+-- resolves DO UPDATE, so a second tenant placing against the same customer id increments the first
+-- tenant's order_count and adds its own money to the first tenant's lifetime_value_amount on the
+-- way past, and then holds no row of its own.
+--
+-- ix_customer_summary_orders_order_id does not move and is not dropped, and that was answered from
+-- the queries that read it rather than from symmetry with the keys. One query uses it, the
+-- cancel-side lookup by order id, whose predicate is (order_id, tenant_id); the other four
+-- statements against that table are an insert, a delete that names every column of the new primary
+-- key, a whole-table truncate, and a tenant-scoped delete. The composite key above leads
+-- with tenant_id and customer_id, so it cannot serve that lookup and this index is still the only
+-- thing that does. Its leading column is still the lookup's selective one and the tenant filter
+-- applies on top of it exactly as it does today, so the key change neither degrades it nor makes
+-- it redundant. Rewriting it tenant-leading would improve the plan and change nothing the
+-- isolation model admits, which puts it in a commit about planning rather than this one.
+--
+-- Safe on populated data with no rewrite and no empty-table guard: every pre-existing row carries
+-- the default tenant from 0017's NOT NULL DEFAULT, so a tenant-leading composite is unique exactly
+-- when the old key was unique. Both swaps widen what the table admits rather than narrowing it, so
+-- no pre-existing row can violate the new key whatever the corpus holds. It assumes it runs before
+-- a second tenant is onboarded to these tables, the condition 0018 states for the SKU keys.
+--
+-- Re-establishing that condition rather than carrying it forward found 0024's statement of it
+-- wrong in two clauses. 0024 is checksummed and its bytes cannot be corrected, so the correction
+-- is here, and it quotes both clauses so a reader can match them exactly rather than guess which
+-- sentence is meant.
+--
+-- The first clause: "every other production construction of a TenantId is a round trip, two
+-- delay-queue readers reading back a tenant they wrote, two JSON converters, and one hub
+-- subscription echoing the tenant its authorize call returned". That enumeration is short by one.
+-- The second clause: "No production path originates a non-default tenant until the per-user tenant
+-- lookup lands with tenant onboarding". One does.
+--
+-- The site both clauses miss is the Replay Tool page, which takes a tenant id as free text from an
+-- operator and calls TenantId.Parse on it. It landed 2026-06-24 against 0024's 2026-08-15, so both
+-- claims were false when they were made rather than overtaken by later work. The reader behind
+-- them was scoped to .cs files and that page is .razor, which is the whole of the defect: a reader
+-- scoped by file extension is a prediction about where code lives, and C# in this repository lives
+-- in two file kinds. Read both clauses as covering the sites a .cs search reaches, which is not
+-- what either one says.
+--
+-- 0024 carries no pointer to this correction and cannot be given one, so a reader who meets 0024
+-- and stops there is left believing it. Closing that reaches ADR 0031, which governs the isolation
+-- model and is not this commit's to edit.
+--
+-- The narrower claim these two swaps need does hold, and it is about rows rather than values. The
+-- Replay Tool passes its parsed tenant to the order-throughput rebuild and to nothing else, that
+-- rebuild is the only production caller of the per-tenant rebuilder, and the rebuilder is the only
+-- production caller of any store's ResetTenantAsync. So read_models.order_throughput is the only
+-- read-model table an operator-supplied tenant can reach, and it has been keyed
+-- (tenant_id, second_utc) since 0021. Two further bounds sit under that one. The replay reads
+-- through ReadAllForTenantAsync, so it sees only events already carrying that tenant, and the
+-- write path takes its tenant from each event's own metadata rather than from the operator's
+-- input, so an operator-supplied tenant selects which rows to reset and which events to read and
+-- never becomes the tenant on a row. Every other production construction of a TenantId is the
+-- unconditional default or a round trip: CurrentRolesPrincipalFactory is the only production
+-- construction of an authenticated principal and hands it WellKnownTenants.Default, and
+-- TenantId.From outside the default constant itself has five call sites, two delay-queue readers
+-- reading back a tenant they wrote, two JSON converters, and one hub subscription echoing the
+-- tenant its authorize call returned. No production path writes a customer_summary or
+-- customer_summary_orders row under a non-default tenant, which is what these swaps require and
+-- all they require.
+--
+-- What the swap costs, in 0019's terms: each ALTER takes ACCESS EXCLUSIVE on its table and
+-- rebuilds the backing index. Two small read-model tables on a single-tenant corpus make that
+-- acceptable. CREATE UNIQUE INDEX CONCURRENTLY followed by a constraint swap is the path if table
+-- size or projection availability later requires it, and it would run per table rather than in one
+-- statement per table as written here.
+--
+-- The two ON CONFLICT clauses in PostgresCustomerSummaryUnitOfWork move with these keys and must:
+-- PostgreSQL requires a conflict target to match a unique index or constraint, so
+-- ON CONFLICT (customer_id) against a (tenant_id, customer_id) primary key raises 42P10 at
+-- execution rather than degrading quietly.
+--
+-- Moving the keys does not close this family on its own, and one of the two writes that gain a
+-- tenant predicate in the same commit is the proof. DeleteOrderAsync deletes on the pair it
+-- recovered from the acting tenant's own lookup row, so it could not reach another tenant's row
+-- while the old key forbade two tenants holding that pair at once. This migration makes that
+-- arrangement expressible, and until the predicate lands beside it the statement reaches across.
+-- The key is what makes the predicate necessary and the predicate is what closes it, which is why
+-- they ride together.
+--
+-- A read_models-schema migration, so it does not touch the event_store constraint and index
+-- assertions. It does change the applied count and the last-applied identity that the migration
+-- runner's own tests pin, and those move with it. Stated as the obligation rather than as a file
+-- name, because these bytes are checksummed and immutable once applied, so a reference in them
+-- could never be corrected if the referent moved.
+
+ALTER TABLE read_models.customer_summary
+    DROP CONSTRAINT pk_customer_summary,
+    ADD CONSTRAINT pk_customer_summary PRIMARY KEY (tenant_id, customer_id);
+
+ALTER TABLE read_models.customer_summary_orders
+    DROP CONSTRAINT pk_customer_summary_orders,
+    ADD CONSTRAINT pk_customer_summary_orders PRIMARY KEY (tenant_id, customer_id, order_id);

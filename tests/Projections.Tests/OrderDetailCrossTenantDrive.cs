@@ -6,8 +6,13 @@ using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Billing.Events;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
+using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
+using EventSourcingCqrs.Infrastructure.Versioning;
 using EventSourcingCqrs.Projections.OrderDetail;
+using EventSourcingCqrs.TestInfrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -21,11 +26,6 @@ namespace EventSourcingCqrs.Projections.Tests;
 //
 // The assertions live in OrderDetailCrossTenantWriteTests, where a reader debugging a failure
 // will look. The drives live here so both that class and the harness run the same code.
-internal sealed record OrderDetailDrive(
-    string Name,
-    Func<OrderDetailProjection, StubTenantAccessor, Guid, string, Task> ArrangeAsOwner,
-    Func<OrderDetailProjection, StubTenantAccessor, Guid, string, Task> ActAsOther);
-
 internal static class OrderDetailCrossTenantDrive
 {
     private static TenantId Owner => ProjectionTenantTaggingTests.TenantA;
@@ -39,23 +39,50 @@ internal static class OrderDetailCrossTenantDrive
     private static readonly Dictionary<Guid, Guid> OwnerShipmentIds = [];
     private static readonly Dictionary<Guid, Guid> OwnerPaymentIds = [];
 
-    internal static IReadOnlyList<OrderDetailDrive> All { get; } =
+    internal static IReadOnlyList<CrossTenantDrive> All { get; } =
     [
-        new("Draft", DraftAsOwner, DraftAsOther),
-        new("Place", DraftAsOwner, PlaceAsOther),
-        new("Ship", DraftAsOwner, ShipAsOther),
-        new("Cancel", DraftAsOwner, CancelAsOther),
-        new("Complete", DraftAsOwner, CompleteAsOther),
-        new("SetAddress", DraftAsOwner, SetAddressAsOther),
-        new("Return", DraftAndScheduleShipmentAsOwner, ReturnAsOther),
-        new("RemoveLine", DraftAndAddLineAsOwner, RemoveOwnersLineAsOther),
-        new("AddLine", DraftAsOwner, AddLineAsOther),
-        new("ScheduleShipment", DraftAndScheduleShipmentAsOwner, ScheduleOwnersShipmentIdAsOther),
-        new("AuthorizePayment", DraftAndAuthorizePaymentAsOwner, AuthorizeOwnersPaymentIdAsOther),
+        new("Draft", Bind(DraftAsOwner), Bind(DraftAsOther)),
+        new("Place", Bind(DraftAsOwner), Bind(PlaceAsOther)),
+        new("Ship", Bind(DraftAsOwner), Bind(ShipAsOther)),
+        new("Cancel", Bind(DraftAsOwner), Bind(CancelAsOther)),
+        new("Complete", Bind(DraftAsOwner), Bind(CompleteAsOther)),
+        new("SetAddress", Bind(DraftAsOwner), Bind(SetAddressAsOther)),
+        new("Return", Bind(DraftAndScheduleShipmentAsOwner), Bind(ReturnAsOther)),
+        new("RemoveLine", Bind(DraftAndAddLineAsOwner), Bind(RemoveOwnersLineAsOther)),
+        new("AddLine", Bind(DraftAsOwner), Bind(AddLineAsOther)),
+        new("ScheduleShipment", Bind(DraftAndScheduleShipmentAsOwner), Bind(ScheduleOwnersShipmentIdAsOther)),
+        new("AuthorizePayment", Bind(DraftAndAuthorizePaymentAsOwner), Bind(AuthorizeOwnersPaymentIdAsOther)),
     ];
 
-    internal static OrderDetailDrive Named(string name) =>
-        All.Single(d => d.Name == name);
+    // Declared after All, because a static initializer that reads All must run after it.
+    internal static CrossTenantFamily Family { get; } = new(
+        "OrderDetail",
+        typeof(IOrderDetailUnitOfWork),
+        BuildTarget,
+        All);
+
+    // The one cast in the family, next to the Build that constructed the instance. Drive bodies
+    // below stay typed against the projection, so an event a projection does not handle is a
+    // compile error rather than a runtime one.
+    private static Func<CrossTenantTarget, Guid, string, Task> Bind(
+        Func<OrderDetailProjection, StubTenantAccessor, Guid, string, Task> drive)
+        => (target, orderId, connStr)
+            => drive((OrderDetailProjection)target.Projection, target.Tenant, orderId, connStr);
+
+    // The real adapter, wrapped so the coverage property can see which members a run reached. The
+    // wrapper delegates every call, so the isolation property still observes the real writes.
+    private static CrossTenantTarget BuildTarget(NpgsqlDataSource ds, ISet<string> invoked)
+    {
+        var factory = new NpgsqlReadModelConnectionFactory(ds);
+        var stub = new StubTenantAccessor { Current = Owner };
+        var real = new PostgresOrderDetailStore(
+            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), stub);
+        var store = RecordingPort.Wrap<IOrderDetailStore>(
+            real, invoked, typeof(IOrderDetailUnitOfWork));
+        var projection = new OrderDetailProjection(
+            store, EventStoreJsonOptions.Create(), NullLogger<OrderDetailProjection>.Instance);
+        return new CrossTenantTarget(projection, stub, store);
+    }
 
     // === arrange: the owning tenant establishes the rows ===
 

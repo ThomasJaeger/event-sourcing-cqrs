@@ -60,7 +60,7 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
             "(customer_id, order_count, lifetime_value_amount, lifetime_value_currency, " +
             "last_order_utc, last_updated_utc, tenant_id) " +
             "VALUES (@customer_id, 1, @amount, @currency, @placed_utc, @last_updated_utc, @tenant_id) " +
-            "ON CONFLICT (customer_id) DO UPDATE " +
+            "ON CONFLICT (tenant_id, customer_id) DO UPDATE " +
             "SET order_count = cs.order_count + 1, " +
             "lifetime_value_amount = cs.lifetime_value_amount + EXCLUDED.lifetime_value_amount, " +
             "last_order_utc = GREATEST(cs.last_order_utc, EXCLUDED.last_order_utc), " +
@@ -84,15 +84,22 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
         // upsert: the subtraction trusts the cancelled order's currency matches.
         // Touches zero rows if no summary row exists, a harmless no-op (the
         // projection calls this only after a found lookup, so the row exists).
+        //
+        // The tenant predicate is defense in depth rather than the fix. Since the
+        // key carries the discriminator, a customer id another tenant also uses
+        // selects that tenant's own row and not this one's; the predicate says so
+        // at the statement instead of leaving it implicit in the schema.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.customer_summary " +
             "SET order_count = order_count - 1, " +
             "lifetime_value_amount = lifetime_value_amount - @amount, " +
             "last_updated_utc = @last_updated_utc " +
-            "WHERE customer_id = @customer_id";
+            "WHERE customer_id = @customer_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
         cmd.Parameters.AddWithValue("amount", NpgsqlDbType.Numeric, total.Amount);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -107,7 +114,7 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
             "INSERT INTO read_models.customer_summary_orders " +
             "(customer_id, order_id, total_amount, total_currency, placed_utc, tenant_id) " +
             "VALUES (@customer_id, @order_id, @total_amount, @total_currency, @placed_utc, @tenant_id) " +
-            "ON CONFLICT (customer_id, order_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, customer_id, order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, row.CustomerId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("total_amount", NpgsqlDbType.Numeric, row.Total.Amount);
@@ -147,12 +154,23 @@ internal sealed class PostgresCustomerSummaryUnitOfWork : ICustomerSummaryUnitOf
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // Both ids in the WHERE: the primary key, so the delete is exact.
+        // All three key columns in the WHERE, so the delete is exact against the
+        // tenant-leading primary key.
+        //
+        // The tenant is load-bearing here rather than defensive, and this is the
+        // one statement in the family where the key alone would not have closed
+        // the gap. The pair comes from the acting tenant's own lookup row, so
+        // while the key was (customer_id, order_id) no second tenant could hold
+        // that pair and the delete could not reach across. Tenant-scoping the key
+        // is what lets both tenants hold it, and the two rows then match a delete
+        // that names only the pair.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "DELETE FROM read_models.customer_summary_orders " +
-            "WHERE customer_id = @customer_id AND order_id = @order_id";
+            "WHERE customer_id = @customer_id AND order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, customerId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

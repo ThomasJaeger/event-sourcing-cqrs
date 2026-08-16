@@ -2,13 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EventSourcingCqrs.Domain.Sales.ReadModels;
-using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
-using EventSourcingCqrs.Infrastructure.Versioning;
-using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NpgsqlTypes;
 using Xunit;
@@ -41,27 +36,37 @@ namespace EventSourcingCqrs.Projections.Tests;
 // Neither side of either property is a list anyone maintains, which is what keeps the check from
 // agreeing with its own assumption. The declared writes come off the port by reflection, the
 // tenant-carrying tables come off the schema, and what changed comes off the database.
+//
+// Both properties run once per family in CrossTenantFamilies.All, so a family joins by adding its
+// drive list and nothing here. What that list does not close is stated where it is declared.
 public sealed class CrossTenantWriteSurfaceCoverageTests : IClassFixture<PostgresFixture>
 {
     private readonly PostgresFixture _fixture;
 
     public CrossTenantWriteSurfaceCoverageTests(PostgresFixture fixture) => _fixture = fixture;
 
-    [Fact]
-    public async Task No_order_detail_drive_lets_a_second_tenant_change_the_owning_tenants_rows()
+    // Family names rather than families: a CrossTenantFamily carries delegates, which xUnit cannot
+    // serialize, and an unserializable data row collapses the per-family cases into one.
+    public static IEnumerable<object[]> Families =>
+        CrossTenantFamilies.All.Select(f => new object[] { f.Name });
+
+    [Theory]
+    [MemberData(nameof(Families))]
+    public async Task No_drive_lets_a_second_tenant_change_the_owning_tenants_rows(string familyName)
     {
+        var family = CrossTenantFamilies.Named(familyName);
         var crossed = new List<string>();
 
-        foreach (var drive in OrderDetailCrossTenantDrive.All)
+        foreach (var drive in family.Drives)
         {
             var connStr = await _fixture.CreateMigratedDatabaseAsync();
             await using var ds = NpgsqlDataSource.Create(connStr);
-            var (projection, stub) = BuildAsync(ds, new HashSet<string>(StringComparer.Ordinal));
-            var orderId = Guid.NewGuid();
+            var target = family.Build(ds, new HashSet<string>(StringComparer.Ordinal));
+            var aggregateId = Guid.NewGuid();
 
-            await drive.ArrangeAsOwner(projection, stub, orderId, connStr);
+            await drive.ArrangeAsOwner(target, aggregateId, connStr);
             var before = await SnapshotOwnerRowsAsync(connStr);
-            await drive.ActAsOther(projection, stub, orderId, connStr);
+            await drive.ActAsOther(target, aggregateId, connStr);
             var after = await SnapshotOwnerRowsAsync(connStr);
 
             foreach (var table in before.Keys.Where(t => before[t] != after[t]))
@@ -72,53 +77,43 @@ public sealed class CrossTenantWriteSurfaceCoverageTests : IClassFixture<Postgre
 
         crossed.Should().BeEmpty(
             "a write dispatched under a tenant that does not own the row must leave the owning "
-            + "tenant's rows untouched. {0} of {1} drives crossed: {2}",
+            + "tenant's rows untouched. {0} of {1} {2} drives crossed: {3}",
             crossed.Count,
-            OrderDetailCrossTenantDrive.All.Count,
+            family.Drives.Count,
+            family.Name,
             string.Join(", ", crossed));
     }
 
-    [Fact]
-    public async Task Every_order_detail_write_is_reached_by_a_drive_acting_as_a_second_tenant()
+    [Theory]
+    [MemberData(nameof(Families))]
+    public async Task Every_write_is_reached_by_a_drive_acting_as_a_second_tenant(string familyName)
     {
+        var family = CrossTenantFamilies.Named(familyName);
         var reachedAsOther = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var drive in OrderDetailCrossTenantDrive.All)
+        foreach (var drive in family.Drives)
         {
             var connStr = await _fixture.CreateMigratedDatabaseAsync();
             await using var ds = NpgsqlDataSource.Create(connStr);
             var duringArrange = new HashSet<string>(StringComparer.Ordinal);
-            var (projection, stub) = BuildAsync(ds, duringArrange);
-            var orderId = Guid.NewGuid();
+            var target = family.Build(ds, duringArrange);
+            var aggregateId = Guid.NewGuid();
 
             // Only the act phase counts. The recording set is swapped between the phases so a
             // write reached while arranging as the owner earns no coverage.
-            await drive.ArrangeAsOwner(projection, stub, orderId, connStr);
+            await drive.ArrangeAsOwner(target, aggregateId, connStr);
             duringArrange.Clear();
-            await drive.ActAsOther(projection, stub, orderId, connStr);
+            await drive.ActAsOther(target, aggregateId, connStr);
             reachedAsOther.UnionWith(duringArrange);
         }
 
-        var declared = CrossTenantCoverage.DeclaredWrites(typeof(IOrderDetailUnitOfWork));
-        CrossTenantCoverage.FindUnexercisedWrites(typeof(IOrderDetailUnitOfWork), reachedAsOther)
+        var declared = CrossTenantCoverage.DeclaredWrites(family.UnitOfWorkPort);
+        CrossTenantCoverage.FindUnexercisedWrites(family.UnitOfWorkPort, reachedAsOther)
             .Should().BeEmpty(
-                "every mutating member IOrderDetailUnitOfWork declares must be driven by a fact "
-                + "that runs it as a tenant which does not own the row; {0} are declared",
+                "every mutating member {0} declares must be driven by a fact that runs it as a "
+                + "tenant which does not own the row; {1} are declared",
+                family.UnitOfWorkPort.Name,
                 declared.Count);
-    }
-
-    private static (OrderDetailProjection Projection, StubTenantAccessor Stub) BuildAsync(
-        NpgsqlDataSource ds, ISet<string> invoked)
-    {
-        var factory = new NpgsqlReadModelConnectionFactory(ds);
-        var stub = new StubTenantAccessor { Current = ProjectionTenantTaggingTests.TenantA };
-        var real = new PostgresOrderDetailStore(
-            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), stub);
-        var projection = new OrderDetailProjection(
-            new RecordingOrderDetailStore(real, invoked),
-            EventStoreJsonOptions.Create(),
-            NullLogger<OrderDetailProjection>.Instance);
-        return (projection, stub);
     }
 
     // One digest per discriminator-carrying read_models table, over the owning tenant's rows

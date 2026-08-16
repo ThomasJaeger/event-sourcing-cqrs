@@ -1,16 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
-using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
-using EventSourcingCqrs.Infrastructure.Versioning;
-using EventSourcingCqrs.Projections.OrderDetail;
 using EventSourcingCqrs.TestInfrastructure;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Xunit;
 
@@ -141,20 +138,16 @@ public sealed class OrderDetailCrossTenantWriteTests : IClassFixture<PostgresFix
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         var ds = NpgsqlDataSource.Create(connStr);
-        var factory = new NpgsqlReadModelConnectionFactory(ds);
-        var stub = new StubTenantAccessor { Current = TenantA };
-        var store = new PostgresOrderDetailStore(
-            factory, new PostgresCheckpointStore(factory), TestNotificationPublisher.Create(), stub);
-        var projection = new OrderDetailProjection(
-            store,
-            EventStoreJsonOptions.Create(),
-            NullLogger<OrderDetailProjection>.Instance);
+        var family = OrderDetailCrossTenantDrive.Family;
 
-        var drive = OrderDetailCrossTenantDrive.Named(driveName);
+        // The same Build the harness uses, so a fact and a property see one wiring. The recording
+        // set is a throwaway here: these facts assert on rows, not on which members were reached.
+        var target = family.Build(ds, new HashSet<string>(StringComparer.Ordinal));
+        var drive = family.Drive(driveName);
         var orderId = Guid.NewGuid();
-        await drive.ArrangeAsOwner(projection, stub, orderId, connStr);
-        await drive.ActAsOther(projection, stub, orderId, connStr);
-        return new Run(store, stub, orderId, ds);
+        await drive.ArrangeAsOwner(target, orderId, connStr);
+        await drive.ActAsOther(target, orderId, connStr);
+        return new Run((IOrderDetailStore)target.Store, target.Tenant, orderId, ds);
     }
 
     private static async Task<OrderDetailRow?> ReadAsOwnerAsync(Run run)

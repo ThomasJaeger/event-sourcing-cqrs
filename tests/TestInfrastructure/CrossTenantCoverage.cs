@@ -34,6 +34,10 @@ public static class CrossTenantCoverage
     // disposal is not a mutation, but it rests on how interface reflection behaves rather than on
     // a rule here, and a base interface that later declares a mutating member would be missed the
     // same way.
+    //
+    // A write is named by its declaring interface and its own name, joined by a dot, which is the
+    // token RecordingPort records. A family wires two ports into one recording set, so bare method
+    // names would let a read on one earn coverage for a same-named write on the other.
     public static IReadOnlyCollection<string> FindUnexercisedWrites(
         Type unitOfWorkPort, ISet<string> exercised)
     {
@@ -47,8 +51,8 @@ public static class CrossTenantCoverage
         ArgumentNullException.ThrowIfNull(unitOfWorkPort);
         return unitOfWorkPort.GetMethods()
             .Where(m => m.ReturnType == typeof(Task))
-            .Select(m => m.Name)
-            .Where(n => n != "CommitAsync")
+            .Where(m => m.Name != "CommitAsync")
+            .Select(m => $"{m.DeclaringType!.Name}.{m.Name}")
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToArray();
     }
