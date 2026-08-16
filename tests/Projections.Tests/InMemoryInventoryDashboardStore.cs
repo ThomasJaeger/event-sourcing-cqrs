@@ -8,6 +8,21 @@ namespace EventSourcingCqrs.Projections.Tests;
 // checkpoint, because the projection always commits and the tests assert on the
 // committed result. Rollback is exercised against the real database in
 // PostgresInventoryDashboardStoreTests.
+//
+// It carries no tenant dimension, and that is the second divergence from the
+// adapter rather than an oversight. Both dictionaries below key on the
+// caller-supplied ids alone, while migration 0026 keys both tables tenant-leading
+// and the adapter filters every statement on the tenant. Under one tenant the two
+// keyings are the same map, and every test constructing this double runs under
+// one: nothing here reads a tenant accessor, so there is no second tenant for a
+// key to separate. The tenant keying is pinned where a double cannot pin it,
+// against a real database in InventoryDashboardCrossTenantWriteTests and in the
+// write-surface harness, whose isolation property digests actual rows.
+//
+// Adding the dimension here would buy nothing those facts do not already hold and
+// would put a tenant accessor into twenty-odd construction sites that have no use
+// for one. What was missing was this paragraph: the header named the rollback
+// divergence and stopped, so a reader met an enumeration that looked complete.
 internal sealed class InMemoryInventoryDashboardStore : IInventoryDashboardStore
 {
     private readonly Dictionary<Guid, InventoryDashboardRow> _dashboard = [];

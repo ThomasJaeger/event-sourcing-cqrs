@@ -42,14 +42,23 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
         // Untargeted ON CONFLICT DO NOTHING, covering both unique constraints on
-        // the table: a redelivered InventoryCreated conflicts on the inventory_id
-        // PK, and a duplicate-SKU create under a different InventoryId conflicts on
-        // the sku UNIQUE constraint (migration 0013). Both no-op, so a duplicate SKU
-        // never faults the projection, mirroring SkuToInventoryIdUnitOfWork.
-        // RecordAsync. The first SKU owner keeps its row; a conflicting create
-        // leaves an orphan aggregate with no dashboard row, the read-side stance of
-        // ADR 0020. on_hand_quantity and reserved_quantity take their DDL defaults
-        // of 0.
+        // the table, and both are tenant-leading composites: a redelivered
+        // InventoryCreated conflicts on pk_inventory_dashboard
+        // (tenant_id, inventory_id) from migration 0026, and a duplicate-SKU create
+        // under a different InventoryId conflicts on
+        // uq_inventory_dashboard_tenant_sku (tenant_id, sku) from migration 0018.
+        // Both no-op, so a duplicate SKU never faults the projection, mirroring
+        // SkuToInventoryIdUnitOfWork.RecordAsync. The first SKU owner keeps its row;
+        // a conflicting create leaves an orphan aggregate with no dashboard row, the
+        // read-side stance of ADR 0020. on_hand_quantity and reserved_quantity take
+        // their DDL defaults of 0.
+        //
+        // Naming no columns is what lets this clause survive both key swaps
+        // unedited, and it is the reason the two constraints are named here rather
+        // than left implicit: a reader cannot recover them from the statement. The
+        // comment this replaces cited 0013's global UNIQUE(sku), which 0018 dropped,
+        // so it read as a constraint one tenant's duplicate sku could hit across
+        // tenants when 0018 had already scoped it per tenant.
         var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "INSERT INTO read_models.inventory_dashboard (inventory_id, sku, last_updated_utc, tenant_id) " +
@@ -69,16 +78,18 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         cmd.Transaction = _transaction;
         // RETURNING sku hands back the mutated row's routing key in the same
         // statement, no write-path read. A zero-row UPDATE (no dashboard row for
-        // this InventoryId, the ADR 0020 orphan case) returns null, and the
-        // handler stages nothing.
+        // this InventoryId under this tenant, the ADR 0020 orphan case) returns
+        // null, and the handler stages nothing.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.inventory_dashboard " +
             "SET on_hand_quantity = on_hand_quantity + @delta, last_updated_utc = @last_updated_utc " +
-            "WHERE inventory_id = @inventory_id " +
+            "WHERE inventory_id = @inventory_id AND tenant_id = @tenant " +
             "RETURNING sku";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("delta", NpgsqlDbType.Integer, quantityDelta);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
@@ -88,14 +99,16 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
         // RETURNING sku: see AdjustOnHandAsync. Null when no row matched.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "UPDATE read_models.inventory_dashboard " +
             "SET reserved_quantity = reserved_quantity + @delta, last_updated_utc = @last_updated_utc " +
-            "WHERE inventory_id = @inventory_id " +
+            "WHERE inventory_id = @inventory_id AND tenant_id = @tenant " +
             "RETURNING sku";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("delta", NpgsqlDbType.Integer, reservedDelta);
         cmd.Parameters.AddWithValue("last_updated_utc", NpgsqlDbType.TimestampTz, lastUpdatedUtc);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
@@ -110,7 +123,7 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
             "INSERT INTO read_models.inventory_reservations " +
             "(inventory_id, order_id, line_id, quantity, reserved_utc, tenant_id) " +
             "VALUES (@inventory_id, @order_id, @line_id, @quantity, @reserved_utc, @tenant_id) " +
-            "ON CONFLICT (inventory_id, order_id, line_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, inventory_id, order_id, line_id) DO NOTHING";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, row.InventoryId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, row.LineId);
@@ -125,8 +138,9 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // Keys on the full (inventory_id, order_id, line_id) PK, all three carried
-        // by InventoryReleased.
+        // Keys on the full pk_inventory_reservations, which migration 0026 makes
+        // (tenant_id, inventory_id, order_id, line_id). InventoryReleased carries
+        // the three ids; the tenant comes off the accessor.
         var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "SELECT inventory_id, order_id, line_id, quantity, reserved_utc " +
@@ -156,12 +170,15 @@ internal sealed class PostgresInventoryDashboardUnitOfWork : IInventoryDashboard
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
             "DELETE FROM read_models.inventory_reservations " +
-            "WHERE inventory_id = @inventory_id AND order_id = @order_id AND line_id = @line_id";
+            "WHERE inventory_id = @inventory_id AND order_id = @order_id AND line_id = @line_id " +
+            "AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("inventory_id", NpgsqlDbType.Uuid, inventoryId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("line_id", NpgsqlDbType.Uuid, lineId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

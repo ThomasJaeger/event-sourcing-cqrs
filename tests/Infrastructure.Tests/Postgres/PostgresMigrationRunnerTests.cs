@@ -76,7 +76,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(25);
+        rows.Should().HaveCount(26);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -152,6 +152,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[24].Version.Should().Be(25);
         rows[24].Name.Should().Be("tenant_scoped_customer_summary_keys");
         rows[24].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[25].Version.Should().Be(26);
+        rows[25].Name.Should().Be("tenant_scoped_inventory_dashboard_keys");
+        rows[25].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -178,7 +181,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0023 add_snapshots.");
         log.Should().Contain("Applying 0024 tenant_scoped_order_detail_keys.");
         log.Should().Contain("Applying 0025 tenant_scoped_customer_summary_keys.");
-        log.Should().Contain("Applied 25 migration(s).");
+        log.Should().Contain("Applying 0026 tenant_scoped_inventory_dashboard_keys.");
+        log.Should().Contain("Applied 26 migration(s).");
     }
 
     [Fact]
@@ -198,7 +202,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(25);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(26);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -254,11 +258,11 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(25);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(26);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
-        // pending batch (0001 through 0025); the other sees nothing pending.
+        // pending batch (0001 through 0026); the other sees nothing pending.
         // That signature is what the advisory lock produces and nothing else does.
         var combined = logA.Concat(logB).ToList();
         combined.Count(m => m == "Applying 0001 initial_event_store.").Should().Be(1);
@@ -310,7 +314,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 25 migration(s) pending.");
+        log.Should().Contain("Dry run: 26 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -336,6 +340,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0023 add_snapshots"));
         log.Should().Contain(m => m.EndsWith("0024 tenant_scoped_order_detail_keys"));
         log.Should().Contain(m => m.EndsWith("0025 tenant_scoped_customer_summary_keys"));
+        log.Should().Contain(m => m.EndsWith("0026 tenant_scoped_inventory_dashboard_keys"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();

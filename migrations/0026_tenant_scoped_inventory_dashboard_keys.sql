@@ -1,0 +1,108 @@
+-- 0026_tenant_scoped_inventory_dashboard_keys.sql
+-- Phase 10 (multi-tenancy): make the inventory-dashboard family's keys tenant-scoped under the
+-- shared-schema isolation model. Migration 0017 added the tenant_id column to both tables; this
+-- migration moves both primary keys to tenant-leading composites.
+--
+--   inventory_dashboard     pk (inventory_id)                    -> (tenant_id, inventory_id)
+--   inventory_reservations  pk (inventory_id, order_id, line_id) -> (tenant_id, inventory_id,
+--                                                                    order_id, line_id)
+--
+-- Why the swap is needed. Inventory ids, order ids, and line ids all originate caller-side, and the
+-- tenant never does. A command reaching these tables carries a tenant it did not choose: over HTTP
+-- the tenant is read from the loaded principal, from a process manager it is taken from the causing
+-- event's metadata, and the row itself is written under the tenant on the event's metadata. No route
+-- lets a caller name one, so two tenants can present the same identifiers and neither can name the
+-- other's. A read-model key on the caller-supplied ids alone does not separate them, so the second
+-- tenant's row lands on the first tenant's key. No predicate closes that: ON CONFLICT is decided by
+-- the key, and the row the clause hits is the row the key selects.
+--
+-- Why the reservations key takes all four columns. GetReservationAsync is the release path's lookup
+-- and its predicate is the three ids plus the tenant, which is the new key exactly.
+-- DeleteReservationAsync gains the tenant predicate in this same commit and addresses those four
+-- columns too. ResetTenantAsync's delete against this table can use the new key's leading column,
+-- where the old key does not carry tenant_id at all.
+--
+-- Why uq_inventory_dashboard_tenant_sku does not move. Migration 0018 already made it
+-- (tenant_id, sku), so it is tenant-scoped as it stands. The new primary key does not make it
+-- redundant: the two enforce different invariants, one row per inventory id per tenant against one
+-- row per sku per tenant. GetBySkuAsync reads by sku under the tenant filter and returns the first
+-- row it finds, with no ORDER BY and no LIMIT, so this constraint alone is what keeps that read
+-- deterministic. Drop it and one tenant could hold two rows carrying one sku, which neither the old
+-- primary key nor the new one bounds.
+--
+-- Which conflict targets move. InsertReservationAsync's target is the reservations key, so it moves
+-- with the key and must: PostgreSQL requires a conflict target to match a unique index or
+-- constraint, and ON CONFLICT (inventory_id, order_id, line_id) against the new four-column key
+-- raises 42P10 at execution rather than degrading quietly. CreateDashboardAsync's clause names no
+-- columns, so it arbitrates over every unique index on the table and needs no edit. What it does
+-- changes even though its text does not: before the swap a second tenant creating at the owner's
+-- inventory id conflicted on the primary key and was discarded, and after it the insert conflicts on
+-- neither constraint and that tenant gets its own row. It still no-ops on the two cases it was
+-- written for, a redelivered InventoryCreated, which now conflicts on (tenant_id, inventory_id), and
+-- a duplicate sku under a second inventory id inside one tenant, which conflicts on
+-- (tenant_id, sku).
+--
+-- Which writes gain a tenant predicate. Three, in this same commit: AdjustOnHandAsync,
+-- AdjustReservedAsync, and DeleteReservationAsync. The first two keyed on inventory_id alone, so a
+-- second tenant's inventory events moved the first tenant's counters while the inventory id was
+-- shared; that reach predates this migration and the predicate is the whole of its repair.
+-- DeleteReservationAsync is the one whose reach the swap opens: the old key forbade two tenants
+-- holding the same three ids at once, so the statement had nothing to cross into, and the predicate
+-- has to land with the key rather than after it.
+--
+-- Why the swap is safe on the corpus it meets, whatever that corpus holds. Two facts, and the
+-- argument needs both. Uniqueness weakens: UNIQUE over a set of columns implies UNIQUE over any
+-- superset of it, so no row unique under the old key can collide under the new one. That alone is
+-- not sufficient, because a PRIMARY KEY also imposes NOT NULL on every column it names, and a
+-- widened key can therefore reject rows the narrower one admitted. Migration 0017 closes the second
+-- half: it added tenant_id to both tables as NOT NULL with a DEFAULT, so the column is already
+-- non-null and already populated on every pre-existing row before either ALTER runs. Together the
+-- two hold however many tenants the corpus carries, so neither swap needs an empty-table guard or an
+-- onboarding precondition.
+--
+-- What the swap costs. Each ALTER takes ACCESS EXCLUSIVE on its table, and the backing index is
+-- dropped and a fresh one built rather than reindexed in place. Two read-model tables, both with a
+-- rebuild path, make that acceptable.
+--
+-- Three claims stated elsewhere in this repository are wrong, and a reader who meets one of them
+-- before meeting this file would be misled. Each is corrected below.
+--
+-- Correction: CREATE UNIQUE INDEX CONCURRENTLY followed by a constraint swap cannot run as a
+-- migration in this repository. Migrations 0024 and 0025 name that path as the one to take when
+-- table size or projection availability requires it. MigrationRunner opens a transaction and
+-- executes each migration's whole body inside it, and PostgreSQL refuses CREATE INDEX CONCURRENTLY
+-- inside a transaction block. The path is real as an operational procedure run outside the runner
+-- against the live database, with the constraint swap following as its own migration once the index
+-- exists.
+--
+-- Correction: StreamId does not compose the tenant into the stream for the default tenant. That
+-- claim is inherited through migrations 0024 and 0025, which both state it. Default-tenant streams
+-- render as the two-segment {prefix}:{guid:N} with no tenant segment, and that is every stream in
+-- the current corpus. What holds instead is that the two forms cannot collide, since at most one of
+-- two distinct tenants is the default.
+--
+-- Correction: session log 0021 records this boundary as already closed. It says "the
+-- inventory_dashboard updates key on inventory_id, whose primary key migration 0018 left unchanged
+-- (0018 swapped only the sku uniqueness to the composite), so those updates still match at most one
+-- row and cannot cross the tenant boundary". Matching at most one row is not the same as matching
+-- this tenant's row. The update matched whichever tenant's row carried that inventory id, and under
+-- the old key only one tenant could hold one, so a single match and a match belonging to the caller
+-- coincided by accident of the key rather than by anything the statement did. That log is a dated
+-- record of what its session observed and keeps its as-written content. A migration is the right
+-- home for the correction because this file is what changes the key the claim is about, so a reader
+-- asking what pk_inventory_dashboard is and why lands here.
+--
+-- A read_models-schema migration, so it does not touch the event_store constraint and index
+-- assertions. It does change the applied count and the last-applied identity that the migration
+-- runner's own tests pin, and those move with it. Stated as the obligation rather than as a file
+-- name, because these bytes are checksummed and immutable once applied, so a reference in them could
+-- never be corrected if the referent moved.
+
+ALTER TABLE read_models.inventory_dashboard
+    DROP CONSTRAINT pk_inventory_dashboard,
+    ADD CONSTRAINT pk_inventory_dashboard PRIMARY KEY (tenant_id, inventory_id);
+
+ALTER TABLE read_models.inventory_reservations
+    DROP CONSTRAINT pk_inventory_reservations,
+    ADD CONSTRAINT pk_inventory_reservations
+        PRIMARY KEY (tenant_id, inventory_id, order_id, line_id);
