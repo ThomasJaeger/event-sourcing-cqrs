@@ -17,8 +17,10 @@ public interface IOrderIdToPaymentIdStore
     Task<IOrderIdToPaymentIdUnitOfWork> BeginAsync(CancellationToken ct);
 
     // Read path: the process manager looks up one order at a time, outside any
-    // unit of work. Returns null when no payment has been authorized for the
-    // order, which the PM treats as a workflow failure routing to Stuck.
+    // unit of work, scoped to the current tenant the read resolves from the
+    // accessor the same way the write does. Returns null when no payment has been
+    // authorized for the order under that tenant, which the PM treats as a
+    // workflow failure routing to Stuck.
     Task<Guid?> GetPaymentIdAsync(Guid orderId, CancellationToken ct);
 
     // Rebuild support: drop every row so a replay starts from empty.
@@ -33,8 +35,9 @@ public interface IOrderIdToPaymentIdUnitOfWork : IAsyncDisposable
     // the handler's idempotency check shares isolation with its write.
     Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct);
 
-    // Records an order's PaymentId. An order has one authorized payment, so a
-    // redelivered PaymentAuthorized for the same order is a no-op.
+    // Records an order's PaymentId under the current tenant. Within one tenant an
+    // order has one authorized payment, so a redelivered PaymentAuthorized for the
+    // same order is a no-op.
     Task RecordAsync(Guid orderId, Guid paymentId, CancellationToken ct);
 
     // Stages a notification to publish atomically inside CommitAsync, on the

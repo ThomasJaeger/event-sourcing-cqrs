@@ -16,18 +16,25 @@ public sealed class PostgresOrderIdToPaymentIdStore : IOrderIdToPaymentIdStore, 
     private readonly IReadModelConnectionFactory _factory;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
+    // The accessor feeds both paths: the unit of work tags the write's tenant from it,
+    // and GetPaymentIdAsync resolves the read's tenant from it the same way, since the
+    // process-manager dispatch loop is tenanted and the accessor is set there.
     public PostgresOrderIdToPaymentIdStore(
         IReadModelConnectionFactory factory,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(publisher);
+        ArgumentNullException.ThrowIfNull(tenantAccessor);
         _factory = factory;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<IOrderIdToPaymentIdUnitOfWork> BeginAsync(CancellationToken ct)
@@ -36,7 +43,8 @@ public sealed class PostgresOrderIdToPaymentIdStore : IOrderIdToPaymentIdStore, 
         try
         {
             var transaction = await connection.BeginTransactionAsync(ct);
-            return new PostgresOrderIdToPaymentIdUnitOfWork(connection, transaction, _checkpointStore, _publisher);
+            return new PostgresOrderIdToPaymentIdUnitOfWork(
+                connection, transaction, _checkpointStore, _publisher, _tenantAccessor);
         }
         catch
         {
@@ -49,11 +57,14 @@ public sealed class PostgresOrderIdToPaymentIdStore : IOrderIdToPaymentIdStore, 
 
     public async Task<Guid?> GetPaymentIdAsync(Guid orderId, CancellationToken ct)
     {
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "SELECT payment_id FROM read_models.order_id_to_payment_id WHERE order_id = @order_id";
+            "SELECT payment_id FROM read_models.order_id_to_payment_id " +
+            "WHERE order_id = @order_id AND tenant_id = @tenant";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
+        cmd.Parameters.AddWithValue("tenant", NpgsqlDbType.Uuid, tenant);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }

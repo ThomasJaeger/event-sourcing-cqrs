@@ -17,18 +17,21 @@ internal sealed class PostgresOrderIdToPaymentIdUnitOfWork : IOrderIdToPaymentId
     private readonly NpgsqlTransaction _transaction;
     private readonly ICheckpointStore _checkpointStore;
     private readonly PostgresPgNotifyPublisher _publisher;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
     private NotificationEnvelope? _staged;
 
     public PostgresOrderIdToPaymentIdUnitOfWork(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         ICheckpointStore checkpointStore,
-        PostgresPgNotifyPublisher publisher)
+        PostgresPgNotifyPublisher publisher,
+        ICurrentTenantAccessor tenantAccessor)
     {
         _connection = connection;
         _transaction = transaction;
         _checkpointStore = checkpointStore;
         _publisher = publisher;
+        _tenantAccessor = tenantAccessor;
     }
 
     public Task<long> GetCheckpointAsync(string projectionName, CancellationToken ct)
@@ -38,15 +41,19 @@ internal sealed class PostgresOrderIdToPaymentIdUnitOfWork : IOrderIdToPaymentId
     {
         await using var cmd = _connection.CreateCommand();
         cmd.Transaction = _transaction;
-        // ON CONFLICT DO NOTHING: an order has one authorized payment, so a
-        // redelivered PaymentAuthorized for the same order leaves the first mapping
-        // in place rather than erroring.
+        // ON CONFLICT DO NOTHING: within one tenant an order has one authorized
+        // payment, so a redelivered PaymentAuthorized for the same order leaves the
+        // first mapping in place rather than erroring. The target carries the tenant
+        // because the key does (migration 0028), so a second tenant writing at the
+        // same order id conflicts with nothing and keeps its own mapping.
+        var tenant = ReadModelTenant.ResolveOrThrow(_tenantAccessor);
         cmd.CommandText =
-            "INSERT INTO read_models.order_id_to_payment_id (order_id, payment_id) " +
-            "VALUES (@order_id, @payment_id) " +
-            "ON CONFLICT (order_id) DO NOTHING";
+            "INSERT INTO read_models.order_id_to_payment_id (order_id, payment_id, tenant_id) " +
+            "VALUES (@order_id, @payment_id, @tenant_id) " +
+            "ON CONFLICT (tenant_id, order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("payment_id", NpgsqlDbType.Uuid, paymentId);
+        cmd.Parameters.AddWithValue("tenant_id", NpgsqlDbType.Uuid, tenant);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

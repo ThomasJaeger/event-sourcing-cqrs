@@ -35,12 +35,12 @@ namespace EventSourcingCqrs.Projections.Tests;
 // builders and Ctx, the Sku Env and ReadMappingRowsAsync) stays in the tenant-tagging test classes the
 // cases extend and is invoked here.
 //
-// Six projections are tenant-scoped and carry a real isolation case: a write tagged under one tenant is
-// invisible under another. Two are global by design and carry a recorded-decision case rather than an
-// isolation assertion the read does not perform. OrderIdToPaymentId is keyed on a globally-unique order_id
-// whose sole consumer (ReturnProcessManagerHandler) passes a tenant-bound order_id, so its read needs no
-// tenant predicate. CurrentRoles is a per-user roles read model the principal factory reads, with no
-// tenant on the row and a tenant-free read.
+// Seven projections are tenant-scoped and carry a real isolation case: a write tagged under one tenant is
+// invisible under another. One is global by design and carries a recorded-decision case rather than an
+// isolation assertion the read does not perform. CurrentRoles is a per-user roles read model the principal
+// factory reads, with no tenant on the row and a tenant-free read. OrderIdToPaymentId was the second such
+// projection until migration 0028 keyed it on the tenant; its recorded-decision case is retired and it
+// carries an isolation case now.
 internal static class CrossTenantProjectionCases
 {
     // The same operative and control tenants the tenant-tagging tests use, so both boundaries assert
@@ -62,7 +62,7 @@ internal static class CrossTenantProjectionCases
             [typeof(InventoryDashboardProjection)] = () => InventoryDashboardIsolatesAsync(fixture),
             [typeof(OrderThroughputProjection)] = () => OrderThroughputIsolatesAsync(fixture),
             [typeof(SkuToInventoryIdProjection)] = () => SkuToInventoryIdIsolatesAsync(fixture),
-            [typeof(OrderIdToPaymentIdProjection)] = () => OrderIdToPaymentIdGlobalByOrderIdAsync(fixture),
+            [typeof(OrderIdToPaymentIdProjection)] = () => OrderIdToPaymentIdIsolatesAsync(fixture),
             [typeof(CurrentRolesProjection)] = () => CurrentRolesGlobalPerUserAsync(fixture),
         };
     }
@@ -195,43 +195,44 @@ internal static class CrossTenantProjectionCases
         }, "each tenant's InventoryCreated for the same sku must record its own (tenant_id, inventory_id) mapping");
     }
 
-    // ---- Recorded-decision cases (global by design; pin the behavior, not a false isolation) ----
-
-    // OrderIdToPaymentId is global by a globally-unique order_id. Its sole consumer, ReturnProcessManagerHandler,
-    // passes a tenant-bound order_id recovered from the current-tenant shipment, and in that same handler the
-    // SKU lookup passes the tenant explicitly while this lookup omits it, so the read carries no tenant predicate
-    // and needs none. This case pins the by-design behavior: each mapping is retrievable by its order_id with no
-    // read-time tenant context, and the write tags no tenant. The decision is conditional on that single
-    // tenant-bound consumer staying the only reader.
-    private static async Task OrderIdToPaymentIdGlobalByOrderIdAsync(PostgresFixture fixture)
+    // Two tenants authorize payment for the same order id, which they can because order ids reach this
+    // projection from caller input. Each keeps its own mapping under its own tenant, and neither
+    // resolves the other's. Before migration 0028 this projection carried a recorded-decision case
+    // instead, pinning the untagged write and the tenant-free read as intended on the premise that the
+    // order id was globally unique. That premise was refuted, so the case is retired rather than
+    // rewritten: its subject was the exemption, and the exemption is gone.
+    private static async Task OrderIdToPaymentIdIsolatesAsync(PostgresFixture fixture)
     {
         var connStr = await fixture.CreateMigratedDatabaseAsync();
         await using var ds = NpgsqlDataSource.Create(connStr);
         var readModelFactory = new NpgsqlReadModelConnectionFactory(ds);
+        var stub = new StubTenantAccessor { Current = TenantA };
         var store = new PostgresOrderIdToPaymentIdStore(
-            readModelFactory, new PostgresCheckpointStore(readModelFactory), TestNotificationPublisher.Create());
+            readModelFactory, new PostgresCheckpointStore(readModelFactory), TestNotificationPublisher.Create(),
+            stub);
         var projection = new OrderIdToPaymentIdProjection(store);
 
-        var (orderA, paymentA) = (Guid.NewGuid(), Guid.NewGuid());
-        var (orderB, paymentB) = (Guid.NewGuid(), Guid.NewGuid());
+        var orderId = Guid.NewGuid();
+        var (paymentA, paymentB) = (Guid.NewGuid(), Guid.NewGuid());
 
-        // Two PaymentAuthorized under different event-metadata tenants for different orders; the write ignores
-        // the event tenant either way.
+        stub.Current = TenantA;
         await projection.HandleAsync(
-            ProjectionTenantTaggingTests.Ctx(new PaymentAuthorized(paymentA, orderA, new Money(10m, Currency.USD), "ref-a", At), 1, TenantA),
+            ProjectionTenantTaggingTests.Ctx(new PaymentAuthorized(paymentA, orderId, new Money(10m, Currency.USD), "ref-a", At), 1, TenantA),
             CancellationToken.None);
+        stub.Current = TenantB;
         await projection.HandleAsync(
-            ProjectionTenantTaggingTests.Ctx(new PaymentAuthorized(paymentB, orderB, new Money(10m, Currency.USD), "ref-b", At), 2, TenantB),
+            ProjectionTenantTaggingTests.Ctx(new PaymentAuthorized(paymentB, orderId, new Money(10m, Currency.USD), "ref-b", At), 2, TenantB),
             CancellationToken.None);
 
-        // Each mapping is retrievable by its globally-unique order_id, with no read-time tenant context.
-        (await store.GetPaymentIdAsync(orderA, CancellationToken.None)).Should().Be(paymentA);
-        (await store.GetPaymentIdAsync(orderB, CancellationToken.None)).Should().Be(paymentB);
+        // Each tenant resolves its own payment for the shared order id, and neither sees the other's.
+        stub.Current = TenantA;
+        (await store.GetPaymentIdAsync(orderId, CancellationToken.None)).Should().Be(paymentA);
+        stub.Current = TenantB;
+        (await store.GetPaymentIdAsync(orderId, CancellationToken.None)).Should().Be(paymentB);
 
-        // The write tags no tenant: both rows carry the default tenant regardless of the event's tenant, so
-        // there is no per-tenant partitioning to isolate.
-        (await ReadTenantIdAsync(connStr, orderA)).Should().Be(WellKnownTenants.Default.Value);
-        (await ReadTenantIdAsync(connStr, orderB)).Should().Be(WellKnownTenants.Default.Value);
+        // The write tags the writing tenant, so the rows are partitioned rather than piled on one default.
+        (await ReadTenantIdsAsync(connStr, orderId))
+            .Should().BeEquivalentTo(new[] { TenantA.Value, TenantB.Value });
     }
 
     // CurrentRoles is a per-user roles read model the principal factory reads. Roles ride on the principal, not
@@ -261,7 +262,7 @@ internal static class CrossTenantProjectionCases
         (await ColumnExistsAsync(connStr, "current_user_roles", "tenant_id")).Should().BeFalse();
     }
 
-    private static async Task<Guid> ReadTenantIdAsync(string connectionString, Guid orderId)
+    private static async Task<IReadOnlyList<Guid>> ReadTenantIdsAsync(string connectionString, Guid orderId)
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
@@ -269,7 +270,13 @@ internal static class CrossTenantProjectionCases
         cmd.CommandText =
             "SELECT tenant_id FROM read_models.order_id_to_payment_id WHERE order_id = @order_id";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        var tenants = new List<Guid>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            tenants.Add(reader.GetGuid(0));
+        }
+        return tenants;
     }
 
     private static async Task<bool> ColumnExistsAsync(string connectionString, string table, string column)

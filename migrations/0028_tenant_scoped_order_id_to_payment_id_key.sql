@@ -1,0 +1,71 @@
+-- 0028_tenant_scoped_order_id_to_payment_id_key.sql
+-- Phase 10 (multi-tenancy): make the order-id-to-payment-id lookup's key tenant-scoped under the
+-- shared-schema isolation model. Migration 0017 added the tenant_id column; this migration moves the
+-- primary key to a tenant-leading composite.
+--
+--   order_id_to_payment_id  pk (order_id) -> (tenant_id, order_id)
+--
+-- Why the swap is needed. Order ids originate caller-side. DraftOrder and PlaceOrder each declare an
+-- OrderId the request body supplies, both are registered for by-name HTTP dispatch, and the
+-- OrderFulfillment process manager carries that same id into AuthorizePayment, whose event this
+-- projection folds. So two tenants can present the same order id here. A key on the order id alone
+-- does not separate them, and the second tenant's mapping lands on the first tenant's key, where
+-- ON CONFLICT DO NOTHING discards it. That discard raises nothing and logs nothing, so the behavior
+-- is observable only by counting rows after two tenants have written.
+--
+-- Which conflict target moves. One, and it must: PostgreSQL requires a conflict target to match a
+-- unique index or constraint, so ON CONFLICT (order_id) against a (tenant_id, order_id) primary key
+-- raises 42P10 at execution rather than degrading quietly. RecordAsync's target becomes
+-- (tenant_id, order_id). The clause stays DO NOTHING and keeps the idempotency it was written for: a
+-- redelivered PaymentAuthorized arrives under the tenant that already holds the row, so it still
+-- conflicts on the new key and is still discarded.
+--
+-- Why the key takes two columns rather than three. GetPaymentIdAsync selects payment_id under the
+-- order id and the tenant, with no ORDER BY and no LIMIT, and reads a single scalar. Adding
+-- payment_id to the key would admit two mappings per tenant at one order id and leave that read
+-- returning whichever row the scan reached first. Two columns are what the lookup's predicate names
+-- and what its determinism requires.
+--
+-- What the write and the read gain in this same commit. RecordAsync names tenant_id in its column
+-- list and binds it from the current-tenant accessor, where before it named the column nowhere and
+-- every row took this column's DEFAULT. GetPaymentIdAsync gains AND tenant_id = @tenant, resolved
+-- from the same accessor. The two together are what make the key's second column mean anything,
+-- since a key that separates tenants is inert while every row carries one tenant value and every
+-- read ignores the column.
+--
+-- What this migration does not do to the rows already here. Every existing row carries this column's
+-- DEFAULT, because the insert named the tenant nowhere, so the value on disk records which default
+-- the column carried rather than which tenant authorized the payment. This migration changes the key
+-- and leaves those values as they are, because a tenant-leading key cannot relabel a column whose
+-- correct value was never written. What that costs depends on which tenant wrote the row, and the row
+-- does not say. A row the default tenant produced reads back correctly, since the value it carries
+-- and the value its producer predicates on are the same one, and that match is an accident of the
+-- default rather than something the write recorded. A row any other tenant produced is misattributed,
+-- and that tenant will not resolve it through the tenant-predicated read. A mapping a fold discarded
+-- was never written, so it is absent rather than misfiled. The last two come right on a rebuild,
+-- which drops the table and replays PaymentAuthorized under each event's own tenant.
+--
+-- Why the swap is safe on the corpus it meets, whatever that corpus holds. Two facts, and the
+-- argument needs both. Uniqueness weakens: UNIQUE over a set of columns implies UNIQUE over any
+-- superset of it, so no row unique under (order_id) can collide under (tenant_id, order_id). That
+-- alone is not sufficient, because a PRIMARY KEY also imposes NOT NULL on every column it names, and
+-- a widened key can therefore reject rows the narrower one admitted. Migration 0017 closes the second
+-- half: it added tenant_id as NOT NULL with a constant DEFAULT, so the column is already non-null and
+-- already populated on every pre-existing row before the ALTER runs. Every row carrying one repeated
+-- tenant value weakens neither fact: uniqueness over a superset is implied whatever the added column
+-- holds, and a column that is non-null stays non-null whatever value it repeats. So the ALTER cannot
+-- fail on this table's contents, and it needs no empty-table guard.
+--
+-- What the swap costs. The ALTER takes ACCESS EXCLUSIVE on the table, and the backing index is
+-- dropped and a fresh one built rather than reindexed in place. One read-model table with a rebuild
+-- path makes that acceptable.
+--
+-- A read_models-schema migration, so it does not touch the event_store constraint and index
+-- assertions. It does change the applied count and the last-applied identity that the migration
+-- runner's own tests pin, and those move with it. Stated as the obligation rather than as a file
+-- name, because these bytes are checksummed and immutable once applied, so a reference in them could
+-- never be corrected if the referent moved.
+
+ALTER TABLE read_models.order_id_to_payment_id
+    DROP CONSTRAINT pk_order_id_to_payment_id,
+    ADD CONSTRAINT pk_order_id_to_payment_id PRIMARY KEY (tenant_id, order_id);
