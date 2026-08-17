@@ -49,6 +49,7 @@ internal static class CrossTenantFamilies
         OrderDetailCrossTenantDrive.Family,
         CustomerSummaryCrossTenantDrive.Family,
         InventoryDashboardCrossTenantDrive.Family,
+        OrderListCrossTenantDrive.Family,
     ];
 
     internal static CrossTenantFamily Named(string name) => All.Single(f => f.Name == name);

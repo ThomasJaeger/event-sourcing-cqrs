@@ -1,0 +1,82 @@
+-- 0027_tenant_scoped_order_list_keys.sql
+-- Phase 10 (multi-tenancy): make the order-list family's keys tenant-scoped under the shared-schema
+-- isolation model. Migration 0017 added the tenant_id column to both tables; this migration moves
+-- both primary keys to tenant-leading composites.
+--
+--   order_list            pk (order_id)    -> (tenant_id, order_id)
+--   order_list_shipments  pk (shipment_id) -> (tenant_id, shipment_id)
+--
+-- Why the order_list swap is needed. Order ids originate caller-side. DraftOrder and PlaceOrder each
+-- declare an OrderId the request body supplies, and both are registered for by-name HTTP dispatch.
+-- The tenant never originates that way: no command record in this repository declares a tenant
+-- parameter, and the tenant a projection writes under is assigned from the causing event's metadata,
+-- on the dispatch path and on the replay path alike. So two tenants can present the same order id and
+-- neither can name the other's tenant. A key on the order id alone does not separate them, and the
+-- second tenant's insert lands on the first tenant's key. No predicate closes that: ON CONFLICT is
+-- decided by the key, and the row the clause hits is the row the key selects. What the second tenant
+-- is left with is nothing rather than the wrong row, because both inserts here are DO NOTHING.
+--
+-- Why the order_list_shipments swap is needed, which is a different argument. Shipment ids do not
+-- originate caller-side. The OrderFulfillment process manager mints one with Guid.NewGuid() and
+-- dispatches ScheduleShipment itself, and that command appears in no ICommandTypeProvider, so no HTTP
+-- route can present a shipment id to it. Two tenants colliding at one shipment id is therefore not
+-- reachable through the routes that exist today. That is a property of who mints the identifier
+-- rather than of what the table enforces, and it is the wrong thing to rest isolation on. The mapping
+-- row is what MarkReturnedAsync resolves an order through, so a tenant whose mapping was discarded
+-- cannot mark its own order returned, and nothing in the schema would have said why. The key states
+-- the isolation rather than inheriting it from how a Guid happens to be minted.
+--
+-- Why the shipments key takes two columns rather than three. GetOrderIdByShipmentIdAsync selects
+-- order_id under the shipment id and the tenant, with no ORDER BY and no LIMIT, and reads a single
+-- scalar. Adding order_id to the key would admit two rows per tenant at one shipment id and leave
+-- that read returning whichever row the scan reached first. Two columns are what the lookup's
+-- predicate names and what its determinism requires.
+--
+-- Which conflict targets move. Both, and both must: PostgreSQL requires a conflict target to match a
+-- unique index or constraint, so ON CONFLICT (order_id) against a (tenant_id, order_id) primary key
+-- raises 42P10 at execution rather than degrading quietly. InsertAsync's target becomes
+-- (tenant_id, order_id) and InsertShipmentMappingAsync's becomes (tenant_id, shipment_id). Both
+-- clauses stay DO NOTHING and keep the idempotency they were written for: a redelivered OrderPlaced
+-- or ShipmentScheduled arrives under the tenant that already holds the row, so it still conflicts on
+-- the new key and is still discarded.
+--
+-- No write gains a tenant predicate, which is worth stating rather than leaving as an absence. Every
+-- statement in PostgresOrderListUnitOfWork that addresses a row by id already carries
+-- AND tenant_id = @tenant: both UPDATEs, UpdateStatusAsync and MarkReturnedAsync, and the
+-- GetOrderIdByShipmentIdAsync lookup between them. The whole of what this migration repairs is the
+-- two conflict targets and the two keys behind them.
+--
+-- Why the two indexes on order_list do not move. ix_order_list_placed_utc on (placed_utc DESC) and
+-- ix_order_list_status_placed_utc on (status, placed_utc DESC) are both non-unique. A non-unique
+-- index decides no ON CONFLICT and admits any number of rows at one value, so neither can fold two
+-- tenants' rows together and neither is implicated in what this migration repairs. They order rows
+-- rather than identify them, and the swap leaves what they order untouched.
+--
+-- Why the swap is safe on the corpus it meets, whatever that corpus holds. Two facts, and the
+-- argument needs both. Uniqueness weakens: UNIQUE over a set of columns implies UNIQUE over any
+-- superset of it, so no row unique under (order_id) can collide under (tenant_id, order_id), and the
+-- same holds for the shipments key against (shipment_id). That alone is not sufficient, because a
+-- PRIMARY KEY also imposes NOT NULL on every column it names, and a widened key can therefore reject
+-- rows the narrower one admitted. Migration 0017 closes the second half: it added tenant_id to both
+-- of these tables as NOT NULL with a constant DEFAULT, so the column is already non-null and already
+-- populated on every pre-existing row before either ALTER runs. Together the two hold however many
+-- tenants the corpus carries, so neither swap needs an empty-table guard or an onboarding
+-- precondition.
+--
+-- What the swap costs. Each ALTER takes ACCESS EXCLUSIVE on its table, and the backing index is
+-- dropped and a fresh one built rather than reindexed in place. Two read-model tables, both with a
+-- rebuild path, make that acceptable.
+--
+-- A read_models-schema migration, so it does not touch the event_store constraint and index
+-- assertions. It does change the applied count and the last-applied identity that the migration
+-- runner's own tests pin, and those move with it. Stated as the obligation rather than as a file
+-- name, because these bytes are checksummed and immutable once applied, so a reference in them could
+-- never be corrected if the referent moved.
+
+ALTER TABLE read_models.order_list
+    DROP CONSTRAINT pk_order_list,
+    ADD CONSTRAINT pk_order_list PRIMARY KEY (tenant_id, order_id);
+
+ALTER TABLE read_models.order_list_shipments
+    DROP CONSTRAINT pk_order_list_shipments,
+    ADD CONSTRAINT pk_order_list_shipments PRIMARY KEY (tenant_id, shipment_id);

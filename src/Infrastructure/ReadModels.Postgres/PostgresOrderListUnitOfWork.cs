@@ -53,7 +53,7 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
             "placed_utc, last_updated_utc, tenant_id) " +
             "VALUES (@order_id, @customer_id, @status, @total_amount, @total_currency, " +
             "@placed_utc, @last_updated_utc, @tenant_id) " +
-            "ON CONFLICT (order_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, order_id) DO NOTHING";
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, row.OrderId);
         cmd.Parameters.AddWithValue("customer_id", NpgsqlDbType.Uuid, row.CustomerId);
         cmd.Parameters.AddWithValue("status", NpgsqlDbType.Text, row.Status.ToString());
@@ -100,7 +100,7 @@ internal sealed class PostgresOrderListUnitOfWork : IOrderListUnitOfWork
             "INSERT INTO read_models.order_list_shipments " +
             "(shipment_id, order_id, scheduled_utc, tenant_id) " +
             "VALUES (@shipment_id, @order_id, @scheduled_utc, @tenant_id) " +
-            "ON CONFLICT (shipment_id) DO NOTHING";
+            "ON CONFLICT (tenant_id, shipment_id) DO NOTHING";
         cmd.Parameters.AddWithValue("shipment_id", NpgsqlDbType.Uuid, shipmentId);
         cmd.Parameters.AddWithValue("order_id", NpgsqlDbType.Uuid, orderId);
         cmd.Parameters.AddWithValue("scheduled_utc", NpgsqlDbType.TimestampTz, scheduledUtc);
