@@ -6,14 +6,12 @@ Accepted (May 2026)
 
 ## Context
 
-The repository's foundational framing in CLAUDE.md held the codebase as
-"a teaching artifact, not a production framework" whose readers "clone
-it, run it, study it, and use it as a reference for their own systems.
-They do not deploy it." The "What 'good' looks like" section that
-followed reinforced the position: "When there is a choice between
-idiomatic .NET and the book's pattern, the book's pattern wins," and
-"Generic abstractions that hide the pattern are worse than concrete code
-that shows it."
+This project once framed itself as a teaching artifact rather than a production
+framework, on the reasoning that readers clone it, run it, and study it as a
+reference for their own systems rather than deploying it. That framing governed
+repo-wide, and it followed through into the standard applied at a fork: where
+production rigour and teaching clarity pulled against each other, clarity had
+the stronger claim.
 
 Two architectural decisions extended that framing into specific design
 choices. ADR 0004 (self-contained event-store adapters) justified
@@ -46,13 +44,10 @@ resolution was teaching-friendly; each defect's correct resolution was
 production-grade. The pattern is not specific to those three; it
 generalizes.
 
-CLAUDE.md was reframed in commit `08644e0` to make production-grade
-correctness, rigor, and operational hygiene non-negotiable across every
-line of code in the repository, with the "Production quality is
-non-negotiable" section naming the rule explicitly. This ADR records the
-decision as a decision-record-weighted artifact, both for its own
-durability and to govern the relationship between this rule and the two
-prior ADRs whose justifications it reframes.
+In May 2026 that framing was reversed across the repository, and the standard it
+produced was reversed with it. This ADR records the reversal as a decision rather
+than as a change of wording, because what moved was the rule that settles every
+subsequent fork.
 
 ## Decision
 
@@ -90,9 +85,9 @@ Concretely:
   tests exercise the wire format. Unit tests exercise the contract, not
   the incidental implementation.
 
-The decision overrides any framing elsewhere in CLAUDE.md, in any ADR, in
-any session log, or in any planning artifact that suggests teaching
-clarity competes with production rigor. Where such framing exists in
+The decision overrides any framing that suggests teaching clarity competes
+with production rigor, wherever it sits in this repository: in any ADR, in
+any session log, in any planning artifact. Where such framing exists in
 artifacts predating this ADR, the artifact is treated as carrying the old
 framing until the next change touching it reframes the wording; the
 architectural rules that artifact carries remain in force in the
@@ -121,9 +116,8 @@ ADR-touching change to them, or at an explicit supersession ADR; this ADR
 records that the reframe is pending and why.
 
 No retroactive editing of decision-records is undertaken to chase the
-reframe across the ADR corpus. The discipline lives in CLAUDE.md and in
-this ADR; consumers of the prior ADRs read the justifications in light of
-this one.
+reframe across the ADR corpus. Consumers of the prior ADRs read the
+justifications in light of this one.
 
 ## Consequences
 
@@ -197,10 +191,8 @@ this one.
   wholesale.
 
 - The repository's adoption pattern shifts such that production use cases
-  dominate. If production adopters become the primary readership and the
-  manuscript-side framing becomes the secondary concern, an amendment to
-  CLAUDE.md may follow that further narrows the teaching-friendly framing
-  in the repository.
+  dominate, with production adopters becoming the primary readership and
+  the manuscript-side framing becoming the secondary concern.
 
 ## Amendment (August 2026)
 
@@ -208,8 +200,8 @@ An application of this decision, recorded because its reasoning lived only in a 
 message. The decision above is unchanged, its status is unchanged, and nothing here
 supersedes anything.
 
-CLAUDE.md's rule against generic abstractions ahead of need carried a justification this ADR
-already overrides. It argued the concrete shape on teaching grounds, that a reader learns
+The rule against generic abstractions ahead of need once carried a justification this ADR
+overrides. It argued the concrete shape on teaching grounds, that a reader learns
 more from a per-aggregate repository than from a generic one, which is the axis the Decision
 above says does not win. The rule survives. The argument that had been offered for it does
 not.

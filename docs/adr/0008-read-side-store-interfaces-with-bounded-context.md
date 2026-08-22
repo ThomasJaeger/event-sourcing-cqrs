@@ -30,7 +30,7 @@ Concretely for the existing read-side surface: `IOrderListStore`, `IOrderListUni
 - The row shape retains its typed Domain values. Consumers of `IOrderListStore.GetPageAsync` receive `OrderListRow` instances with `Money` and `OrderStatus` rather than primitives requiring reconstruction.
 - `Domain.Abstractions` stays at zero ProjectReferences. The project is pure abstractions, as it was before this session.
 - Phase 6 brings three more read-side stores (`IOrderDetailStore`, `ICustomerSummaryStore`, `IInventoryDashboardStore`). Each follows this ADR: stores trafficking in their context's typed shapes live at `Domain/{Context}/ReadModels/`. The precedent is set without being immediately stress-tested by Phase 4, which ships no new read-side stores.
-- `CLAUDE.md`'s hexagonal-architecture amendment (introduced in commit `dbf2aba` as part of Session 0007) revises to describe the rule above.
+- `docs/ARCHITECTURE.md`'s Layering section describes the rule above.
 
 ## Trigger for revisiting
 

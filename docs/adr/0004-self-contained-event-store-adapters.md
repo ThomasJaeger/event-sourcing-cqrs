@@ -10,7 +10,7 @@ The reference implementation ships four first-class event store peers: PostgreSQ
 
 The two relational adapters differ in engine-specific particulars even though their high-level shape is identical: different unique-constraint error codes, different JSON storage types, different filtered and partial index syntax, different transaction APIs. The high-level pattern is the same; the engine-specific code is different in nearly every detail.
 
-CLAUDE.md's principle "do not generate generic abstractions ahead of need" sets the default toward duplication over premature abstraction. With two known first-class relational adapters, the duplication is concrete and reasonable in scope.
+The rule against generic abstractions ahead of need, which ADR 0025's August 2026 amendment states and names this ADR as applying, sets the default toward duplication over premature abstraction. With two known first-class relational adapters, the duplication is concrete and reasonable in scope.
 
 ## Decision
 
