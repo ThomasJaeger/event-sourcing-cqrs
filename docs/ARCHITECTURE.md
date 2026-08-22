@@ -13,8 +13,7 @@ when an ADR does.
 
 Domain sits at the center with no I/O. Application depends on Domain and Domain.Abstractions
 and nothing else. Infrastructure implements what Domain.Abstractions declares. The four hosts
-depend on Application. `CLAUDE.md` states the rule; the compiler enforces it through project
-references.
+depend on Application. The compiler enforces this through project references.
 
 Two decisions place types that could plausibly have gone elsewhere. Read-side store interfaces
 live with their bounded context rather than in Domain.Abstractions, so `IOrderListStore` sits

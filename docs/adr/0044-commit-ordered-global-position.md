@@ -122,3 +122,25 @@ exact-contiguity assertion in PostgresEventStore_ReadAllAsync_Tests, named in th
 consequences, relaxed to this specification at 7b57366; and
 PostgresEventStore_CommitVisibility_Tests, named in the decision, was retired
 into the suite in that same commit.
+
+## Amendment (August 2026): the instance's other advisory lock
+
+The append lock is not the only advisory lock this system takes on a PostgreSQL
+instance. MigrationRunner.MigrationAdvisoryLockKey is the migration runner's, and
+its eight bytes read as ASCII E S R C Q _ M R. The two keys are distinct values
+in one shared space: PostgreSQL scopes advisory locks to the instance, so both
+components contend on the same surface and a collision between them would
+serialize a migration against an append.
+
+Their scopes differ, and that difference is what each key is for. The append lock
+is transaction-scoped, taken as the first statement inside an append transaction
+and released implicitly at commit or rollback. The migration lock is
+session-scoped: RunPendingAsync acquires it once before the batch begins and
+releases it in a finally, so it is held across every per-migration transaction
+rather than inside any one of them. A batch that fails partway releases the lock
+on connection close, and the operator's re-run reacquires it before reading the
+tracking table, which is what keeps a second runner out of a database that is
+only partially migrated.
+
+A third component taking an advisory lock on this instance picks a value that
+collides with neither.

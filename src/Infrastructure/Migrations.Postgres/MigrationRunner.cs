@@ -9,9 +9,9 @@ namespace EventSourcingCqrs.Infrastructure.Migrations.Postgres;
 public sealed class MigrationRunner
 {
     // pg_advisory_lock(bigint) key. The eight bytes spell ASCII "ESRCQ_MR"
-    // (event-sourcing reference implementation, migration runner). Recorded
-    // in docs/sessions/0002-weeks3-4-postgres-adapter.md so a second runner
-    // targeting the same PostgreSQL instance picks a different value.
+    // (event-sourcing reference implementation, migration runner). ADR 0044's
+    // amendment on the instance's other advisory lock records it, so a second
+    // runner targeting the same PostgreSQL instance picks a different value.
     public const long MigrationAdvisoryLockKey = 0x4553_5243_515F_4D52L;
 
     private readonly Assembly _assembly;

@@ -30,8 +30,8 @@ Update the manuscript Track A to reflect .NET 10 / C# 14:
 
 ## Consequences
 
-- Contributors and readers must install the .NET 10 SDK to build the repo. This is documented in the README and in the "Stack and constraints" section of CLAUDE.md.
-- The build fails loudly if a different SDK is in use, rather than rolling forward silently. This matches the rule in CLAUDE.md: "Do not target a .NET version other than 10".
+- Contributors and readers must install the .NET 10 SDK to build the repo. The README states the requirement in its running instructions.
+- The build fails loudly if a different SDK is in use, rather than rolling forward silently. The Decision above is what produces that: the pin lives in `global.json`, so a different SDK fails at the toolchain instead of rolling forward.
 - C# 14 features are available where they help. Reaching for them purely to use them is not. The book teaches concrete patterns; the language must serve the patterns.
 - If a future LTS release ships before publication and offers a meaningfully longer support window, this ADR is reopened.
 

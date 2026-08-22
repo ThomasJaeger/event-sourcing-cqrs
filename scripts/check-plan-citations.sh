@@ -7,10 +7,10 @@
 # Why
 #   A line number pointing into another document goes stale the moment anything
 #   above it is edited, and it goes stale silently: the citation still resolves
-#   and now names the wrong line. CLAUDE_CODE_PREAMBLE.md's working pattern rules
-#   that documents are cited by content, and that an edit shifting lines in a
-#   cited document owns the citations into it. This script is the structural half
-#   of that rule: the obligation is checkable rather than remembered.
+#   and now names the wrong line. Documents are cited by content and never by line
+#   number, and an edit that shifts lines in a cited document owns the citations
+#   into it. This script is the structural half of that rule: the obligation is
+#   checkable rather than remembered.
 #
 #   PLAN.md earned the check. Before Phase 17's Arc C it carried 60 line-number
 #   citations across 38 files, so a single inserted line above them invalidated
@@ -18,8 +18,8 @@
 #
 #   The three outcomes stay distinct. git grep exits 0 when it found matches, 1 when
 #   it found none, and above that when it did not answer at all, so folding the last
-#   two together reports a broken check as a clean one. CLAUDE_CODE_PREAMBLE.md rules
-#   the same thing for the CI gate: an unreadable gate is unknown, never presumed.
+#   two together reports a broken check as a clean one. An unreadable gate is
+#   unknown, never presumed, and never reported as green or red on a guess.
 #   A checker gets the same treatment, and git's own diagnostics stay unsuppressed so
 #   the unknown can say what went wrong.
 #

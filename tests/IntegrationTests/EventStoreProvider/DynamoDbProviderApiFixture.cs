@@ -29,7 +29,7 @@ namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 // the host's arm has no configuration key for a table name. Infrastructure.Tests' LocalStackFixture
 // hands out a fresh table per fact because it shares one container across a class; nothing here does.
 //
-// LocalStack is pinned to 4.14.0 for the reason CLAUDE.md records: :latest exits 55 on a license check
+// LocalStack is pinned to 4.14.0 for the reason ADR 0049 records: :latest exits 55 on a license check
 // unless an auth token is set, and the community edition is archived rather than superseded. Built
 // through the generic ContainerBuilder, which keeps this to the Testcontainers package the repository
 // already carries.

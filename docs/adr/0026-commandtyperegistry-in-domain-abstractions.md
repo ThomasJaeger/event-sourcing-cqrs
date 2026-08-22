@@ -54,8 +54,8 @@ Three placement options were considered:
   dependency to resolve scheduled command types. Moving the registry
   to `Application` forces `EventStore.Postgres` to reference
   `Application`, inverting the hexagonal layering rule (Infrastructure
-  must not depend on Application; CLAUDE.md marks the rule
-  non-negotiable). The alternative of moving the registration to
+  must not depend on Application, the layering `docs/ARCHITECTURE.md`
+  records and the compiler enforces). The alternative of moving the registration to
   `AddApplication` while keeping the type in `Application` leaves
   `AddPostgresEventStore` unable to resolve `IDelayQueue` without
   `AddApplication` also being called, which couples two extension

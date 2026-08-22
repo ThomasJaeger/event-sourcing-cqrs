@@ -10,7 +10,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 
 // The KurrentDB read-side dispatch mechanism: a catch-up subscription over the $all feed that plays
 // aggregate events into the in-process dispatcher, the native counterpart to the relational outbox
-// processor (CLAUDE.md: "Native catch-up subscriptions used for projections instead of polling").
+// processor (ADR 0047; docs/ARCHITECTURE.md records that only the relational adapters have an outbox).
 // KurrentDB pushes committed events to a live subscription, so there is no poll loop and no outbox
 // table; the subscription's own $all position is the dispatch checkpoint, kept under its own name in
 // the same checkpoint store the projections use.

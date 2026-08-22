@@ -15,7 +15,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Kurrent;
 // KurrentDB's native expected-revision check, not a relational uniqueness constraint, so
 // expectedVersion maps to a StreamState and a WrongExpectedVersionException translates to the
 // contract's ConcurrencyException. There is no outbox: KurrentDB feeds projections through native
-// catch-up subscriptions, so an append writes one event to one stream and nothing else (CLAUDE.md).
+// catch-up subscriptions, so an append writes one event to one stream and nothing else (ADR 0047).
 public sealed class KurrentEventStore : IEventStore
 {
     // Excludes KurrentDB system streams (the '$' sigil) and PM streams (ADR 0013) from the $all
