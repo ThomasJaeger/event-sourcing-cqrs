@@ -89,6 +89,21 @@ EVENT_STORE_CONNECTION_STRING=... dotnet run --project src/Infrastructure/EventS
 Its usage is `EventStore.Postgres.Cli migrate [--dry-run]`. The dry run reports what is pending
 and writes nothing.
 
+### Seeding the demo scenarios
+
+The seeder drives the system through named scenarios, so the read side has something to show
+without arranging each case through the UI. Workers must already be running, because that host
+is where projections advance and no scenario finishes without it.
+
+```
+EVENT_STORE_CONNECTION_STRING=... READ_MODEL_CONNECTION_STRING=... \
+  dotnet run --project src/Demo/Demo.Seeder -- all
+```
+
+Its usage is `Demo.Seeder <scenario>`, where the scenario is `clean`, `compensation`, `tenants`
+or `all`. With no argument it runs `all`. An unknown scenario exits 64, and a missing connection
+string exits 78 naming the one that is absent.
+
 ## Build and test
 
 The same commands CI runs, from `.github/workflows/ci.yml`:

@@ -21,6 +21,7 @@
     <Project Path="src/Hosts/Web/Hosts.Web.csproj" />
     <Project Path="src/Hosts/AdminConsole/Hosts.AdminConsole.csproj" />
     <Project Path="src/Migration/Migration.Demo/Migration.Demo.csproj" />
+    <Project Path="src/Demo/Demo.Seeder/Demo.Seeder.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Application.Tests/Application.Tests.csproj" />
