@@ -1,6 +1,5 @@
 using EventSourcingCqrs.Demo.Seeder;
-using EventSourcingCqrs.Projections.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
+using EventSourcingCqrs.Demo.Seeder.Scenarios;
 
 // The demo seeder. It drives the reference implementation through named scenarios so a reader
 // can watch an order run end to end, watch a compensation fire, and watch two tenants keep their
@@ -40,6 +39,16 @@ if (string.IsNullOrEmpty(readModelConnectionString))
     return 78; // EX_CONFIG
 }
 
+// Ctrl+C cancels the scenario rather than killing the process mid-dispatch. Every await below
+// carries the token, so a cancelled run stops at the next boundary instead of leaving a wait
+// running against a database it no longer intends to read.
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
+
 try
 {
     Console.WriteLine($"Demo seeder: running scenario '{scenario}'.");
@@ -51,13 +60,18 @@ try
     // Resolved once so the wiring is exercised on every run rather than on the first scenario
     // that reaches for it. Opening a connection is deferred, so this stays cheap and says
     // nothing about whether the database is reachable.
-    _ = provider.GetRequiredService<ProjectionCatchUpWaiter>();
+    var context = SeederStartup.CreateContext(provider);
 
-    await RunScenarioAsync(scenario);
+    await RunScenarioAsync(scenario, context, cts.Token);
 
     Console.WriteLine();
     Console.WriteLine("Seeding complete.");
     return 0;
+}
+catch (OperationCanceledException)
+{
+    Console.Error.WriteLine("Seeding cancelled.");
+    return 130; // 128 + SIGINT
 }
 catch (Exception ex)
 {
@@ -65,12 +79,12 @@ catch (Exception ex)
     return 1;
 }
 
-static Task RunScenarioAsync(string scenario)
+static async Task RunScenarioAsync(string scenario, SeederContext context, CancellationToken ct)
 {
     switch (scenario)
     {
         case "clean":
-            RunClean();
+            await CleanOrderScenario.RunAsync(context, ct);
             break;
         case "compensation":
             RunCompensation();
@@ -79,17 +93,12 @@ static Task RunScenarioAsync(string scenario)
             RunTenants();
             break;
         case "all":
-            RunClean();
+            await CleanOrderScenario.RunAsync(context, ct);
             RunCompensation();
             RunTenants();
             break;
     }
-
-    return Task.CompletedTask;
 }
-
-static void RunClean()
-    => Console.WriteLine("  clean: an order through to completion. Not yet implemented.");
 
 static void RunCompensation()
     => Console.WriteLine("  compensation: an order whose reservation fails. Not yet implemented.");
