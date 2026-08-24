@@ -90,15 +90,12 @@ static async Task RunScenarioAsync(string scenario, SeederContext context, Cance
             await CompensationScenario.RunAsync(context, ct);
             break;
         case "tenants":
-            RunTenants();
+            await TenantsScenario.RunAsync(context, ct);
             break;
         case "all":
             await CleanOrderScenario.RunAsync(context, ct);
             await CompensationScenario.RunAsync(context, ct);
-            RunTenants();
+            await TenantsScenario.RunAsync(context, ct);
             break;
     }
 }
-
-static void RunTenants()
-    => Console.WriteLine("  tenants: two tenants writing the same order id. Not yet implemented.");
