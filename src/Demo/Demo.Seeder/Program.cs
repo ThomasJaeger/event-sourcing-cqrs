@@ -87,21 +87,18 @@ static async Task RunScenarioAsync(string scenario, SeederContext context, Cance
             await CleanOrderScenario.RunAsync(context, ct);
             break;
         case "compensation":
-            RunCompensation();
+            await CompensationScenario.RunAsync(context, ct);
             break;
         case "tenants":
             RunTenants();
             break;
         case "all":
             await CleanOrderScenario.RunAsync(context, ct);
-            RunCompensation();
+            await CompensationScenario.RunAsync(context, ct);
             RunTenants();
             break;
     }
 }
-
-static void RunCompensation()
-    => Console.WriteLine("  compensation: an order whose reservation fails. Not yet implemented.");
 
 static void RunTenants()
     => Console.WriteLine("  tenants: two tenants writing the same order id. Not yet implemented.");
