@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Access.Events;
 using EventSourcingCqrs.Domain.Sales.Events;
@@ -147,12 +148,100 @@ public class ProjectionCatchUpWaiterTests : IClassFixture<PostgresFixture>
         thrown.Which.Message.Should().Contain(ProbeProjection.ProjectionName).And.Contain("7");
     }
 
+    // Fact 5. The log's last row is a process-manager row, and no projection will ever see it: PM
+    // events skip the outbox and the aggregate feed excludes them by stream prefix. Every projection
+    // handling the written aggregate event sits at the last position that feed carries, so the wait
+    // returns. It is held against the feed's own last position rather than the raw tail of the events
+    // table, and that distinction is the whole of this fact. A waiter comparing against the raw tail
+    // can never see these projections arrive, because the position it waits for is one the feed will
+    // not hand them.
+    [Fact]
+    public async Task A_process_manager_row_at_the_tail_does_not_hold_the_wait_open()
+    {
+        var connectionString = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        await AppendProbeEventsAsync(dataSource);
+        var feedHead = await FeedHeadAsync(dataSource);
+        await AppendProcessManagerEventAsync(dataSource);
+
+        // The arrangement's premise, asserted rather than assumed: the raw tail has moved past
+        // anything a projection can reach. Without this the fact could pass on a log where the two
+        // positions happen to agree, which is the case it is meant to exclude.
+        var rawTail = await new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource))
+            .GetHeadPositionAsync(CancellationToken.None);
+        rawTail.Should().BeGreaterThan(feedHead);
+
+        // And the port the waiter will take answers the feed's question rather than the log's. The
+        // wait returning is not evidence of that on its own, so the reading is pinned here directly.
+        IProjectionFeedHeadPosition port =
+            new PostgresProjectionFeedHeadReader(new NpgsqlConnectionFactory(dataSource));
+        var reported = await port.GetFeedHeadPositionAsync(CancellationToken.None);
+        reported.Should().Be(feedHead);
+
+        await using var provider = ComposeReadModels(connectionString);
+        var handling = NamesHandling<OrderPlaced>(provider);
+        handling.Should().NotBeEmpty();
+        foreach (var name in handling)
+        {
+            await AdvanceAndCommitAsync(dataSource, name, feedHead);
+        }
+
+        var waiter = CreateFeedWaiter(dataSource, provider, TimeProvider.System);
+        var waited = await waiter.WaitForCatchUpAsync(
+            [typeof(OrderPlaced)], Budget, PollInterval, CancellationToken.None);
+
+        waited.Should().BeEquivalentTo(handling);
+    }
+
+    // Fact 6. A process-manager row at the tail must not become a licence to stop checking. One
+    // projection is left short of the feed's last position while the others reach it, and the wait
+    // has to end on its bound naming that projection and where it stopped. This is what the fact
+    // above cannot pin on its own: an implementation that simply stopped comparing anything would
+    // satisfy fact 5 and fail here.
+    [Fact]
+    public async Task A_projection_behind_the_feed_is_still_caught_when_a_process_manager_row_is_last()
+    {
+        var connectionString = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        await AppendProbeEventsAsync(dataSource);
+        var feedHead = await FeedHeadAsync(dataSource);
+        await AppendProcessManagerEventAsync(dataSource);
+
+        await using var provider = ComposeReadModels(connectionString);
+        var handling = NamesHandling<OrderPlaced>(provider);
+        handling.Should().NotBeEmpty();
+
+        // Every projection but one reaches the feed's last position. The one held back is what the
+        // bound has to surface, and it is chosen from the derived set rather than named as a literal
+        // so a drifting subscription cannot turn this into a fact about a projection that no longer
+        // handles the event.
+        var lagging = handling[0];
+        var laggingPosition = feedHead - 1;
+        foreach (var name in handling.Skip(1))
+        {
+            await AdvanceAndCommitAsync(dataSource, name, feedHead);
+        }
+        await AdvanceAndCommitAsync(dataSource, lagging, laggingPosition);
+
+        var waiter = CreateFeedWaiter(
+            dataSource,
+            provider,
+            new AdvancingTimeProvider(new DateTimeOffset(BaseTime), TimeSpan.FromSeconds(4)));
+
+        var act = async () => await waiter.WaitForCatchUpAsync(
+            [typeof(OrderPlaced)], Budget, PollInterval, CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<TimeoutException>();
+        thrown.Which.Message.Should().Contain(lagging)
+            .And.Contain(laggingPosition.ToString(CultureInfo.InvariantCulture));
+    }
+
     // Arrangement shared by the facts above.
 
     private static ProjectionCatchUpWaiter CreateWaiter(
         NpgsqlDataSource dataSource, IServiceProvider provider, TimeProvider timeProvider)
         => new(
-            new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource)),
+            new PostgresProjectionFeedHeadReader(new NpgsqlConnectionFactory(dataSource)),
             provider.GetRequiredService<ICheckpointStore>(),
             provider,
             timeProvider);
@@ -188,8 +277,89 @@ public class ProjectionCatchUpWaiterTests : IClassFixture<PostgresFixture>
             .ToList();
 
     private static Task<long> HeadAsync(NpgsqlDataSource dataSource)
-        => new PostgresEventStoreHeadReader(new NpgsqlConnectionFactory(dataSource))
-            .GetHeadPositionAsync(CancellationToken.None);
+        => new PostgresProjectionFeedHeadReader(new NpgsqlConnectionFactory(dataSource))
+            .GetFeedHeadPositionAsync(CancellationToken.None);
+
+    // The waiter under the feed-scoped port these two facts demand. The port reports the last
+    // position the projection feed carries, which is what a projection can reach, and it is
+    // a different question from the raw tail of the log that IEventStoreHeadPosition answers. The
+    // existing facts keep the raw-tail helper above, so the two shapes stay visible side by side
+    // until the waiter settles on one.
+    private static ProjectionCatchUpWaiter CreateFeedWaiter(
+        NpgsqlDataSource dataSource, IServiceProvider provider, TimeProvider timeProvider)
+    {
+        // Typed as the port rather than the adapter, so the waiter is demanded to accept the port
+        // and not one engine's class. The three other engines answer the same question their own way.
+        IProjectionFeedHeadPosition feedHead =
+            new PostgresProjectionFeedHeadReader(new NpgsqlConnectionFactory(dataSource));
+        return new ProjectionCatchUpWaiter(
+            feedHead,
+            provider.GetRequiredService<ICheckpointStore>(),
+            provider,
+            timeProvider);
+    }
+
+    // The last position a projection could reach, read from the feed itself rather than from the
+    // reader under test. ReadAllAsync is what a projection consumes, so the last position it yields
+    // is the definition these facts hold the waiter to, and taking it from the production read keeps
+    // the arrangement from restating the exclusion in its own words.
+    private static async Task<long> FeedHeadAsync(NpgsqlDataSource dataSource)
+    {
+        var registry = new EventTypeRegistry().Register<WaiterProbe>();
+        var eventStore = new PostgresEventStore(
+            new NpgsqlConnectionFactory(dataSource),
+            registry,
+            new ProcessManagerEventTypeRegistry(),
+            EventStoreJsonOptions.Create(),
+            new EventUpcasterPipeline(registry, []));
+
+        var last = 0L;
+        await foreach (var envelope in eventStore.ReadAllAsync(0, CancellationToken.None))
+        {
+            last = envelope.GlobalPosition;
+        }
+        return last;
+    }
+
+    // Appends one process-manager event so the log's last row is a PM row. PM events land in the
+    // same events table and skip the outbox (ADR 0013), and both relational feeds exclude the stream
+    // prefix they carry, so this moves the raw tail of the log and moves nothing any projection will
+    // ever be handed. That divergence is the arrangement the two facts above are built on.
+    private static async Task AppendProcessManagerEventAsync(NpgsqlDataSource dataSource)
+    {
+        var eventStore = new PostgresEventStore(
+            new NpgsqlConnectionFactory(dataSource),
+            new EventTypeRegistry(),
+            new ProcessManagerEventTypeRegistry().Register<WaiterPmProbe>(),
+            EventStoreJsonOptions.Create(),
+            new EventUpcasterPipeline(new EventTypeRegistry(), []));
+
+        var stream = StreamId.ForProcessManager(
+            StreamPrefixes.OrderFulfillmentPm, WellKnownTenants.Default, Guid.NewGuid());
+        var eventId = Guid.NewGuid();
+        var metadata = new EventMetadata(
+            EventId: eventId,
+            CorrelationId: Guid.NewGuid(),
+            CausationId: Guid.NewGuid(),
+            ActorId: Guid.Empty,
+            Source: "test",
+            OccurredUtc: BaseTime,
+            Tenant: WellKnownTenants.Default);
+
+        await eventStore.AppendProcessManagerEventsAsync(stream, 0,
+        [
+            new ProcessManagerEventEnvelope(
+                StreamId: stream,
+                StreamVersion: 1,
+                EventId: eventId,
+                EventType: nameof(WaiterPmProbe),
+                EventVersion: 1,
+                Payload: new WaiterPmProbe(1),
+                Metadata: metadata,
+                OccurredUtc: BaseTime,
+                GlobalPosition: 0),
+        ], CancellationToken.None);
+    }
 
     // Moves the head off zero so a checkpoint at the head is a real assertion rather than the
     // empty-store coincidence of nothing being behind anything.
@@ -255,6 +425,10 @@ public class ProjectionCatchUpWaiterTests : IClassFixture<PostgresFixture>
 
     public sealed record UnhandledProbe(Guid Id) : IDomainEvent;
 
+    // The process-manager payload the tail-row arrangement appends. Public for the same reason the
+    // aggregate probes are.
+    public sealed record WaiterPmProbe(int Step) : IProcessManagerEvent;
+
     public sealed class ProbeProjection : IProjection, IEventHandler<WaiterProbe>
     {
         public const string ProjectionName = "waiter-probe";
@@ -265,9 +439,9 @@ public class ProjectionCatchUpWaiterTests : IClassFixture<PostgresFixture>
             => Task.CompletedTask;
     }
 
-    private sealed class FixedHeadPosition(long head) : IEventStoreHeadPosition
+    private sealed class FixedHeadPosition(long head) : IProjectionFeedHeadPosition
     {
-        public Task<long> GetHeadPositionAsync(CancellationToken ct) => Task.FromResult(head);
+        public Task<long> GetFeedHeadPositionAsync(CancellationToken ct) => Task.FromResult(head);
     }
 
     // A checkpoint that never advances, so the head stays out of reach for the whole bound.
@@ -288,9 +462,9 @@ public class ProjectionCatchUpWaiterTests : IClassFixture<PostgresFixture>
             => throw new NotSupportedException();
     }
 
-    private sealed class ThrowingHeadPosition : IEventStoreHeadPosition
+    private sealed class ThrowingHeadPosition : IProjectionFeedHeadPosition
     {
-        public Task<long> GetHeadPositionAsync(CancellationToken ct)
+        public Task<long> GetFeedHeadPositionAsync(CancellationToken ct)
             => throw new InvalidOperationException(
                 "The head must not be read when no projection handles the written events.");
     }

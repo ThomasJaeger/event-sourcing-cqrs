@@ -4,8 +4,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace EventSourcingCqrs.Projections.Infrastructure;
 
 // Waits until every projection that subscribes to a written event has checkpointed at or past
-// the head of the log. A caller that has just dispatched commands knows which event types it
-// caused; this turns that into a completion condition it can wait on instead of sleeping.
+// the head of the feed those projections consume. A caller that has just dispatched commands
+// knows which event types it caused; this turns that into a completion condition it can wait on
+// instead of sleeping.
+//
+// The target is the feed's head and not the log's, because only one of the two is reachable.
+// Process-manager events raise the log's head and never reach a projection, so a log whose last
+// row is a PM row leaves every projection permanently short of that head, and a wait against it
+// can only ever end on its bound. IProjectionFeedHeadPosition answers the reachable question.
+// IEventStoreHeadPosition keeps answering the truthful one, which is the right answer for the lag
+// display that reads it.
 //
 // Why the wait is per event type rather than over the whole roster. A projection advances only
 // on events it handles, so a projection subscribing to none of the written types never moves and
@@ -14,31 +22,31 @@ namespace EventSourcingCqrs.Projections.Infrastructure;
 // registered event handler in this solution is a projection. The reverse direction, from a
 // projection to its event types, no container query answers.
 //
-// Read ordering follows ProjectionLagReader: every checkpoint first, the head last. A projection
-// only checkpoints at a position the log has already assigned and the head never moves backwards,
-// so a head read taken after the checkpoints is at least as recent as all of them and a
-// projection can never read as further along than the head it is compared against.
+// Read ordering follows ProjectionLagReader: every checkpoint first, the feed head last. A
+// projection only checkpoints at a position the feed has already carried and that head never
+// moves backwards, so a head read taken after the checkpoints is at least as recent as all of
+// them and a projection can never read as further along than the head it is compared against.
 //
 // The deadline is wall-clock arithmetic over the injected TimeProvider rather than a timer, so a
 // test can expire the bound by advancing the clock without spending the budget in real time.
 public sealed class ProjectionCatchUpWaiter
 {
-    private readonly IEventStoreHeadPosition _headPosition;
+    private readonly IProjectionFeedHeadPosition _feedHead;
     private readonly ICheckpointStore _checkpointStore;
     private readonly IServiceProvider _services;
     private readonly TimeProvider _timeProvider;
 
     public ProjectionCatchUpWaiter(
-        IEventStoreHeadPosition headPosition,
+        IProjectionFeedHeadPosition feedHead,
         ICheckpointStore checkpointStore,
         IServiceProvider services,
         TimeProvider timeProvider)
     {
-        ArgumentNullException.ThrowIfNull(headPosition);
+        ArgumentNullException.ThrowIfNull(feedHead);
         ArgumentNullException.ThrowIfNull(checkpointStore);
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(timeProvider);
-        _headPosition = headPosition;
+        _feedHead = feedHead;
         _checkpointStore = checkpointStore;
         _services = services;
         _timeProvider = timeProvider;
@@ -76,7 +84,7 @@ public sealed class ProjectionCatchUpWaiter
             }
 
             // Read once, and last, so it is at least as recent as every checkpoint above.
-            var head = await _headPosition.GetHeadPositionAsync(ct);
+            var head = await _feedHead.GetFeedHeadPositionAsync(ct);
 
             var behind = positions.Where(p => p.Position < head).ToList();
             if (behind.Count == 0)
