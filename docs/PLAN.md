@@ -479,7 +479,7 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 
 **Goals.**
 - `EventStore.DynamoDb` adapter implementing `IEventStore` against DynamoDB.
-- Composite key: partition key = `AggregateType#AggregateId`, sort key = Version.
+- Composite key: partition key = the stream id, `{prefix}:{id:N}` or `{prefix}:{tenant:N}:{id:N}`, sort key = Version.
 - Conditional write with `attribute_not_exists(Version)` for optimistic concurrency.
 - Global Secondary Index for global ordering and replay.
 - Configuration switch: same domain code, different event store.

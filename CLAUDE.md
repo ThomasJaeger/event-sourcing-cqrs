@@ -71,7 +71,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * Application depends on Domain and Domain.Abstractions only. Context-specific read-side ports (e.g., `IOrderListStore`) live at `Domain/{Context}/ReadModels/`; context-agnostic ports live in Domain.Abstractions. Projections holds adapters and references Domain.
 * Infrastructure projects implement the abstractions Domain.Abstractions declares.
 * Hosts (Web, Api, Workers, AdminConsole) depend on Application.
-* Domain.Tests has no infrastructure dependencies and runs in microseconds.
+* Domain.Tests has no infrastructure dependencies and runs in milliseconds per fact, the whole project in well under a second.
 
 ### Events
 
@@ -106,7 +106,7 @@ These are non-negotiable. If a generated solution conflicts with one of these, t
 * PostgreSQL adapter: hand-rolled SQL via Npgsql. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
 * SQL Server adapter: hand-rolled SQL via Microsoft.Data.SqlClient. Schema in `migrations/`. Append is atomic per stream with unique constraint on (StreamId, Version). Outbox table updated in the same transaction.
 * KurrentDB adapter: gRPC client. Native catch-up subscriptions used for projections instead of polling.
-* DynamoDB adapter: composite key (partition = AggregateType#AggregateId, sort = Version), conditional writes with `attribute_not_exists(Version)`. DynamoDB Streams feeds projections.
+* DynamoDB adapter: composite key (partition = the stream id, `{prefix}:{id:N}` or `{prefix}:{tenant:N}:{id:N}`, sort = Version), conditional writes with `attribute_not_exists(Version)`. DynamoDB Streams feeds projections.
 * No ORM for the event store. Read models may use Entity Framework Core if it helps; the event store does not.
 
 ### Projections

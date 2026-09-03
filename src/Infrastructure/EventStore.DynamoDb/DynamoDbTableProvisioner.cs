@@ -12,9 +12,11 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // The schema is the whole design, so it is worth stating plainly. One partition key (S), one
 // sort key (N), and nothing else:
 //
-//   pk = "AggregateType#AggregateId" for an aggregate row, the PM stream id for a PM row,
-//        a reserved literal for the position counter, and a reserved literal for the log
-//        partition that carries global ordering.
+//   pk = the stream id for an aggregate row and for a PM row alike, which StreamId composes as
+//        "{prefix}:{id:N}", or "{prefix}:{tenant:N}:{id:N}" outside the default tenant. The
+//        prefix is the lowercased aggregate type name, or the "pm-" form for a process manager.
+//        Also a reserved literal for the position counter, a reserved literal for the log
+//        partition that carries global ordering, and an "$eid#" prefix for event-id dedupe rows.
 //   sk = the stream version for an event row, the position for a log row.
 //
 // No Global Secondary Index. PLAN.md's Phase 14 GSI goal proposed a GSI for global ordering and replay, and a
