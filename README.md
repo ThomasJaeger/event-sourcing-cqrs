@@ -35,22 +35,47 @@ You need Docker and the .NET 10 SDK. From the repository root:
 
 ```
 docker compose -f docker/docker-compose.yml up -d
+dotnet dev-certs https --trust
 ```
 
 **That starts the backing stores and nothing else.** The compose file declares four services,
 PostgreSQL on 5432, SQL Server on 1433, KurrentDB on 2113, and LocalStack on 4566. It does not
 start the application. A reader who runs it and opens a browser gets nothing, because no host
-is listening yet. Start the hosts yourself, in this order:
+is listening yet.
+
+The certificate is the second half of the same step. The Web host sets the antiforgery cookie
+policy to require a secure request, so it serves over HTTPS and every page returns 500 over
+plain HTTP.
+
+Every host reads its configuration from the environment and there are no `appsettings.json`
+files, so none of the values below is optional and a missing one throws at startup. Export
+them in each terminal you start a host from. The connection strings are the compose file's own
+dev-only defaults:
+
+```
+export EVENT_STORE_CONNECTION_STRING='Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
+export READ_MODEL_CONNECTION_STRING='Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
+export FORWARDED_IDENTITY_SIGNING_SECRET='local-development-secret-not-for-any-other-environment'
+export API_BASE_URL='http://localhost:5000'
+export BootstrapAdministrator__AdministratorUserId='11111111-1111-1111-1111-111111111111'
+```
+
+Then start the hosts, one per terminal, in this order:
 
 ```
 dotnet run --project src/Hosts/Workers
-dotnet run --project src/Hosts/Api
-dotnet run --project src/Hosts/Web
+ASPNETCORE_URLS='http://localhost:5000' dotnet run --project src/Hosts/Api
+ASPNETCORE_URLS='https://localhost:5101' dotnet run --project src/Hosts/Web
 ```
 
 Workers goes first because it applies the database migrations at startup, for the selected
-event store and for the read models. Api serves the JSON endpoints the Web host calls. Web
-serves the UI.
+event store and for the read models, and because it seeds the bootstrap administrator that
+`BootstrapAdministrator__AdministratorUserId` names. Api serves the JSON endpoints the Web host
+calls. Web serves the UI. The two URLs are stated rather than left to the default because both
+hosts default to port 5000 and the second one to start would fail to bind.
+
+Then open `https://localhost:5101/login`. There is no route at `/`, and the application requires
+an established identity, so the sign-in page is the entry point rather than a redirect target.
 
 The credentials in the compose file are dev-only defaults, stated as such in its own header.
 They are not for any other environment.
