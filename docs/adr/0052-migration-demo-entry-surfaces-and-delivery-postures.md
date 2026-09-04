@@ -10,8 +10,8 @@ Phase 16's migration demo is the Chapter 18 teaching artifact: a CRUD-shaped leg
 order system and four patterns that carry it toward event sourcing, CDC,
 outbox-on-legacy, the strangler, and shadow mode, running end to end from
 `src/Migration` under one compose command. It is standalone from the reference
-system's own hosts by scope (PLAN.md's Phase 16 standalone goal), and it is a teaching artifact, not a
-production migration (PLAN.md's Phase 16 out-of-scope entry). This ADR records the decisions the demo made that
+system's own hosts by scope (the v1 standalone requirement), and it is a teaching artifact, not a
+production migration (out of scope for v1). This ADR records the decisions the demo made that
 are not obvious from the code: where each pattern's events enter the event-sourced
 side, how the two cross-database delivery paths behave, and how identity and
 versioning cross the legacy boundary. The four patterns and their tests are real and

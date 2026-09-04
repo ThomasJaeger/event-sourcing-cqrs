@@ -11,7 +11,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // sequence, and a GSI cannot serve a strongly-consistent read, so an append writes one log row per
 // event under a single partition key with the position as its sort key. Reading that partition
 // with ConsistentRead in sort order is the global feed, and it is the only read on this engine
-// that can hold ADR 0044's commit-order visibility. ADR 0049 records why the GSI PLAN.md's Phase 14 goal
+// that can hold ADR 0044's commit-order visibility. ADR 0049 records why the GSI ADR 0049's rejected option
 // proposed does not work.
 internal static class DynamoDbSchema
 {

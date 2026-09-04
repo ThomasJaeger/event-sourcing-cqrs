@@ -11,7 +11,7 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
 // Boots the Api host with its event store on KurrentDB and its read models on PostgreSQL, the Kurrent
-// analog of SqlServerProviderApiFixture and of PLAN.md's Phase 13 provider-switch done-when: switching the configured event store to
+// analog of SqlServerProviderApiFixture and of ADR 0047's provider-switch posture: switching the configured event store to
 // KurrentDB is a configuration change, not a code change.
 //
 // Two containers, because the split is real. The provider key selects the engine that holds events;

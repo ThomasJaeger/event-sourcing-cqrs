@@ -10,7 +10,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 
 // The DynamoDB read-side dispatch mechanism: a Streams consumer that wakes on the table's change
 // feed and plays aggregate events into the in-process dispatcher, the managed-cloud counterpart to
-// the relational outbox processor and to KurrentDB's catch-up subscription (PLAN.md's Phase 14 Streams goal and its no-polling done-when).
+// the relational outbox processor and to KurrentDB's catch-up subscription (ADR 0049's Streams mapping and its no-polling requirement).
 //
 // WAKE-THEN-DRAIN, and this is the ruling the whole design turns on. A stream record is a wake
 // signal and nothing more. The loop never parses one; it reads IEventStore.ReadAllAsync from the
@@ -51,7 +51,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // undrained: the drain is the only thing that can find those rows, and it is cheap enough that
 // draining on suspicion is always the right trade.
 //
-// "Without polling" (PLAN.md's Phase 14 no-polling done-when) reads as: no interval poll of the event table for new events, the
+// "Without polling" (ADR 0049's no-polling requirement) reads as: no interval poll of the event table for new events, the
 // way the relational outbox processors poll their outbox. The change feed is the trigger. A quiet
 // feed costs one GetRecords per live shard per EmptyShardBackoff and touches the event table not at
 // all. Shard discovery is a DescribeStream and sits on ShardRefreshInterval rather than the wake

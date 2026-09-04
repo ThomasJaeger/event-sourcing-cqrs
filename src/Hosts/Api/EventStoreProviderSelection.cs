@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace EventSourcingCqrs.Hosts.Api;
 
-// The event-store engine this host composes (PLAN.md's Phase 2 provider-switch done-when). EVENT_STORE_PROVIDER selects it. Absent
+// The event-store engine this host composes (the provider-switch commitment in docs/PLAN.md's scope). EVENT_STORE_PROVIDER selects it. Absent
 // or empty means Postgres, which is what every deployment ran before the key existed, so the default
 // path is exactly what it was. An unrecognized value fails the host at startup with the value named:
 // there is no fallback, because a typo that silently composes the other engine writes events to the

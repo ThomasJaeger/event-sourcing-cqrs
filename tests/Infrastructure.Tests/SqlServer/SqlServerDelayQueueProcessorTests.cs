@@ -10,7 +10,7 @@ using Xunit;
 namespace EventSourcingCqrs.Infrastructure.Tests.SqlServer;
 
 // The SQL Server twins of every DelayQueueProcessorTests fact except the notification one, which
-// has nothing to test here: no LISTEN/NOTIFY, no listener, and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes this engine to
+// has nothing to test here: no LISTEN/NOTIFY, no listener, and ADR 0045's engine mapping, which leaves engine-native triggers unused, scopes this engine to
 // polling, so the idle timer is the whole wake path.
 public class SqlServerDelayQueueProcessorTests : IClassFixture<SqlServerFixture>
 {

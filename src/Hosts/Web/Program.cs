@@ -42,7 +42,7 @@ var loginActorId =
         ? configuredActorId
         : throw new InvalidOperationException("BootstrapAdministrator:AdministratorUserId is not set.");
 
-// Blazor Server only (PLAN.md and setup-doc D8). The optimistic-UI patterns at
+// Blazor Server only. The optimistic-UI patterns at
 // Cluster 4 Commit 23 are pure server-circuit concerns; no WASM render mode buys
 // anything for the v1 page set, and the Server-only composition is the simplest
 // container for the pending-badge state machine and polling loop.

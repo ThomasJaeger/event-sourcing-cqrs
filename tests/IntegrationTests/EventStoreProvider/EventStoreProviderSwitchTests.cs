@@ -6,7 +6,7 @@ using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
-// PLAN.md's Phase 2 provider-switch done-when, the Phase 2 done-when: switching the configured event store from PostgreSQL to SQL
+// the provider-switch commitment in docs/PLAN.md's scope, the Phase 2 done-when: switching the configured event store from PostgreSQL to SQL
 // Server in a test run requires no domain-code changes. The host under test is the Api composition
 // every other command test boots, the command is the one DraftOrderTests dispatches, and the only
 // difference is the provider key and the connection string behind it.

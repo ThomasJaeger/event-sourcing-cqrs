@@ -14,7 +14,7 @@ using Xunit;
 
 namespace EventSourcingCqrs.IntegrationTests.AdminConsole;
 
-// Slice 5's browser done-when (PLAN.md Phase 13, "The Event Store Browser works against KurrentDB").
+// Slice 5's browser done-when (ADR 0047, "The Event Store Browser works against KurrentDB").
 // The browser's read seam, IStreamInspector, reads one aggregate stream through IEventStore and
 // re-serializes payloads; it is engine-agnostic over the port, so composing it over a Kurrent-composed
 // IEventStore and reading back an appended stream is the seam-level evidence the done-when is met.

@@ -15,7 +15,7 @@
 --
 -- NO TRIGGER, and the absence is the design. PostgreSQL migration 0008 puts an AFTER INSERT
 -- trigger here that fires pg_notify to shorten latency for at-or-near-present rows. SQL Server has
--- no LISTEN/NOTIFY and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes this engine to polling in v1, so the processor's idle
+-- no LISTEN/NOTIFY and ADR 0045's engine mapping, which leaves engine-native triggers unused, scopes this engine to polling in v1, so the processor's idle
 -- poll carries the whole duty and there is nothing for a trigger to signal.
 
 CREATE TABLE event_store.delayed_commands (

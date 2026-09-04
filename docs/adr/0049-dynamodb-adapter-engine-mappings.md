@@ -16,7 +16,7 @@ throwaway spike against LocalStack 4.14.0 (TDD_RULES section 1) established the
 engine's real contract before authoring, and several session spikes across the
 arc refuted things reading alone had gotten wrong. This ADR records the mappings
 and the decisions they forced, on the model of ADR 0047. The run posture is
-LocalStack only, per PLAN.md's Phase 14 out-of-scope entry "Real AWS deployment.
+LocalStack only, per the v1 scope entry "Real AWS deployment.
 Local-only via LocalStack."
 
 ## Decisions
@@ -67,7 +67,7 @@ gapless here, stronger than the contract requires, and a gap would be a defect
 rather than a tolerated engine behavior. The spike observed the same: 300
 appends, positions 1 to 300, none missing.
 
-**The dead GSI, and the log partition that replaced it.** PLAN.md's Phase 14 GSI goal proposed a
+**The dead GSI, and the log partition that replaced it.** The original GSI design proposed a
 Global Secondary Index for global ordering and replay. The live engine refuses
 it: ConsistentRead against a GSI is rejected outright with "Consistent reads are
 not supported on global secondary indexes" (ValidationException). A GSI-backed
@@ -164,7 +164,7 @@ iterators before it drains, which closes the window where an event committed
 between the drain and the acquire would be missed by both. A drain is forced on
 that first pass rather than waited for, so a quiet stream with a backlog still
 catches up; after that a quiet stream costs no read of the event feed, which is
-the PLAN.md's Phase 14 no-polling done-when reading: there is no interval polling of the event table, and the
+the no-polling reading: there is no interval polling of the event table, and the
 native feed is the trigger. Dispatch is at-least-once like every other path here,
 and a fault restarts the loop, which drains from the checkpoint again: redelivery
 absorbed by per-handler idempotency, and degraded-mode availability rather than a
@@ -209,7 +209,7 @@ cannot deterministically produce.
 
 ## Consequences
 
-- The switching guarantee at PLAN.md's Phase 2 provider-switch done-when now extends to four engines. The Api,
+- The switching guarantee in this repository's scope now extends to four engines. The Api,
   Workers, and AdminConsole hosts each compose a DynamoDb arm, and the provider
   value carries the engine through the write path, the read-side ports, and the
   projection feed.
@@ -232,7 +232,7 @@ cannot deterministically produce.
 ## Trigger for revisiting
 
 A deployment needing more write throughput than one counter row serializes
-reopens the ordering guarantee, not this cap. Real AWS, which PLAN.md's Phase 14
+reopens the ordering guarantee, not this cap. Real AWS, which the v1 scope
 out-of-scope list excludes, reopens every fidelity claim here and the credential chain's boot
 posture with it. An engine-native correlation index, or a dedicated correlation
 projection, would reopen the tracer's unavailable state and be its own ADR. A

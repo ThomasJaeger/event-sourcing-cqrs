@@ -9,12 +9,12 @@ using Microsoft.Extensions.Options;
 
 namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 
-// The DynamoDB event store (PLAN.md Phase 14). One table holds everything: aggregate rows, PM
+// The DynamoDB event store (ADR 0049). One table holds everything: aggregate rows, PM
 // rows, the position counter, and the log partition that carries global ordering. DynamoDB has no
 // cheap cross-table transaction, and an append has to move all of them at once, so they share a
 // table by necessity rather than by preference.
 //
-// The trade-offs PLAN.md's Phase 14 trade-offs goal asks to be written down, in present tense, because they are what this
+// The trade-offs ADR 0049 asks to be written down, in present tense, because they are what this
 // engine costs today rather than what it might cost later.
 //
 // The counter is a serialization point, and it is the design's price. ADR 0044 binds every adapter
@@ -41,7 +41,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // choice.
 //
 // The GSI the plan proposed is dead, and the refutation is the reason the log partition exists.
-// PLAN.md's Phase 14 GSI goal proposed a Global Secondary Index for global ordering and replay. DynamoDB rejects
+// ADR 0049's rejected GSI option proposed a Global Secondary Index for global ordering and replay. DynamoDB rejects
 // ConsistentRead against a GSI outright: "Consistent reads are not supported on global secondary
 // indexes" (ValidationException), measured against the live engine. A GSI-backed global position
 // therefore cannot serve the strongly-consistent ordered read ADR 0044 requires, so ordering rides

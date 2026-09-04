@@ -7,7 +7,7 @@ using Xunit;
 namespace EventSourcingCqrs.IntegrationTests.EventStoreProvider;
 
 // RED for slice 3's Kurrent provider value, the KurrentDB analog of EventStoreProviderSwitchTests and
-// of PLAN.md's Phase 13 provider-switch done-when: switching the configured event store to KurrentDB is a configuration change, not a
+// of ADR 0047's provider-switch posture: switching the configured event store to KurrentDB is a configuration change, not a
 // code change. The host under test is the Api composition every other command test boots, the command
 // is the one DraftOrderTests dispatches, and the only difference is the provider key and the KurrentDB
 // connection string behind it.

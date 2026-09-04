@@ -185,7 +185,7 @@ is the worked example for Chapter 7's context mapping.
 - `docs/architecture/cross-context-vocabulary.md` for what crosses each bounded-context
   boundary, and what does not.
 - `CLAUDE.md` for the repo-wide rules, the stack, and the folder layout.
-- `docs/PLAN.md` for the build sequence and the scope v1 committed to. It records intent; what
+- `docs/PLAN.md` for the scope v1 committed to and the definition of done. It records intent; what
   currently ships is read from the code.
 
 ## License

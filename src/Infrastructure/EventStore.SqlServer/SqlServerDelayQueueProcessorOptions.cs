@@ -13,7 +13,7 @@ public sealed class SqlServerDelayQueueProcessorOptions
     public Func<double> Jitter { get; init; } = Random.Shared.NextDouble;
 
     // The whole wake path, not a fallback. The PostgreSQL processor treats its timer as a backstop
-    // behind a pg_notify trigger; SQL Server has no LISTEN/NOTIFY and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes this
+    // behind a pg_notify trigger; SQL Server has no LISTEN/NOTIFY and ADR 0045's engine mapping, which leaves engine-native triggers unused, scopes this
     // engine to polling, so this interval IS the dispatch-latency bound. There is no
     // NotificationChannelName here because there is no channel.
     //

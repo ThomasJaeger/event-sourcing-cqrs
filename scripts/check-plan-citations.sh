@@ -88,7 +88,7 @@ fi
 
 if [ "$status" -eq 0 ]; then
     printf '%s\n' "A document is cited by line number. Cite it by content instead:" >&2
-    printf '%s\n' "  name the section or quote the sentence, as in \"PLAN.md's Phase 2 provider-switch done-when\"" >&2
+    printf '%s\n' "  name the section or quote the sentence, as in \"PLAN.md's scope section\"" >&2
     printf '%s\n' "  or \"ADR 0004's Trigger for revisiting section\"." >&2
     printf '\n%s\n' "$hits" >&2
     exit 1

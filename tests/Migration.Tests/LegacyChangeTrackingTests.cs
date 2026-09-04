@@ -7,7 +7,7 @@ namespace EventSourcingCqrs.Migration.Tests;
 
 // S1: the CDC baseline. A CRUD write to the legacy orders table must leave an ordered audit
 // trail in legacy.legacy_changes, one row per insert/update/delete, carrying the row image the
-// later CDC pattern reads to emit domain events. This is the change-tracking table PLAN.md's
+// later CDC pattern reads to emit domain events. This is the change-tracking table the book's
 // Chapter 18 CDC pattern reads from.
 //
 // RED this turn: LegacySchemaApplier is a no-op placeholder, so legacy.orders does not exist and

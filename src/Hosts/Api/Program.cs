@@ -27,7 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Testcontainer connection (Commit 12). The Api host does not run migrations; the Workers host owns
 // migration orchestration, so two hosts never race to migrate the same database.
 //
-// Which engine holds the events is a configuration choice, not a code change (PLAN.md's Phase 2 provider-switch done-when). The
+// Which engine holds the events is a configuration choice, not a code change (the provider-switch commitment in docs/PLAN.md's scope). The
 // provider is read once, here, and it is read first because it decides which key addresses the
 // engine. The read-model database stays PostgreSQL under its own key regardless of the provider.
 var eventStoreProvider = EventStoreProviderSelection.Read(

@@ -79,7 +79,7 @@ through one seam.
 
 **Subscription dispatch and checkpoint tail-lag.** KurrentDB feeds projections
 through a native catch-up subscription over the filtered $all feed in place of an
-outbox drain (PLAN.md's Phase 13 no-polling done-when). The subscription service plays each matched event into
+outbox drain (the no-polling requirement). The subscription service plays each matched event into
 the same in-process dispatcher the relational outbox processors feed, advancing its
 own $all dispatch checkpoint, held under a name disjoint from every projection
 checkpoint. The loop resumes exclusively from the stored checkpoint on reconnect
@@ -132,7 +132,7 @@ bare data source in their hosts and register with plain Adds.
 
 ## Consequences
 
-- The switching guarantee at PLAN.md's Phase 2 provider-switch done-when extends to KurrentDB for the write hosts
+- The switching guarantee in this repository's scope extends to KurrentDB for the write hosts
   (Api, Workers) and the read host (AdminConsole) by EVENT_STORE_PROVIDER selection,
   through a third copy of the per-host parser twin.
 - ADR 0004's revisit trigger, three adapters touching identical code, has fired.

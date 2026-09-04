@@ -261,7 +261,7 @@ public class DynamoDbStreamDispatchTests
         //
         // The order is what makes it a trigger claim rather than a delivery claim. A loop that
         // simply re-drained forever would also deliver a post-start append, and that shape is the
-        // table polling PLAN.md's Phase 14 no-polling done-when forbids. Asserting that records came back first, and that the
+        // table polling ADR 0049's no-polling requirement forbids. Asserting that records came back first, and that the
         // feed was not read in between, is what separates the two.
         await using var harness = await DynamoDbStreamHarness.CreateAsync(_localStack, _postgres);
         var log = new DispatchObservationLog();
@@ -349,7 +349,7 @@ public class DynamoDbStreamDispatchTests
     [Fact]
     public async Task A_quiet_stream_costs_no_read_of_the_event_feed()
     {
-        // The no-poll fact (PLAN.md's Phase 14 no-polling done-when). Once the startup drain finishes, a healthy but silent
+        // The no-poll fact (ADR 0049's no-polling requirement). Once the startup drain finishes, a healthy but silent
         // stream must not cause another feed read: the loop asks the stream, the stream says
         // nothing, and the event table is left alone. A loop that re-drained on a timer would fail
         // here, which is exactly the shape "without polling" forbids.

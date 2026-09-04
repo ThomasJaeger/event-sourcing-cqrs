@@ -8,7 +8,7 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.DynamoDb;
 // checks for the others.
 //
 // ServiceUrl is the LocalStack escape hatch and is empty for real AWS, where the SDK resolves
-// the endpoint from the region. PLAN.md's Phase 14 out-of-scope entry for real AWS scopes this phase to LocalStack, so ServiceUrl is
+// the endpoint from the region. ADR 0049's LocalStack-only scope scopes this phase to LocalStack, so ServiceUrl is
 // set on every path the repository currently runs.
 public sealed class DynamoDbEventStoreOptions
 {

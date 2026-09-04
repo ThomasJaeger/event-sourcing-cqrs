@@ -10,7 +10,7 @@ public sealed class SqlServerOutboxProcessorOptions
     public Func<double> Jitter { get; init; } = Random.Shared.NextDouble;
 
     // The whole wake path, not a fallback. The PostgreSQL processor treats its idle timer as a
-    // backstop behind LISTEN/NOTIFY; SQL Server has no LISTEN/NOTIFY, and PLAN.md's Phase 2 out-of-scope entry for engine-native SQL Server triggers scopes the
+    // backstop behind LISTEN/NOTIFY; SQL Server has no LISTEN/NOTIFY, and ADR 0045's engine mapping, which leaves engine-native triggers unused, scopes the
     // SQL Server trigger mechanism to polling in v1, so this interval IS the dispatch latency
     // bound. There is no NotificationChannelName here because there is no channel.
     public TimeSpan IdlePollInterval { get; init; } = TimeSpan.FromMilliseconds(500);
