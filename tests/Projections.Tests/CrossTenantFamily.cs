@@ -36,12 +36,14 @@ internal sealed record CrossTenantFamily(
 
 // The families the harness runs.
 //
-// This list is hand-maintained and both properties read it, so a family missing from it is silently
-// green in both. That is the registry-completeness gap one level up from where it bit before. What
-// closes it is a meta-fact requiring every unit-of-work port reachable from the projection registry
-// to appear here; it lands with the last family, because it is red for families whose drives are
-// not written yet. Nothing below it is hand-maintained: the required write set comes off the port
-// by reflection and the table set off information_schema.
+// This list is hand-maintained and both properties read it, so a family missing from it would be
+// silently green in both. That was the registry-completeness gap one level up from where it bit
+// before, and CrossTenantFamilyRegistryCompletenessTests closes it: the declared unit-of-work ports
+// come off the Domain assembly by reflection and must equal the ports named here, so a read model
+// added without a family fails the suite rather than passing unnoticed. It could only land once the
+// last family did, because it is red for any port whose drives are not written yet. Nothing below
+// it is hand-maintained either: the required write set comes off the port by reflection and the
+// table set off information_schema.
 internal static class CrossTenantFamilies
 {
     internal static IReadOnlyList<CrossTenantFamily> All { get; } =
