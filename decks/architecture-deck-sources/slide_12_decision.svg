@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">THE ASK</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">The Decision</text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">Three approvals would unblock the discovery quarter. We need a decision by [date].</text>
+
+  <!-- Three checkbox asks -->
+  <rect x="120" y="225" width="1040" height="100" rx="10" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <rect x="145" y="250" width="50" height="50" rx="6" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2.5"/>
+  <text x="220" y="270" font-size="20" font-weight="bold" fill="#111827">Approve the discovery quarter</text>
+  <text x="220" y="298" font-size="16" fill="#6B7280">Q1 spend: ~25-30 engineer-weeks of focused time on event-storming and design.</text>
+
+  <rect x="120" y="345" width="1040" height="100" rx="10" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <rect x="145" y="370" width="50" height="50" rx="6" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2.5"/>
+  <text x="220" y="390" font-size="20" font-weight="bold" fill="#111827">Approve contractor budget</text>
+  <text x="220" y="418" font-size="16" fill="#6B7280">~$60-80K for an external event-sourcing specialist embedded in the team for Q1-Q2.</text>
+
+  <rect x="120" y="465" width="1040" height="100" rx="10" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <rect x="145" y="490" width="50" height="50" rx="6" fill="#FFFFFF" stroke="#3B82F6" stroke-width="2.5"/>
+  <text x="220" y="510" font-size="20" font-weight="bold" fill="#111827">Approve the first bounded context</text>
+  <text x="220" y="538" font-size="16" fill="#6B7280">Recommend: billing or audit. Both deliver compliance value in Month 6 even if we stop there.</text>
+
+  <!-- Decision date / next step -->
+  <rect x="120" y="595" width="1040" height="80" rx="10" fill="#3B82F6"/>
+  <text x="640" y="635" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Decision needed by [date]</text>
+  <text x="640" y="660" font-size="16" fill="#DBEAFE" text-anchor="middle" font-style="italic">Next step: 30-minute follow-up to assign the discovery team.</text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 12 of 12</text>
+</svg>

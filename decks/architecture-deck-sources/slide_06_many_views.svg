@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">CAPABILITY 4 OF 6</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">Many Views, One Truth</text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">The same source data feeds many products, each optimized for its own purpose.</text>
+
+  <rect x="120" y="220" width="1040" height="125" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+  <text x="145" y="252" font-size="16" font-weight="bold" fill="#1E40AF" letter-spacing="1">WHAT THIS MEANS</text>
+  <text x="145" y="285" font-size="20" fill="#111827">One event log feeds many purpose-built views. Marketing gets analytical dashboards, customer</text>
+  <text x="145" y="312" font-size="20" fill="#111827">success gets operational tooling, data science gets training data. All from the same source of truth.</text>
+
+  <text x="120" y="385" font-size="16" font-weight="bold" fill="#6B7280" letter-spacing="1">WHAT IT ENABLES</text>
+
+  <rect x="120" y="405" width="333" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="140" y="435" font-size="18" font-weight="bold" fill="#111827">No data silos</text>
+  <text x="140" y="465" font-size="15" fill="#6B7280">Marketing's numbers and</text>
+  <text x="140" y="485" font-size="15" fill="#6B7280">customer success's numbers</text>
+  <text x="140" y="505" font-size="15" fill="#6B7280">come from the same source.</text>
+
+  <rect x="473" y="405" width="333" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="493" y="435" font-size="18" font-weight="bold" fill="#111827">New views in days</text>
+  <text x="493" y="465" font-size="15" fill="#6B7280">A team needs a new dashboard?</text>
+  <text x="493" y="485" font-size="15" fill="#6B7280">Build a projection. No database</text>
+  <text x="493" y="505" font-size="15" fill="#6B7280">migrations. No coordination.</text>
+
+  <rect x="826" y="405" width="334" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="846" y="435" font-size="18" font-weight="bold" fill="#111827">Compounding leverage</text>
+  <text x="846" y="465" font-size="15" fill="#6B7280">Each new use of the data adds</text>
+  <text x="846" y="485" font-size="15" fill="#6B7280">value without changing the</text>
+  <text x="846" y="505" font-size="15" fill="#6B7280">source. The asset compounds.</text>
+
+  <rect x="120" y="555" width="1040" height="105" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+  <text x="145" y="585" font-size="16" font-weight="bold" fill="#92400E" letter-spacing="1">CONCRETE EXAMPLE</text>
+  <text x="145" y="615" font-size="18" fill="#111827" font-style="italic">"Finance and product had different revenue numbers for two years. With one event log feeding both</text>
+  <text x="145" y="640" font-size="18" fill="#111827" font-style="italic">teams&apos; dashboards, the discrepancy disappeared. There is only one number now, by construction.&quot;</text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 6 of 12</text>
+</svg>

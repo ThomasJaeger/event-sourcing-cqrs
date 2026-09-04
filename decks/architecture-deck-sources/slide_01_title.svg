@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <!-- Eyebrow label -->
+  <text x="120" y="180" font-size="20" font-weight="bold" fill="#3B82F6" letter-spacing="3">A PROPOSAL FOR THE LEADERSHIP TEAM</text>
+
+  <!-- Title -->
+  <text x="120" y="280" font-size="64" font-weight="bold" fill="#111827">Six Capabilities</text>
+  <text x="120" y="360" font-size="64" font-weight="bold" fill="#111827">Our Current Architecture</text>
+  <text x="120" y="440" font-size="64" font-weight="bold" fill="#3B82F6">Cannot Deliver</text>
+
+  <!-- Subtitle -->
+  <text x="120" y="510" font-size="26" fill="#6B7280" font-style="italic">An honest case for moving to event-sourced architecture,</text>
+  <text x="120" y="544" font-size="26" fill="#6B7280" font-style="italic">grounded in concrete business outcomes.</text>
+
+  <!-- Footer divider -->
+  <line x1="120" y1="640" x2="1160" y2="640" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Footer -->
+  <text x="120" y="675" font-size="18" fill="#9CA3AF">Presented by [Your Name] · [Date]</text>
+  <text x="1160" y="675" font-size="18" fill="#9CA3AF" text-anchor="end">Slide 1 of 12</text>
+</svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">THE BUDGETING CONVERSATION</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">What It Costs</text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">Real numbers, not vague reassurances. We have done the arithmetic.</text>
+
+  <!-- Cost table -->
+  <rect x="120" y="220" width="1040" height="370" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="2"/>
+
+  <!-- Header row -->
+  <rect x="120" y="220" width="1040" height="55" rx="12" fill="#F3F4F6"/>
+  <text x="145" y="255" font-size="16" font-weight="bold" fill="#374151" letter-spacing="1">COST CATEGORY</text>
+  <text x="500" y="255" font-size="16" font-weight="bold" fill="#374151" letter-spacing="1">ESTIMATE</text>
+  <text x="800" y="255" font-size="16" font-weight="bold" fill="#374151" letter-spacing="1">WHEN</text>
+
+  <!-- Rows -->
+  <line x1="120" y1="275" x2="1160" y2="275" stroke="#E5E7EB"/>
+
+  <text x="145" y="310" font-size="18" font-weight="bold" fill="#111827">Team ramp-up time</text>
+  <text x="145" y="333" font-size="14" fill="#6B7280">Two to six weeks to productivity per engineer</text>
+  <text x="500" y="320" font-size="18" fill="#111827">25-30 engineer-weeks</text>
+  <text x="800" y="320" font-size="18" fill="#111827">Q1 only</text>
+
+  <line x1="145" y1="355" x2="1135" y2="355" stroke="#F3F4F6"/>
+
+  <text x="145" y="385" font-size="18" font-weight="bold" fill="#111827">Contractor / specialist</text>
+  <text x="145" y="408" font-size="14" fill="#6B7280">External event-sourcing expertise for the first quarter</text>
+  <text x="500" y="395" font-size="18" fill="#111827">~$60-80K</text>
+  <text x="800" y="395" font-size="18" fill="#111827">Q1-Q2</text>
+
+  <line x1="145" y1="430" x2="1135" y2="430" stroke="#F3F4F6"/>
+
+  <text x="145" y="460" font-size="18" font-weight="bold" fill="#111827">Storage</text>
+  <text x="145" y="483" font-size="14" fill="#6B7280">Event log + projections at our event volume</text>
+  <text x="500" y="470" font-size="18" fill="#111827">~$300-500/year</text>
+  <text x="800" y="470" font-size="18" fill="#111827">Ongoing</text>
+
+  <line x1="145" y1="505" x2="1135" y2="505" stroke="#F3F4F6"/>
+
+  <text x="145" y="535" font-size="18" font-weight="bold" fill="#111827">On-call expansion</text>
+  <text x="145" y="558" font-size="14" fill="#6B7280">Additional infrastructure to monitor (event store, projections)</text>
+  <text x="500" y="545" font-size="18" fill="#111827">Modest</text>
+  <text x="800" y="545" font-size="18" fill="#111827">Ongoing</text>
+
+  <!-- Bottom takeaway -->
+  <rect x="120" y="610" width="1040" height="65" rx="8" fill="#ECFDF5" stroke="#10B981"/>
+  <text x="145" y="640" font-size="18" fill="#111827">
+    <tspan font-weight="bold" fill="#047857">Total first-year cost:</tspan> well under one engineer-year of fully-loaded cost.
+  </text>
+  <text x="145" y="663" font-size="16" fill="#6B7280" font-style="italic">By comparison: the next "version 2.0" rewrite would cost 5-10× this.</text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 10 of 12</text>
+</svg>

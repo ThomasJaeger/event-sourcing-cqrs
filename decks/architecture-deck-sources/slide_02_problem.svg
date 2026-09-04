@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <!-- Section label -->
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">THE PROBLEM</text>
+
+  <!-- Title -->
+  <text x="120" y="130" font-size="44" font-weight="bold" fill="#111827">Questions Our Systems Cannot Answer Today</text>
+
+  <text x="120" y="180" font-size="20" fill="#6B7280" font-style="italic">Each of these is a real request we have received from the business in the last year.</text>
+
+  <!-- Question cards (4 in a 2x2 grid) -->
+
+  <!-- Card 1 -->
+  <rect x="120" y="220" width="500" height="170" rx="12" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+  <text x="145" y="252" font-size="14" font-weight="bold" fill="#92400E" letter-spacing="1">FROM COMPLIANCE</text>
+  <text x="145" y="290" font-size="22" font-weight="bold" fill="#111827">"Show me everything that happened</text>
+  <text x="145" y="320" font-size="22" font-weight="bold" fill="#111827">to this customer's account on</text>
+  <text x="145" y="350" font-size="22" font-weight="bold" fill="#111827">March 14, in chronological order."</text>
+  <text x="145" y="378" font-size="16" fill="#6B7280" font-style="italic">Today's answer: a multi-day investigation across logs and DBs.</text>
+
+  <!-- Card 2 -->
+  <rect x="660" y="220" width="500" height="170" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+  <text x="685" y="252" font-size="14" font-weight="bold" fill="#1E40AF" letter-spacing="1">FROM PRODUCT</text>
+  <text x="685" y="290" font-size="22" font-weight="bold" fill="#111827">"What would our churn rate</text>
+  <text x="685" y="320" font-size="22" font-weight="bold" fill="#111827">have looked like last quarter</text>
+  <text x="685" y="350" font-size="22" font-weight="bold" fill="#111827">under the new definition?"</text>
+  <text x="685" y="378" font-size="16" fill="#6B7280" font-style="italic">Today&apos;s answer: not possible. We don&apos;t store the inputs.</text>
+
+  <!-- Card 3 -->
+  <rect x="120" y="410" width="500" height="170" rx="12" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5"/>
+  <text x="145" y="442" font-size="14" font-weight="bold" fill="#047857" letter-spacing="1">FROM DATA SCIENCE</text>
+  <text x="145" y="480" font-size="22" font-weight="bold" fill="#111827">"Can we train a model on three</text>
+  <text x="145" y="510" font-size="22" font-weight="bold" fill="#111827">years of customer behavior, not</text>
+  <text x="145" y="540" font-size="22" font-weight="bold" fill="#111827">just the current snapshot?"</text>
+  <text x="145" y="568" font-size="16" fill="#6B7280" font-style="italic">Today's answer: we have snapshots, not behavior history.</text>
+
+  <!-- Card 4 -->
+  <rect x="660" y="410" width="500" height="170" rx="12" fill="#FCE7F3" stroke="#DB2777" stroke-width="1.5"/>
+  <text x="685" y="442" font-size="14" font-weight="bold" fill="#9D174D" letter-spacing="1">FROM CUSTOMER SUCCESS</text>
+  <text x="685" y="480" font-size="22" font-weight="bold" fill="#111827">"Why did this customer's plan</text>
+  <text x="685" y="510" font-size="22" font-weight="bold" fill="#111827">change three times last week?</text>
+  <text x="685" y="540" font-size="22" font-weight="bold" fill="#111827">What did they do?"</text>
+  <text x="685" y="568" font-size="16" fill="#6B7280" font-style="italic">Today's answer: we see the current state, not the journey.</text>
+
+  <!-- Bottom takeaway -->
+  <rect x="120" y="615" width="1040" height="65" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="145" y="645" font-size="18" fill="#111827"><tspan font-weight="bold">The pattern:</tspan> our systems record current state.</text>
+  <text x="145" y="668" font-size="18" fill="#111827">The business increasingly needs <tspan font-style="italic" fill="#3B82F6">history.</tspan></text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 2 of 12</text>
+</svg>

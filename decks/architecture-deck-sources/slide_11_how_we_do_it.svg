@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">THE PLAN</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">How We Would Do It</text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">One bounded context first. Strangler pattern. Each step delivers value on its own.</text>
+
+  <!-- Timeline -->
+  <line x1="180" y1="335" x2="1100" y2="335" stroke="#D1D5DB" stroke-width="3"/>
+
+  <!-- Phase 1 -->
+  <circle cx="220" cy="335" r="14" fill="#3B82F6" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="220" y="290" font-size="14" font-weight="bold" fill="#3B82F6" text-anchor="middle" letter-spacing="1">MONTH 1-3</text>
+  <rect x="120" y="370" width="200" height="160" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+  <text x="220" y="402" font-size="16" font-weight="bold" fill="#111827" text-anchor="middle">Discovery</text>
+  <text x="135" y="430" font-size="13" fill="#374151">· Event-storm one</text>
+  <text x="135" y="450" font-size="13" fill="#374151">  bounded context</text>
+  <text x="135" y="470" font-size="13" fill="#374151">  (suggest: billing or</text>
+  <text x="135" y="490" font-size="13" fill="#374151">  audit)</text>
+  <text x="135" y="513" font-size="13" fill="#374151">· Engineer training</text>
+
+  <!-- Phase 2 -->
+  <circle cx="490" cy="335" r="14" fill="#3B82F6" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="490" y="290" font-size="14" font-weight="bold" fill="#3B82F6" text-anchor="middle" letter-spacing="1">MONTH 4-6</text>
+  <rect x="390" y="370" width="200" height="160" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.5"/>
+  <text x="490" y="402" font-size="16" font-weight="bold" fill="#111827" text-anchor="middle">First Production</text>
+  <text x="405" y="430" font-size="13" fill="#374151">· Build the chosen</text>
+  <text x="405" y="450" font-size="13" fill="#374151">  bounded context</text>
+  <text x="405" y="470" font-size="13" fill="#374151">· Ship to production</text>
+  <text x="405" y="490" font-size="13" fill="#374151">· Run alongside</text>
+  <text x="405" y="510" font-size="13" fill="#374151">  existing systems</text>
+
+  <!-- Phase 3 -->
+  <circle cx="760" cy="335" r="14" fill="#10B981" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="760" y="290" font-size="14" font-weight="bold" fill="#10B981" text-anchor="middle" letter-spacing="1">MONTH 7-12</text>
+  <rect x="660" y="370" width="200" height="160" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5"/>
+  <text x="760" y="402" font-size="16" font-weight="bold" fill="#111827" text-anchor="middle">Evaluate &amp; Expand</text>
+  <text x="675" y="430" font-size="13" fill="#374151">· Measure value vs</text>
+  <text x="675" y="450" font-size="13" fill="#374151">  cost honestly</text>
+  <text x="675" y="470" font-size="13" fill="#374151">· Decide: expand or</text>
+  <text x="675" y="490" font-size="13" fill="#374151">  stop?</text>
+  <text x="675" y="513" font-size="13" fill="#374151">· Add second context</text>
+
+  <!-- Phase 4 -->
+  <circle cx="1040" cy="335" r="14" fill="#10B981" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="1040" y="290" font-size="14" font-weight="bold" fill="#10B981" text-anchor="middle" letter-spacing="1">MONTH 13+</text>
+  <rect x="940" y="370" width="200" height="160" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5"/>
+  <text x="1040" y="402" font-size="16" font-weight="bold" fill="#111827" text-anchor="middle">Steady Adoption</text>
+  <text x="955" y="430" font-size="13" fill="#374151">· One context per</text>
+  <text x="955" y="450" font-size="13" fill="#374151">  quarter</text>
+  <text x="955" y="470" font-size="13" fill="#374151">· Old systems shrink</text>
+  <text x="955" y="490" font-size="13" fill="#374151">  naturally</text>
+  <text x="955" y="510" font-size="13" fill="#374151">· No "switchover day"</text>
+
+  <!-- Bottom takeaway with checkpoint -->
+  <rect x="120" y="565" width="1040" height="105" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+  <text x="145" y="595" font-size="16" font-weight="bold" fill="#92400E" letter-spacing="1">EXIT RAMPS BUILT IN</text>
+  <text x="145" y="625" font-size="17" fill="#111827">After Month 6, we evaluate: did the first bounded context deliver the promised value? If yes, expand.</text>
+  <text x="145" y="650" font-size="17" fill="#111827">If no, we stop with one new system and the lessons learned. <tspan font-style="italic">No commitment to the full migration up front.</tspan></text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 11 of 12</text>
+</svg>

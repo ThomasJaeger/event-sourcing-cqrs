@@ -188,6 +188,16 @@ is the worked example for Chapter 7's context mapping.
 - `docs/PLAN.md` for the scope v1 committed to and the definition of done. It records intent; what
   currently ships is read from the code.
 
+## Making the case internally
+
+`decks/` holds two executive briefing decks, MIT licensed like everything else here, for the reader
+whose next problem is convincing a leadership team rather than writing code. A twelve-slide
+architectural argument and a thirteen-slide narrative pitch, both editable, with the slide sources
+beside them. `decks/README.md` describes what each one argues.
+
+The slide that matters is the one naming what event sourcing costs. Chapter 5 of the book is its
+long form, and this repository is what the decks are describing.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

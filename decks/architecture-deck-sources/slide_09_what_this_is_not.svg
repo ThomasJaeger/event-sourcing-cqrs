@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">CREDIBILITY CHECK</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">What This Is <tspan fill="#DB2777">Not</tspan></text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">An honest list of what we are not promising. Everything else loses credibility.</text>
+
+  <!-- Three "not" cards -->
+  <rect x="120" y="225" width="333" height="220" rx="12" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+  <text x="140" y="265" font-size="20" font-weight="bold" fill="#991B1B">Not a rewrite.</text>
+  <text x="140" y="305" font-size="16" fill="#374151">We do not propose throwing away</text>
+  <text x="140" y="328" font-size="16" fill="#374151">the existing systems. Event sourcing</text>
+  <text x="140" y="351" font-size="16" fill="#374151">is added one bounded context at a</text>
+  <text x="140" y="374" font-size="16" fill="#374151">time, alongside what already runs.</text>
+  <text x="140" y="410" font-size="14" fill="#6B7280" font-style="italic">The big-bang rewrite is</text>
+  <text x="140" y="428" font-size="14" fill="#6B7280" font-style="italic">specifically what this avoids.</text>
+
+  <rect x="473" y="225" width="333" height="220" rx="12" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+  <text x="493" y="265" font-size="20" font-weight="bold" fill="#991B1B">Not a 2-year project.</text>
+  <text x="513" y="305" font-size="16" fill="#374151">First production deployment in</text>
+  <text x="513" y="328" font-size="16" fill="#374151">6 months. Broader adoption</text>
+  <text x="513" y="351" font-size="16" fill="#374151">over 12-18 months. Each step</text>
+  <text x="513" y="374" font-size="16" fill="#374151">delivers value; nothing waits.</text>
+  <text x="513" y="410" font-size="14" fill="#6B7280" font-style="italic">No "trust us, the value</text>
+  <text x="513" y="428" font-size="14" fill="#6B7280" font-style="italic">arrives at the end."</text>
+
+  <rect x="826" y="225" width="334" height="220" rx="12" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.5"/>
+  <text x="846" y="265" font-size="20" font-weight="bold" fill="#991B1B">Not for every system.</text>
+  <text x="866" y="305" font-size="16" fill="#374151">CRUD-by-nature systems should</text>
+  <text x="866" y="328" font-size="16" fill="#374151">stay CRUD. Prototypes should</text>
+  <text x="866" y="351" font-size="16" fill="#374151">stay simple. Not every problem</text>
+  <text x="866" y="374" font-size="16" fill="#374151">benefits from this.</text>
+  <text x="866" y="410" font-size="14" fill="#6B7280" font-style="italic">We will name specifically</text>
+  <text x="866" y="428" font-size="14" fill="#6B7280" font-style="italic">which systems should adopt.</text>
+
+  <!-- Where it doesn't fit -->
+  <rect x="120" y="465" width="1040" height="195" rx="12" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="145" y="498" font-size="16" font-weight="bold" fill="#6B7280" letter-spacing="1">SYSTEMS WHERE WE WILL NOT USE EVENT SOURCING</text>
+
+  <text x="145" y="530" font-size="17" fill="#111827"><tspan font-weight="bold" fill="#DB2777">·</tspan>  Internal tools where the history is uninteresting (brochure managers, simple admin panels)</text>
+  <text x="145" y="558" font-size="17" fill="#111827"><tspan font-weight="bold" fill="#DB2777">·</tspan>  Throwaway prototypes. Rapid CRUD iteration is faster for unknown requirements</text>
+  <text x="145" y="586" font-size="17" fill="#111827"><tspan font-weight="bold" fill="#DB2777">·</tspan>  Pure data pipelines (ETL, stream processing). Purpose-built tools serve these better</text>
+  <text x="145" y="614" font-size="17" fill="#111827"><tspan font-weight="bold" fill="#DB2777">·</tspan>  Systems with a single dominant query (search indexes, recommendation engines)</text>
+  <text x="145" y="642" font-size="17" fill="#111827"><tspan font-weight="bold" fill="#DB2777">·</tspan>  Compliance environments that require provable, auditable data <tspan font-style="italic">deletion</tspan> (some privacy regimes)</text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 9 of 12</text>
+</svg>

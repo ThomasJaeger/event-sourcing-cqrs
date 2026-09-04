@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+  <rect width="1280" height="720" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#3B82F6"/>
+
+  <text x="120" y="80" font-size="14" font-weight="bold" fill="#6B7280" letter-spacing="2">CAPABILITY 5 OF 6</text>
+  <text x="120" y="135" font-size="44" font-weight="bold" fill="#111827">Rewrite Avoidance</text>
+  <text x="120" y="175" font-size="22" fill="#6B7280" font-style="italic">Continuous evolution, not periodic 18-month "version 2.0" rewrites.</text>
+
+  <rect x="120" y="220" width="1040" height="125" rx="12" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5"/>
+  <text x="145" y="252" font-size="16" font-weight="bold" fill="#047857" letter-spacing="1">WHAT THIS MEANS</text>
+  <text x="145" y="285" font-size="20" fill="#111827">New requirements typically force schema migrations, data backfills, or full rewrites. Event-sourced</text>
+  <text x="145" y="312" font-size="20" fill="#111827">systems handle change by adding new event types or new projections, alongside what already runs.</text>
+
+  <text x="120" y="385" font-size="16" font-weight="bold" fill="#6B7280" letter-spacing="1">WHAT IT ENABLES</text>
+
+  <rect x="120" y="405" width="333" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="140" y="435" font-size="18" font-weight="bold" fill="#111827">New fields, no migration</text>
+  <text x="140" y="465" font-size="15" fill="#6B7280">Add a new event field. The old</text>
+  <text x="140" y="485" font-size="15" fill="#6B7280">events keep working. No</text>
+  <text x="140" y="505" font-size="15" fill="#6B7280">downtime. No data backfill.</text>
+
+  <rect x="473" y="405" width="333" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="493" y="435" font-size="18" font-weight="bold" fill="#111827">New integrations, no risk</text>
+  <text x="493" y="465" font-size="15" fill="#6B7280">A new partner needs our data?</text>
+  <text x="493" y="485" font-size="15" fill="#6B7280">They subscribe to events. The</text>
+  <text x="493" y="505" font-size="15" fill="#6B7280">core system doesn't change.</text>
+
+  <rect x="826" y="405" width="334" height="110" rx="8" fill="#F9FAFB" stroke="#E5E7EB"/>
+  <text x="846" y="435" font-size="18" font-weight="bold" fill="#111827">Avoid the big-bang project</text>
+  <text x="846" y="465" font-size="15" fill="#6B7280">No more 18-month "version 2"</text>
+  <text x="846" y="485" font-size="15" fill="#6B7280">rewrites. Evolution happens in</text>
+  <text x="846" y="505" font-size="15" fill="#6B7280">weekly, not annual, increments.</text>
+
+  <rect x="120" y="555" width="1040" height="105" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+  <text x="145" y="585" font-size="16" font-weight="bold" fill="#92400E" letter-spacing="1">CONCRETE EXAMPLE</text>
+  <text x="145" y="615" font-size="18" fill="#111827" font-style="italic">"We added a new revenue category mid-year. In the old system, that would have been a database</text>
+  <text x="145" y="640" font-size="18" fill="#111827" font-style="italic">migration affecting 12 reports. With events, it was a new projection. Done in a sprint, no downtime.&quot;</text>
+
+  <text x="1160" y="700" font-size="14" fill="#9CA3AF" text-anchor="end">Slide 7 of 12</text>
+</svg>
