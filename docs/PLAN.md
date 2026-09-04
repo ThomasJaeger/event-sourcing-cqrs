@@ -233,7 +233,16 @@ The reference implementation is done when:
 3. `docker compose -f docker/docker-compose.yml up`, then the hosts started per the README, followed by browser navigation produces a working UI within five minutes of clone.
 4. The README maps every chapter to its code.
 5. The chapter-to-code map document covers every pattern in the book.
-6. The manuscript and the code agree, including the chapters the book grows to teach access control and multi-tenancy; the parallel book-repo planning scopes that growth against the locked foundation design.
+6. The manuscript and the code agree, on the surfaces the manuscript depicts. Two topics this
+   implementation ships are scoped deliberately rather than by omission, ruled 2026-09-04.
+   Multi-tenancy is taught in the book, inside Chapter 13's CQRS material rather than in a chapter
+   of its own, and the shared-schema discriminator the code implements is the shape that chapter
+   describes. Access control is not taught: the book carries no role-based-access material, the
+   implementation ships RBAC anyway because a multi-tenant system without it would be a poor
+   reference, and the two are not in disagreement because the manuscript makes no claim about it.
+   An earlier wording of this criterion required "the chapters the book grows to teach access
+   control and multi-tenancy". Those chapters were never planned and will not be written, so the
+   clause could not be satisfied by any event and has been replaced by what is true.
 7. ADRs document the major architectural choices.
 8. v1.0.0 is tagged on GitHub.
 9. All four event store adapters pass the same test suite.
