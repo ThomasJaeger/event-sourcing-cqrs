@@ -14,6 +14,13 @@ The codebase already holds a safe rebuild primitive. PerTenantProjectionRebuilde
 
 The order-throughput read model is the gap. Its table read_models.order_throughput is tenant-discriminated by a composite primary key of tenant_id and second_utc, and its projection participates in the shared global checkpoint mechanism like every other projection. PostgresOrderThroughputStore is the one tenant-scoped store that does not implement ITenantResettable. It carries instead a TruncateAsync that drops every bucket for every tenant, wired as a no-op placeholder with zero callers anywhere in the source tree. Its contract comment promises the method empties the table for a replay; the implementation returns a completed task and empties nothing.
 
+**This Context describes the state before this ADR was carried out, and two of its clauses are no
+longer true of the code.** `PostgresOrderThroughputStore` implements `ITenantResettable` now, and
+`TruncateAsync` is absent from both `IOrderThroughputStore` and the adapter. Both changes are this
+ADR's own Decision and Consequences taking effect, so the record is intact and is deliberately left
+as written. The note exists because a reader grepping for either clause would otherwise find a hit
+here and read a superseded state as a current one.
+
 ## Decision
 
 The Replay Tool rebuilds one tenant at a time through the existing PerTenantProjectionRebuilder. The throughput store joins the established safe path: PostgresOrderThroughputStore implements ITenantResettable.ResetTenantAsync to clear one tenant's buckets, and the tool drives the rebuilder against the throughput projection. The rebuilder's checkpoint-neutral construction gives the safety property by structure: the real global checkpoint never moves during a rebuild, the blast radius is one tenant, and a failure mid-rebuild recovers on a clean re-run because reset-then-replay is idempotent over the read model's upsert key.
