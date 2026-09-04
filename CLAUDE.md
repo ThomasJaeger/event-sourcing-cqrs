@@ -26,7 +26,7 @@ schema differ on purpose.
 
 ## Attribution convention
 
-Commit messages, session log content, and doc-edit prose in this repository carry no Co-Authored-By or other Claude / Anthropic attribution. The AI-assistance pattern is internal to the working model, not a public artifact. Historical commits carrying attribution stay as-is; enforcement is forward-only.
+Commit messages and doc-edit prose in this repository carry no Co-Authored-By or other Claude / Anthropic attribution, and no exception is made for any reason. The AI-assistance pattern is internal to the working model, not a public artifact. This applies to the whole history, not only to new commits: the twenty-four early commits that carried attribution were rewritten out before the repository was published.
 
 ## What "good" looks like in this repository
 
