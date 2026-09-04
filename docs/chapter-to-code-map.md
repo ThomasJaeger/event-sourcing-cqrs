@@ -31,4 +31,6 @@ A reader who finds no code for a chapter has not found a hole. The implementatio
 
 Two of Chapter 8's sections are catalogues of patterns rather than descriptions of this system. Its uniqueness section works through six techniques and this implementation uses none of them, having no uniqueness rule that spans aggregates. Its sensitive-data section works through crypto-shredding, and no event here carries personal data to shred. Chapter 17 describes five operator tools and four ship, in `src/Hosts/AdminConsole/`.
 
+Three of Chapter 16's sections describe practices this suite does not run. **Mutation testing** is taught and not adopted: no package reference, no configuration file and no CI step exist for it anywhere, and the only mention left in the tree is ADR 0003, which pinned a test-framework version on the expectation of adopting it. **Performance testing** and **chaos and failure injection** each get a section and neither has a project; the thirteen test projects are correctness suites. The chapter teaches them as practices a team should have, which is a different claim from this repository having them.
+
 None of that is drift. A chapter that catalogues six approaches is not claiming this system implements six, and a reference implementation that built every pattern its book describes would be a worse teaching artifact for the sprawl.
