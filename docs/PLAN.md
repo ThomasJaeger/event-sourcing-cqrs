@@ -26,7 +26,11 @@ fifty-four records in `docs/adr/` for why each decision went the way it did.
 - KurrentDB via gRPC client (the specialized path)
 - DynamoDB with conditional writes on the version attribute (the managed-cloud path)
 
-Configuration switches between them with no domain-code changes.
+Configuration switches between them with no domain-code changes. That holds for the two hosts
+that compose an event store and serve the application, Api and Workers. The AdminConsole is the exception and refuses to compose on any
+engine but PostgreSQL: its three read-side ports are hand-rolled PostgreSQL, and it fails at
+startup with the provider named rather than booting green and failing at the first click.
+`src/Hosts/AdminConsole/Program.cs` carries the refusal and the reasoning.
 
 **Projection trigger mechanisms.** One per event store, demonstrating the trade-offs:
 - Polling and LISTEN/NOTIFY for PostgreSQL
