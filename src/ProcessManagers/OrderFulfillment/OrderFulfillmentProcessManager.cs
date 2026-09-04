@@ -11,7 +11,7 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 // fan-out's CommandOutcome rather than from InventoryReserved. That is why a
 // reservation result lands here as a ReservationSucceeded or ReservationFailed PM
 // event rather than an observed domain event; the information-flow divergence
-// from Chapter 10 is a Track A flag.
+// from Chapter 10 is a recorded manuscript divergence.
 //
 // Commit 20 ships the state machine and the transition vocabulary. The handler
 // that drives it (the four IProcessManagerHandler implementations, the per-line

@@ -1,7 +1,7 @@
 -- migrations/0001_initial_event_store.sql
 -- Chapter 8: Event Store schema (Figure 8.2) and Outbox Pattern (Figure 8.4).
 -- Divergences from the figures are recorded in
--- docs/sessions/0002-weeks3-4-postgres-adapter.md as Track A flags 1-10.
+-- the reconciliation pass against the book's Chapter 8 figures.
 -- PostgreSQL 16 syntax exclusive: IDENTITY columns, STORED generated columns, JSONB.
 
 CREATE SCHEMA event_store;
@@ -54,7 +54,7 @@ CREATE TABLE event_store.outbox (
 
 -- Partial index on outbox_id (not on sent_utc) so the processor scans
 -- pending rows in FIFO order without indexing a column that is always
--- NULL within the filter. Figure 8.4 has this inverted; Track A flag 9.
+-- NULL within the filter. Figure 8.4 has this inverted; a recorded manuscript divergence.
 CREATE INDEX ix_outbox_pending
     ON event_store.outbox (outbox_id)
     WHERE sent_utc IS NULL;

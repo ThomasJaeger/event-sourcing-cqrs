@@ -36,7 +36,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 // takes no current-tenant accessor and no statement here names a tenant, so covering one is a
 // production change rather than a test change.
 //
-// Three of the five defect shapes session log 0065 names are inapplicable by construction here
+// Three of the five defect shapes the read-side tenant-key arc names are inapplicable here
 // rather than absent, and two are applicable in mechanism and intended in effect.
 //
 //   Inapplicable by construction:

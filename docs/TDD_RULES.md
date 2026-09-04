@@ -1,9 +1,8 @@
 # TDD Working Rules: Event Sourcing & CQRS Reference Implementation
 
-These rules govern how Claude.ai (analysis/directives) and Claude Code (execution) apply
-Test-Driven Development to this repository. They extend, and never override, the existing
-working rules (propose before writing, stop and ask before deviating, build green between
-steps, log cross-track flags, implementation wins over manuscript). TDD is the default for
+These rules govern how Test-Driven Development is applied in this repository. They extend,
+and never override, the working rules in CLAUDE.md: propose before writing, stop and ask
+before deviating, build green between steps, and the code wins over the manuscript. TDD is the default for
 behavior. It is not a blanket mandate for every file.
 
 ---

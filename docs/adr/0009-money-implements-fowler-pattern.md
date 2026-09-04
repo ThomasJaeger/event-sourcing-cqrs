@@ -14,7 +14,7 @@ Phase 4 ships Payment, which carries monetary amounts through authorization, cap
 
 Martin Fowler's `Money` pattern from *Patterns of Enterprise Application Architecture* covers this surface: a typed `Currency`, currency-aware operations that throw on mismatch, allocation that distributes minor-unit remainders deterministically, comparison operators alongside arithmetic, and `IsNegative` / `IsZero` predicates that read like domain vocabulary.
 
-The reference implementation is leading the manuscript on this decision. Chapters 7 and 9 currently depict a `Money` shape closer to the pre-Phase-4 record. The divergence is recorded as Track A flags for a Phase 17 manuscript reconciliation pass.
+The reference implementation is leading the manuscript on this decision. Chapters 7 and 9 currently depict a `Money` shape closer to the pre-Phase-4 record. The divergence is recorded for a Phase 17 manuscript reconciliation pass.
 
 ## Decision
 
@@ -40,7 +40,7 @@ The reference implementation is leading the manuscript on this decision. Chapter
 - The empty-string-Currency identity hack disappears. `Order.Total` for an empty order returns `Money.Zero(Currency.USD)`. The empty-order invariant lives at `Order.Place` time; transient empty-Total state is bounded to the draft window.
 - The exception type on currency mismatch changes from `InvalidOperationException` to `DomainException`, aligning `Money` with the project's invariant-violation convention. No existing test asserts on the prior exception type.
 - `Money.Allocate` and `Money * decimal` fix the minor-unit rounding policy via the precision table. A currency operationally important to the system that is not in the precision table gets a 2-decimal default, which is wrong for currencies like JPY (0) or BHD (3). The default behavior is safe for the common case and visible for the uncommon case via the trigger conditions below.
-- Ch 7's `Money` code block and Ch 9's BankAccount code block diverge from the shipped `Money`. Track A flags A through E capture the specific reconciliation surface.
+- Ch 7's `Money` code block and Ch 9's BankAccount code block diverge from the shipped `Money`. Divergences A through E below capture the specific reconciliation surface.
 
 ## Trigger for revisiting
 

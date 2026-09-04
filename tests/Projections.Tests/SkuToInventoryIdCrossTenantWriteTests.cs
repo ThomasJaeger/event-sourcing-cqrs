@@ -15,7 +15,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 //
 // One table, read_models.sku_to_inventory_id, created by migration 0009 keyed on the sku alone,
 // given the discriminator column by 0017, and keyed (tenant_id, sku) by 0018. Its four statements
-// were enumerated against the five defect shapes session log 0065 names and match none of them:
+// were enumerated against the five defect shapes the read-side tenant-key arc names and match none:
 // RecordAsync names the tenant in its column list and conflicts on a target that carries it,
 // GetInventoryIdAsync carries the tenant predicate, ResetTenantAsync carries it too, and
 // TruncateAsync is whole-table by design as the rebuild primitive. So these facts add coverage

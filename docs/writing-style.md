@@ -1,13 +1,11 @@
 # Writing style
 
 The authoritative writing rules for this repository. They govern anything produced here: chat
-prose, code comments, ADRs, commit messages, session logs, and every governing document.
+prose, code comments, ADRs, commit messages, and every governing document.
 
-This document is a port of the book repository's `HANDOFF.md` "VOICE RULES (strict)" section,
-which is the authored original and stays the upstream copy. It replaced a tracked third-party
-video transcript that had served as the style source, which was removed because material of that
-kind does not ship in a public repository. Where this file and the book's section disagree, the
-book's is the one that was authored and this one is the copy that drifted.
+These rules are the author's, applied to this repository's own prose. They are not a general
+style guide and they are not up for debate inside a contribution; they exist so that everything
+written here reads as one voice.
 
 ## Cuts, never use in prose
 
@@ -53,5 +51,4 @@ book's is the one that was authored and this one is the copy that drifted.
 
 ## What this file is not
 
-It is not a source of prose to imitate. It is a list of rules to apply. A document that shipped
-someone else's writing as the model is what this replaced.
+It is not a source of prose to imitate. It is a list of rules to apply.

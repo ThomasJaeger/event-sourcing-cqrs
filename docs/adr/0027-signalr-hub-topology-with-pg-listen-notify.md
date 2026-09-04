@@ -41,7 +41,7 @@ SignalR groups are named per the resource shape:
 - `admin:metrics` for the admin dashboard broadcast.
 - `customer:{customerId}` reserved but unused in v1. The customer-tracking dashboard subscribes per-order rather than per-customer; multi-subscription patterns ("track all my orders") are Phase 17 polish per born-at-consumer discipline.
 
-Per Chapter 13 §19h SaaS dashboard topic shape (`tenant:{id}:mrr`) and §19i customer dashboard topic shape (`order:{id}:updated`). Per-resource groups scale better than broadcast-and-client-filter at high subscriber counts and align with the manuscript's named pattern. The phase-8-readiness doc named broadcast-and-filter as simpler at v1's expected scale; per ADR 0025, the manuscript-aligned pattern is the production-grade choice and ships.
+Per Chapter 13 §19h SaaS dashboard topic shape (`tenant:{id}:mrr`) and §19i customer dashboard topic shape (`order:{id}:updated`). Per-resource groups scale better than broadcast-and-client-filter at high subscriber counts and align with the manuscript's named pattern. Broadcast-and-client-filter was considered and is simpler at v1's expected scale; per ADR 0025, the manuscript-aligned pattern is the production-grade choice and ships.
 
 The publisher's `ResourceId` field maps directly to the resource portion of the group name: an envelope with `ProjectionName: "OrderDetail"` and `ResourceId: "{orderId}"` routes to `order:{orderId}`; an envelope with `ProjectionName: "InventoryDashboard"` and `ResourceId: "{sku}"` routes to `inventory:{sku}`. The hub's broadcast site holds the projection-name-to-group-prefix mapping; the publisher knows only the resource ID, not the group syntax.
 
@@ -49,7 +49,7 @@ The publisher's `ResourceId` field maps directly to the resource portion of the 
 
 On hub connect (and reconnect after a drop), the Blazor page first calls the existing query handler for authoritative state, then subscribes to the resource's group and processes notifications as they arrive. No client-side watermark deduplication. The notification → re-query pattern is naturally idempotent: re-query returns current state regardless of whether a notification was a duplicate, missed, or out-of-order.
 
-Per Chapter 13 `ch13_dashboards_enduser_client_code`'s `onopen` handler triggering a full REST fetch. The phase-8-readiness doc's open question on watermark deduplication resolves to "no, the existing query handler is the watermark."
+Per Chapter 13 `ch13_dashboards_enduser_client_code`'s `onopen` handler triggering a full REST fetch. The open question on watermark deduplication resolves to "no, the existing query handler is the watermark."
 
 The hub itself has no buffer of recent notifications, no sequence numbers, no replay protocol. Notifications missed during a connection drop are recovered through the page's re-query on reconnect, not through hub-side state.
 
@@ -105,7 +105,7 @@ Three alternatives to the LISTEN/NOTIFY carrier were considered and rejected on 
 
 - Structured logging at the publisher's emission site and the hub's receipt site provides the operational audit trail for notification delivery. The notification-only-push design (Chapter 13 §19b tier 3b) means notifications carry data directly with no backing table; a separate audit table would double the write per projection commit for content that structured logging discharges equivalently. Operator-facing observability follows the codebase's existing structured-logging pattern (correlation IDs flowing through where the underlying event carries them).
 
-- Track A flag against Chapter 13's `ch13_dashboards_saas_query_code` and `ch13_dashboards_enduser_server_code`, which use raw `WebSocket` rather than SignalR. The reference implementation ships SignalR per PLAN.md; manuscript reconciliation at Phase 17 (F-0012-A).
+- Manuscript divergence against Chapter 13's `ch13_dashboards_saas_query_code` and `ch13_dashboards_enduser_server_code`, which use raw `WebSocket` rather than SignalR. The reference implementation ships SignalR per PLAN.md; manuscript reconciliation at Phase 17 (F-0012-A).
 
 - The `projection_committed` channel is a convention, not a schema artifact. No migration ships for Cluster 1.
 

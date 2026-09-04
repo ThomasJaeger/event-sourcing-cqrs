@@ -30,8 +30,6 @@
 #   Source files are out of scope. A line number into a .cs file goes stale the same
 #   way, but the working-pattern rule this script enforces is about documents, and
 #   several ADRs cite adapter code by line deliberately.
-#   docs/sessions/ is excluded, because session logs are immutable history and a
-#   citation inside one records what was true when it was written.
 #   This file is excluded too, and the exclusion is the file rather than any line in
 #   it. A checker that documents the pattern it matches carries example citations in
 #   its own comments, so it reports itself; exempting the one line that trips it today
@@ -76,7 +74,7 @@ fi
 # The status is captured rather than discarded. An if-condition is exempt from set -e,
 # so the capture needs no set +e around it and leaves no window where a failure passes.
 if hits=$(git grep -nE '[A-Za-z0-9_./-]+\.md:[0-9]+|ADR [0-9]{4}:[0-9]+' \
-    -- . ':!docs/sessions' ':!scripts/check-plan-citations.sh'); then
+    -- . ':!scripts/check-plan-citations.sh'); then
     status=0
 else
     status=$?

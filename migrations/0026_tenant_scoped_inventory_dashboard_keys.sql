@@ -81,7 +81,7 @@
 -- the current corpus. What holds instead is that the two forms cannot collide, since at most one of
 -- two distinct tenants is the default.
 --
--- Correction: session log 0021 records this boundary as already closed. It says "the
+-- Correction: the tenant-scoping arc records this boundary as already closed. It says "the
 -- inventory_dashboard updates key on inventory_id, whose primary key migration 0018 left unchanged
 -- (0018 swapped only the sku uniqueness to the composite), so those updates still match at most one
 -- row and cannot cross the tenant boundary". Matching at most one row is not the same as matching

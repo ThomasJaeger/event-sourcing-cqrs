@@ -21,7 +21,7 @@ C# 14, which ships with .NET 10, introduces extension members, partial construct
 
 Pin the reference implementation to .NET 10 LTS via `global.json` with `rollForward: latestFeature`. Use C# 14 features where they make patterns clearer.
 
-Update the manuscript Track A to reflect .NET 10 / C# 14:
+Update the manuscript to reflect .NET 10 / C# 14:
 
 - Replace ".NET 8 LTS" with ".NET 10 LTS" in Part 4 Technology Choices.
 - Replace "C# 12" with "C# 14" in Part 4 Technology Choices and Part 5 Resources.
@@ -37,6 +37,6 @@ Update the manuscript Track A to reflect .NET 10 / C# 14:
 
 ## Reconciliation
 
-The Track A manuscript update was completed in April 2026, ahead of Phase 17. Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters were updated in a single Track A pass. The manuscript and the implementation now agree on .NET 10 / C# 14.
+The manuscript update was completed in April 2026, ahead of Phase 17. Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters were updated in a single manuscript pass. The manuscript and the implementation now agree on .NET 10 / C# 14.
 
 The Phase 17 reconciliation step in PLAN.md no longer carries this item. Other reconciliation work that accumulates during Phases 2-16 is still owed in Phase 17.

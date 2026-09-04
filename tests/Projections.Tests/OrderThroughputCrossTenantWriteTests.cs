@@ -16,7 +16,7 @@ namespace EventSourcingCqrs.Projections.Tests;
 //
 // One table, read_models.order_throughput, created by migration 0021 already keyed
 // (tenant_id, second_utc) and unchanged since. This family carries none of the five defect shapes
-// session log 0065 names, so these facts add coverage rather than pinning a repair.
+// the read-side tenant-key arc names, so these facts add coverage rather than pinning a repair.
 //
 // Two of the three read back as the acting tenant, which the isolation property never does. That
 // property digests the owning tenant's rows across the act, so what it answers is whether the

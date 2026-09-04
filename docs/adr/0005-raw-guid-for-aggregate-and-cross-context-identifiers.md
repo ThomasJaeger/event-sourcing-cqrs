@@ -36,7 +36,7 @@ Within-aggregate identifiers (such as `LineId` inside `OrderLine`) also use raw 
 - `AggregateRoot.Id` and `EventMetadata.AggregateId` stay `Guid`. No generic introduced. No per-aggregate typed Id accessor pattern emerges.
 - Type confusion at compile time (passing a `CustomerId`-shaped `Guid` where an `OrderId` was expected) remains possible. Domain validators and command-handler tests are the safety net, not the type system.
 - The codebase stays readable as a Ch 9-style study text. Readers comparing the book's Order aggregate code block to the repo see the same `Guid` shape. The cluster-12 manuscript reconciliation that normalized `OrderPlaced` to 4-arg shape (`OrderId, CustomerId, Money Total, PlacedUtc`, all primitive or value-typed) survives without further reconciliation.
-- Ch 7's typed-wrapper prose (line 604 in the current extract) remains accurate as general DDD advocacy. It does not claim this reference implementation uses the pattern; the absence of the pattern in the code is now made explicit by this ADR and can be cross-linked from Ch 7 if a future Track A pass chooses to.
+- Ch 7's typed-wrapper prose (line 604 in the current extract) remains accurate as general DDD advocacy. It does not claim this reference implementation uses the pattern; the absence of the pattern in the code is now made explicit by this ADR and can be cross-linked from Ch 7 if a future manuscript pass chooses to.
 - The pedagogical cost is real: a reader who finishes Ch 7 wanting to see a typed-wrapper example will not find one in this reference implementation. The book may want to point that reader to an external resource or a non-canonical pedagogical snippet if Ch 7 is reworked to be explicit.
 
 ## Trigger for revisiting
@@ -45,6 +45,6 @@ The decision to keep raw `Guid` is reversible. Conditions that would justify reo
 
 - A domain bug whose root cause is identifier confusion (a `CustomerId`-shaped `Guid` passed where an `OrderId` was expected, surviving validators and tests). The bug's existence would shift the cost-benefit toward typed wrappers.
 - A Phase 15 type-safety pass that takes wrappers as part of a broader refactor (for example, alongside the snapshot-versioning work). Bundling a wrapper migration into a larger type-safety session amortizes the cross-codebase churn.
-- A strong manuscript-reconciliation argument that typed wrappers should ship for pedagogical reasons (Ch 7 reworked to depict the pattern in worked code rather than as abstract advocacy). This would be a Track A decision that flows back to a code session.
+- A strong manuscript-reconciliation argument that typed wrappers should ship for pedagogical reasons (Ch 7 reworked to depict the pattern in worked code rather than as abstract advocacy). That would be a manuscript decision that flows back into the code.
 
 A wrapper refactor, if undertaken, is its own session. The work touches `AggregateRoot` (decide between generic `AggregateRoot<TId>` or per-aggregate typed accessors over a `Guid` base), all event payloads, all command records, all handlers, all tests, `EventMetadata`/`EventEnvelope` decisions, repository signatures, and infrastructure adapter boundaries. It does not fit as a sub-commit of an unrelated phase.

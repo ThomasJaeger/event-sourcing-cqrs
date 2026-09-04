@@ -4,11 +4,11 @@ This document defines the scope and sequence for building the reference implemen
 
 This is a Path 1 plan: the implementation matches the book's full Part 4 commitments. Four event stores as first-class peers (PostgreSQL hand-rolled, SQL Server hand-rolled, KurrentDB, DynamoDB), five aggregates across five bounded contexts, two process managers, four user-facing projections, full hexagonal layout, Blazor and JSON API, AdminConsole tools, and the test patterns from Chapter 16.
 
-This is a solo build with Claude Code on the Max plan, run as an ordered sequence of phases. The authentication-and-authorization and multi-tenancy foundation phases, and the live-dashboards-completion phase (net of the Phase 8 work already delivered), were inserted ahead of the original downstream phases (AdminConsole through documentation). That insertion expands the original plan and is a real impact on the submission timeline, stated rather than absorbed silently.
+The build ran as an ordered sequence of phases. The authentication-and-authorization and multi-tenancy foundation phases, and the live-dashboards-completion phase (net of the Phase 8 work already delivered), were inserted ahead of the original downstream phases (AdminConsole through documentation). That insertion expands the original plan and is a real impact on the submission timeline, stated rather than absorbed silently.
 
 **How to read a phase section.** Each phase section records what that phase set out to build at the time it was written. A completed phase's goals are a record of intent rather than a description of what currently ships, and the two can diverge without either being wrong. What currently ships is read from the code, with `docs/ARCHITECTURE.md` as the routing document for finding it.
 
-This document is a living plan. Update the build log weekly with what was actually built, what changed, and what surprised you; the phase sections keep the intent they were written with. By the end of the build that log is itself launch-period content.
+The phases are complete. Each section stays as written, because code comments throughout this repository cite these goals and done-whens by name as the requirement they satisfy.
 
 ---
 
@@ -134,7 +134,7 @@ These decisions are made. Do not revisit unless something fundamental breaks.
 | Authorization model | Permission-based; command authz as a pipeline behavior, query and read authz as row filtering, subscription authz as a resource-ownership check, identity from a real principal | RBAC and multi-tenancy foundation |
 | TenantId type | Typed wrapper, a security-justified exception to the raw-Guid convention (amends ADR 0005's scope) | RBAC and multi-tenancy foundation |
 
-The manuscript and the implementation agree on .NET 10 / C# 14 as of April 2026. The Track A pass updated Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters. ADR 0001 in this repo records the original deviation and is now closed at superseded-by-manuscript status.
+The manuscript and the implementation agree on .NET 10 / C# 14 as of April 2026. The manuscript pass updated Part 4 Technology Choices, Part 5 Resources, and the cross-references in other chapters. ADR 0001 in this repo records the original deviation and is now closed at superseded-by-manuscript status.
 
 ---
 
@@ -209,7 +209,7 @@ The solution layout reflects the manuscript's Part 4 description.
 /migrations             // SQL migrations applied in order
 /docs                   // README, plan, build log, ADRs, chapter-to-code map
 /docker                 // docker-compose.yml for the four backing services
-/scripts                // manifest.sh
+/scripts                // check-plan-citations.sh
 ```
 
 The folder names map to chapters. Domain shows Chapters 7 and 9. Application shows Chapters 8 and 13. ProcessManagers shows Chapter 10. Projections shows Chapter 13. Infrastructure shows Chapter 8 plus parts of 11, 12, 17. AdminConsole shows Chapter 17. Migration shows Chapter 18.
@@ -546,13 +546,11 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 - Chapter-to-code map document: every pattern in the book, where its code lives, in a single navigable index.
 - Architecture decision records (ADRs) for every significant choice: hexagonal layout, four event stores, hand-rolled vs Marten, in-process bus vs distributed messaging, PostgreSQL read models only, etc.
 - Manuscript reconciliation: walk through every chapter that references the reference implementation. Confirm references match what was actually built. Update manuscript where reality diverged. Update sample chapters if needed.
-- Build log finalized.
 - Code cleanup: TODO comments resolved or tracked.
 - Final test run, full coverage report.
 - Tag v1.0.0 release on GitHub.
-- Update proposal package's supplementary materials description with the GitHub URL and a brief summary of what is in the repo.
 
-**Note on prior reconciliation work.** The .NET 10 / C# 14 manuscript update was completed in Track A in April 2026, ahead of Phase 17. ADR 0001 in this repo records the decision and its closure. Phase 17 reconciliation focuses on whatever divergences accumulate during Phases 2-16.
+**Note on prior reconciliation work.** The .NET 10 / C# 14 manuscript update was completed in April 2026, ahead of Phase 17. ADR 0001 in this repo records the decision and its closure. Phase 17 reconciliation focuses on whatever divergences accumulate during Phases 2-16.
 
 **Out of scope.**
 - Marketing copy in the README. Keep it factual and useful.
@@ -560,40 +558,6 @@ Retired in Phase 11: the runtime hub was replaced by in-process notification dis
 **Done when.**
 - A reader who has never seen the project can clone it, run it, and find the code for any chapter within five minutes.
 - The manuscript and the code agree.
-- The proposal is ready to send to Pearson.
-
----
-
-## Working with Claude Code
-
-The Max plan supports the work, but a few habits make sessions more productive.
-
-**Start each session with the right context.** Load CLAUDE.md and this plan into the conversation. Identify the current phase and what is in scope for it. Tell Claude Code explicitly: "We are working on Phase N. Scope is Y. Do not pull patterns from later phases." This prevents drift.
-
-**Bring the relevant chapter into context.** Each phase corresponds to one or two chapters. When starting Phase 5 (process managers), have Chapter 10 available. When starting Phase 15 (versioning and snapshots), have Chapters 11 and 12 available. The book's specific patterns belong in Claude Code's working memory while you build.
-
-**Do not let scope expand within a phase.** Each phase has a done-when criterion. When the criterion is met, stop. Do not let "while we're here" additions creep in. The next phase is two weeks away; the work will fit there.
-
-**End sessions deliberately.** Token usage on the Max plan is generous but not unlimited. Long idle conversations consume context without producing work. End a session when work pauses; start a fresh one when you return.
-
-**Update the build log weekly.** End each week (or each phase) by appending a short note to the build log: what got built, what changed, what surprised you. Ten minutes of writing per week becomes hours of valuable launch content by the end of the build.
-
-**Commit small.** Commit per logical unit of work, not per phase. Small commits make Claude Code sessions easier to recover from and make the eventual book-to-code references precise.
-
----
-
-## Build log
-
-### Phase 1
-*To be filled in.*
-
-### Phase 2
-*To be filled in.*
-
-### Phase 3
-*To be filled in.*
-
-(Continue per phase.)
 
 ---
 
@@ -628,19 +592,10 @@ The reference implementation is done when:
 7. ADRs document the major architectural choices.
 8. v1.0.0 is tagged on GitHub.
 9. All four event store adapters pass the same test suite.
-10. The proposal package's supplementary materials description references the actual GitHub URL.
+10. The repository is public at the URL the book gives its readers.
 11. No query, command, subscription, or projection reaches production without a cross-tenant isolation test, enforced structurally so a registered type that lacks coverage fails the suite.
 
-When all eleven are true, the proposal goes to Pearson.
+When all eleven are true, v1 is done.
 
 ---
 
-## After submission
-
-The work does not end at v1.0.0. While Pearson reviews, the implementation continues to evolve in two ways.
-
-**Defects and small improvements** that surface during the review get fixed promptly. Each fix is a commit, a small test addition, and possibly a small manuscript edit.
-
-**Extension content for launch.** Companion blog posts, conference talk material, workshop curriculum, and the executive decks all draw on the implementation. The repo becomes the living center of the marketing plan.
-
-The implementation is the book's anchor for years. Treat it as a long-lived asset, not a one-time deliverable.

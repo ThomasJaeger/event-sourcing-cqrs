@@ -10,19 +10,23 @@ This is a production-grade reference implementation. Readers clone it, run it, s
 
 ## Source-of-truth hierarchy
 
-The reference implementation source code in this repository is the highest-priority source of truth for the book at ~/Documents/GitHub/event-sourcing-cqrs-book/. When the manuscript depicts the current canonical shape of a domain type, API signature, schema column, type token, parameter name, or any other observable artifact and disagrees with the code in this repository, the code is canonical. The book gets normalized to match.
+The source code in this repository is the highest-priority source of truth for the book it
+accompanies. Where the manuscript depicts the current shape of a domain type, an API signature, a
+schema column, a type token or a parameter name and disagrees with the code, the code is canonical
+and the book is what gets normalized.
 
-Cluster work in the book repo that touches potentially-divergent surfaces verifies against this repository's code before scoping. Pre-flight reads of the manuscript are starting points; the code is authority.
+Deliberate historical-shape pedagogy in the book is exempt. Chapter 11's upcasting progression
+depicts an event evolving across schema versions, so its earliest shape is intentionally unlike the
+current code. Chapter 18's legacy-CRUD depictions are intentional for the same reason. Pedagogical
+divergence is exempt; current-state divergence is not.
 
-Deliberate historical-shape pedagogy in the book stays as-written. Ch 11's upcasting V1 to V4 progression depicts an event's evolution across schema versions; the V1 shape is intentionally divergent from the current code. Ch 18's legacy-CRUD depictions are intentional. Pedagogical divergence is exempt; current-state divergence is not.
-
-This rule applies symmetrically across both Claude Code instances and the Claude.ai planner. Same rule appears in the book repo's CLAUDE.md and HANDOFF.md.
+`docs/chapter-to-code-map.md` is the index from chapters to the code that implements them, and
+`docs/adr/0054-schema-divergences-from-the-book-figures.md` records where a figure and the shipped
+schema differ on purpose.
 
 ## Attribution convention
 
 Commit messages, session log content, and doc-edit prose in this repository carry no Co-Authored-By or other Claude / Anthropic attribution. The AI-assistance pattern is internal to the working model, not a public artifact. Historical commits carrying attribution stay as-is; enforcement is forward-only.
-
-This rule applies symmetrically across both Claude Code instances and the Claude.ai planner. Same rule appears in the book repo's CLAUDE.md and HANDOFF.md.
 
 ## What "good" looks like in this repository
 
@@ -227,7 +231,7 @@ The folder structure maps to chapters. Domain shows Chapters 7 and 9. Applicatio
 
 Never reference consulting clients, employers, or engagements by name anywhere in this repository or in chat output. The rule covers code, comments, ADRs, commit messages, PR descriptions, session logs, and documentation. When the reasoning behind a decision draws on a specific client or engagement, generalize the reference. Phrases like "a planned implementation for a real-world adopter" or "a future enterprise consumer" carry the reasoning without the name.
 
-The rule applies to all three tracks: book content (Track A), code planning (Track B), and code execution (Track C). It applies retroactively. If you notice a client name in any draft or artifact, flag it for correction before commit.
+It applies retroactively. If you notice a client name in any draft or artifact, flag it for correction before commit.
 
 Software product names (PostgreSQL, SQL Server, KurrentDB, DynamoDB, Marten) and library names (Npgsql, Microsoft.Data.SqlClient) are not client names and are fine to use.
 
@@ -281,12 +285,11 @@ Verify the abstraction holds. When working on Phase 2's SQL Server adapter and P
 
 When starting a session, the relevant context lives in:
 
-1. `CLAUDE_CODE_PREAMBLE.md` for the working pattern Claude Code should follow in every session (propose before writing, stop and ask before deviating, log cross-track flags, commit per logical unit).
-2. `docs/TDD_RULES.md` for the test-first discipline (the RED-before-production-code cycle, the anti-theater enforcement, the scope where TDD is mandatory versus spike-then-stabilize versus judgment). It extends the working pattern; it does not override it.
-3. `docs/writing-style.md` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript), and it is the only source: no bullet-form restatement of the rules exists in this repository.
-4. This file (CLAUDE.md) for repo-wide rules.
-5. `docs/PLAN.md` for the current phase's scope and out-of-scope items. Its phase sections record what each phase set out to build rather than what currently ships; the code is where current state is read.
-6. `docs/ARCHITECTURE.md` for the cross-cutting decisions: what they are, how they compose, and which ADR owns each one. It routes rather than restates, so the ADR it points at is always the authority.
-7. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
+1. `docs/TDD_RULES.md` for the test-first discipline (the RED-before-production-code cycle, the anti-theater enforcement, the scope where TDD is mandatory versus spike-then-stabilize versus judgment). It extends the working pattern; it does not override it.
+2. `docs/writing-style.md` for the writing style this repository expects from anything you produce (chat prose, code comments, ADRs, commit messages, PR descriptions). The file is reference source material (a transcript), and it is the only source: no bullet-form restatement of the rules exists in this repository.
+3. This file (CLAUDE.md) for repo-wide rules.
+4. `docs/PLAN.md` for the current phase's scope and out-of-scope items. Its phase sections record what each phase set out to build rather than what currently ships; the code is where current state is read.
+5. `docs/ARCHITECTURE.md` for the cross-cutting decisions: what they are, how they compose, and which ADR owns each one. It routes rather than restates, so the ADR it points at is always the authority.
+6. The relevant book chapter or chapters for the current phase, which the human will provide in the session.
 
 Always check the plan before starting work. The plan defines what is in scope for the current phase. The chapter defines the patterns to implement.
