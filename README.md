@@ -4,8 +4,8 @@ Companion code for the book *Event Sourcing & CQRS: A Comprehensive and Practica
 Deeper Insights in Your Software Solutions* by Thomas Jaeger.
 
 This is a production-grade reference implementation, not a sample. It exists to be cloned,
-run, read, and adapted, including for commercial services. It is under active development and
-will be tagged v1.0.0 alongside the book.
+run, read, and adapted, including for commercial services. It is tagged v1.0.0, the release the
+book describes, and development continues on main past the tag.
 
 ## What it demonstrates
 
