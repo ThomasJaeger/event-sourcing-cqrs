@@ -1,3 +1,5 @@
+using EventSourcingCqrs.ProcessManagers.OrderFulfillment;
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Application.Commands.Billing;
@@ -121,6 +123,8 @@ if (eventStoreProvider is EventStoreProvider.Kurrent or EventStoreProvider.Dynam
     builder.Services.AddPostgresSnapshotStore(readModelConnectionString);
 }
 builder.Services.AddApplication();
+builder.Services.AddSingleton<IProcessManagerEventTypeProvider, OrderFulfillmentEventTypeProvider>();
+builder.Services.AddScoped<IOrderCancellationGuard, OrderCancellationGuard>();
 builder.Services.AddReadModels(opts =>
     opts.ConnectionString = readModelConnectionString);
 

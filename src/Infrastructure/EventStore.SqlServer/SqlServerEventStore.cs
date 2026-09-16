@@ -58,6 +58,17 @@ public sealed class SqlServerEventStore : IEventStore
         _pipeline = pipeline;
     }
 
+    public async Task<bool> HasCommittedCommandAsync(StreamId streamId, string key, CancellationToken ct)
+    {
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var command = new SqlCommand(
+            "SELECT TOP (1) 1 FROM event_store.events WHERE stream_id = @stream " +
+            "AND CONVERT(varbinary(max), JSON_VALUE(metadata, '$.idempotency_key')) = CONVERT(varbinary(max), @key)", connection);
+        command.Parameters.AddWithValue("@stream", streamId.Value);
+        command.Parameters.AddWithValue("@key", key);
+        return await command.ExecuteScalarAsync(ct) is not null;
+    }
+
     public async Task AppendAsync(
         StreamId streamId,
         int expectedVersion,

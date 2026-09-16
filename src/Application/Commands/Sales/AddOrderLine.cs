@@ -11,7 +11,7 @@ public sealed record AddOrderLine(
     Guid LineId,
     string Sku,
     int Quantity,
-    Money UnitPrice) : IAuthorizedCommand
+    Money UnitPrice) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.ManageOrderLines;
 }
@@ -33,6 +33,7 @@ public sealed class AddOrderLineHandler : ICommandHandler<AddOrderLine>
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<AddOrderLine>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.AddLine(command.LineId, command.Sku, command.Quantity, command.UnitPrice, utcNow);
         await _repository.SaveAsync(order, ct);

@@ -54,9 +54,14 @@ public sealed class PostgresCheckpointStore : ICheckpointStore
         var npgsqlTransaction = (NpgsqlTransaction)transaction;
         await using var cmd = npgsqlTransaction.Connection!.CreateCommand();
         cmd.Transaction = npgsqlTransaction;
+        // Establish and lock the checkpoint even on the first delivery. The lock is held
+        // through the read-model mutation and checkpoint commit, so two consumers cannot
+        // both apply the same event after reading the same old position.
         cmd.CommandText =
+            "INSERT INTO read_models.projection_checkpoints (projection_name, position) " +
+            "VALUES (@projection_name, 0) ON CONFLICT DO NOTHING; " +
             "SELECT position FROM read_models.projection_checkpoints " +
-            "WHERE projection_name = @projection_name";
+            "WHERE projection_name = @projection_name FOR UPDATE";
         cmd.Parameters.AddWithValue("projection_name", NpgsqlDbType.Text, projectionName);
 
         var result = await cmd.ExecuteScalarAsync(ct);

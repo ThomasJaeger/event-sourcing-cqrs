@@ -13,12 +13,10 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.SqlServer;
 // by outbox_id, with exponential-backoff retry and move-to-quarantine after MaxAttempts.
 // Adapter-local per ADR 0004; the PostgreSQL adapter ships its own.
 //
-// The whole batch runs inside a single transaction. Rows are claimed with
-// WITH (UPDLOCK, READPAST, ROWLOCK), the T-SQL counterpart of FOR UPDATE SKIP LOCKED: UPDLOCK
-// takes the update lock, READPAST steps over rows another claimant already holds, ROWLOCK keeps
-// the engine from escalating to a page lock and swallowing rows it should have skipped. The row
-// lock IS the claim. There is no in-flight column, and on a crash the engine releases the lock
-// and the row reverts to pending with no cleanup code.
+// Each batch holds a transaction-owned application lock shared by all processors.
+// UPDLOCK retains claimed rows until commit; ROWLOCK narrows contention. No row
+// is skipped: retry and quarantine barriers preserve global checkpoint order.
+// A crash rolls back dispatch marks and releases the locks for redelivery.
 //
 // POLLING ONLY, and the absence is the design. The PostgreSQL processor carries a second wake
 // path: a long-lived listener connection parked in WaitAsync, woken by a pg_notify trigger, with
@@ -114,6 +112,16 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
 
+        // One ordered delivery lane across workers, held until the batch commits.
+        await using (var claim = new SqlCommand(
+            "DECLARE @result int; EXEC @result = sp_getapplock " +
+            "@Resource = 'event-store-outbox-dispatch', @LockMode = 'Exclusive', " +
+            "@LockOwner = 'Transaction', @LockTimeout = 0; SELECT @result;", connection, transaction))
+        {
+            if ((int)(await claim.ExecuteScalarAsync(ct))! < 0)
+                return 0;
+        }
+
         var batch = await SelectPendingAsync(connection, transaction, nowOffset, ct);
         if (batch.Count == 0)
         {
@@ -121,8 +129,10 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
             return 0;
         }
 
+        var processed = 0;
         foreach (var row in batch)
         {
+            processed++;
             try
             {
                 await _dispatcher.DispatchAsync(HydrateMessage(row), ct);
@@ -162,17 +172,17 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
                         "AttemptCount={AttemptCount} NextAttemptAt={NextAttempt}",
                         row.OutboxId, row.EventId, row.EventType, newAttemptCount, nextAttempt);
                 }
+                // Do not advance any consumer beyond this failed event.
+                break;
             }
         }
 
         await transaction.CommitAsync(ct);
-        return batch.Count;
+        return processed;
     }
 
-    // The claim. UPDLOCK takes the update lock the batch transaction will hold; READPAST steps
-    // over rows a concurrent claimant already locked instead of blocking on them; ROWLOCK stops
-    // the engine escalating to a page lock, which would make READPAST skip rows that were never
-    // claimed. Together they are FOR UPDATE SKIP LOCKED in T-SQL, and the lock is the claim.
+    // Keep each selected row locked through the batch commit. Waiting for a
+    // locked predecessor is intentional: skipping it would violate FIFO delivery.
     private async Task<List<PendingOutboxRow>> SelectPendingAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -182,9 +192,15 @@ public sealed class SqlServerOutboxProcessor : BackgroundService
         await using var cmd = new SqlCommand(
             "SELECT TOP (@batch_size) outbox_id, event_id, event_type, payload, metadata, " +
             "attempt_count, global_position, event_version " +
-            "FROM event_store.outbox WITH (UPDLOCK, READPAST, ROWLOCK) " +
+            "FROM event_store.outbox o WITH (UPDLOCK, ROWLOCK) " +
             "WHERE sent_utc IS NULL " +
             "  AND (next_attempt_at IS NULL OR next_attempt_at <= @now) " +
+            "AND NOT EXISTS (SELECT 1 FROM event_store.outbox earlier " +
+            "WHERE earlier.sent_utc IS NULL AND earlier.outbox_id < o.outbox_id " +
+            "AND earlier.next_attempt_at > @now) " +
+            // Quarantine is an operator-visible barrier, not permission to lose an event.
+            "AND NOT EXISTS (SELECT 1 FROM event_store.outbox_quarantine q " +
+            "WHERE q.outbox_id < o.outbox_id) " +
             "ORDER BY outbox_id",
             connection,
             transaction);

@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Application.Authorization;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Access;
@@ -138,6 +139,7 @@ public static class WorkersHostFactory
         // timeout command handlers live outside the Application assembly
         // AddApplication scans, so they register explicitly.
         builder.Services.AddScoped<OrderFulfillmentCompensation>();
+        builder.Services.AddScoped<IOrderCancellationGuard, OrderCancellationGuard>();
         builder.Services.AddProcessManagerHandler<OrderFulfillmentProcessManagerHandler>();
         builder.Services.AddProcessManagerHandler<ReturnProcessManagerHandler>();
         builder.Services.AddScoped<ICommandHandler<TimeoutAwaitingPaymentForOrder>,

@@ -38,6 +38,25 @@ public sealed class SnapshottingEventStoreRepositoryTests
     private static readonly StreamId Stream =
         StreamId.ForAggregate<Order>(WellKnownTenants.Default, OrderId);
 
+    [Fact]
+    public async Task A_snapshot_cannot_hide_a_committed_command_receipt()
+    {
+        var store = new InMemoryEventStore();
+        var snapshots = new RecordingSnapshotStore();
+        var accessor = new StubCommandContextAccessor
+        {
+            Current = new StubCommandContext { IdempotencyKey = "draft-before-snapshot" }
+        };
+        var repo = new SnapshottingEventStoreRepository<Order, OrderSnapshot>(store, accessor,
+            new StubTenantAccessor { Current = WellKnownTenants.Default }, new StubCurrentVersions(),
+            snapshots, OrderSchema, NewLogger(), snapshotInterval: 1);
+        await repo.SaveAsync(Order.Draft(OrderId, CustomerId, At, "test"), default);
+        Func<Task> retry = () => repo.LoadAsync(OrderId, default);
+        await retry.Should().ThrowAsync<CommandAlreadyCommittedException>();
+        accessor.Current = null;
+        (await repo.LoadAsync(OrderId, default))!.CustomerId.Should().Be(CustomerId);
+    }
+
     // (a) A snapshot at the current schema restores the aggregate and the repository reads only the
     // tail from the snapshot's version. The restored state and Version equal a full replay.
     [Fact]

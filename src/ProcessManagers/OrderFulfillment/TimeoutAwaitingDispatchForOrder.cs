@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 
@@ -7,7 +8,7 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 // 0017): the shipment was scheduled but never dispatched. OrderId routes to the
 // PM. Routes into the same with-releases compensation a ScheduleShipment failure
 // takes (branch 4 collapses into branch 3, commit 23).
-public sealed record TimeoutAwaitingDispatchForOrder(Guid OrderId) : ICommand;
+public sealed record TimeoutAwaitingDispatchForOrder(Guid OrderId) : IOrderWorkflowCommand;
 
 public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<TimeoutAwaitingDispatchForOrder>
 {
@@ -15,17 +16,19 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
     private readonly OrderFulfillmentCompensation _compensation;
     private readonly ICommandContextAccessor _accessor;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly IEventStoreRepository<Shipment> _outcomes;
 
     public TimeoutAwaitingDispatchForOrderHandler(
         IProcessManagerRepository<OrderFulfillmentProcessManager> pms,
         OrderFulfillmentCompensation compensation,
         ICommandContextAccessor accessor,
-        ICurrentTenantAccessor tenantAccessor)
+        ICurrentTenantAccessor tenantAccessor, IEventStoreRepository<Shipment> outcomes)
     {
         _pms = pms;
         _compensation = compensation;
         _accessor = accessor;
         _tenantAccessor = tenantAccessor;
+        _outcomes = outcomes;
     }
 
     public async Task HandleAsync(TimeoutAwaitingDispatchForOrder command, CancellationToken ct)
@@ -48,6 +51,12 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
         {
             return;
         }
+
+        // An undelivered event is not a failed operation. The command pipeline
+        // holds the order lock against authorization/dispatch and cancellation.
+        var shipment = await _outcomes.LoadAsync(pm.ShipmentId, ct);
+        if (shipment is { Status: not ShipmentStatus.Scheduled })
+            return;
 
         var causing = context is null
             ? EventMetadata.ForCommand(CommandContext.System, WellKnownTenants.Default)

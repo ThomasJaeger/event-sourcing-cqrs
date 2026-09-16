@@ -14,11 +14,10 @@ namespace EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 // move-to-quarantine after MaxAttempts. Adapter-local per ADR 0004; the
 // SQL Server adapter ships a parallel implementation in its own project.
 //
-// The whole batch runs inside a single NpgsqlTransaction. Rows are
-// selected with FOR UPDATE SKIP LOCKED so accidental parallel processors
-// don't double-dispatch. The row lock substitutes for an explicit in-flight
-// column; on crash, Postgres releases the lock and the row reverts to
-// pending without cleanup code.
+// Each batch holds a transaction-scoped advisory lock shared by all processors.
+// FOR UPDATE keeps rows pending until dispatch commits; no later position may
+// overtake a retry or quarantined predecessor because projections use a global
+// checkpoint. Crashes release both locks and leave the batch retryable.
 //
 // LISTEN/NOTIFY (migration 0005) gives the processor a sub-second wake on
 // new outbox rows. A long-lived listener connection sits parked in
@@ -259,6 +258,15 @@ public sealed class OutboxProcessor : BackgroundService
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
+        // A global checkpoint requires one ordered delivery lane across workers.
+        await using (var claim = connection.CreateCommand())
+        {
+            claim.Transaction = transaction;
+            claim.CommandText = "SELECT pg_try_advisory_xact_lock(4995148773029072719)";
+            if (!(bool)(await claim.ExecuteScalarAsync(ct))!)
+                return 0;
+        }
+
         var batch = await SelectPendingAsync(connection, transaction, nowUtc, ct);
         if (batch.Count == 0)
         {
@@ -266,8 +274,10 @@ public sealed class OutboxProcessor : BackgroundService
             return 0;
         }
 
+        var processed = 0;
         foreach (var row in batch)
         {
+            processed++;
             try
             {
                 var message = HydrateMessage(row);
@@ -309,11 +319,13 @@ public sealed class OutboxProcessor : BackgroundService
                         "AttemptCount={AttemptCount} NextAttemptAt={NextAttempt}",
                         row.OutboxId, row.EventId, row.EventType, newAttemptCount, nextAttempt);
                 }
+                // Do not advance any consumer beyond this failed event.
+                break;
             }
         }
 
         await transaction.CommitAsync(ct);
-        return batch.Count;
+        return processed;
     }
 
     private async Task<List<PendingOutboxRow>> SelectPendingAsync(
@@ -327,12 +339,18 @@ public sealed class OutboxProcessor : BackgroundService
         cmd.CommandText =
             "SELECT outbox_id, event_id, event_type, payload, metadata, attempt_count, " +
             "global_position, event_version " +
-            "FROM event_store.outbox " +
+            "FROM event_store.outbox o " +
             "WHERE sent_utc IS NULL " +
             "  AND (next_attempt_at IS NULL OR next_attempt_at <= @now) " +
+            "AND NOT EXISTS (SELECT 1 FROM event_store.outbox earlier " +
+            "WHERE earlier.sent_utc IS NULL AND earlier.outbox_id < o.outbox_id " +
+            "AND earlier.next_attempt_at > @now) " +
+            // Quarantine is an operator-visible barrier, not permission to lose an event.
+            "AND NOT EXISTS (SELECT 1 FROM event_store.outbox_quarantine q " +
+            "WHERE q.outbox_id < o.outbox_id) " +
             "ORDER BY outbox_id " +
             "LIMIT @batch_size " +
-            "FOR UPDATE SKIP LOCKED";
+            "FOR UPDATE";
         AddTimestampTz(cmd, "now", nowUtc);
         AddInteger(cmd, "batch_size", _options.BatchSize);
 

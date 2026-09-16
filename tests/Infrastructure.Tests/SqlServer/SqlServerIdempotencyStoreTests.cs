@@ -25,6 +25,16 @@ public class SqlServerIdempotencyStoreTests : IClassFixture<SqlServerFixture>
     }
 
     [Fact]
+    public async Task Cache_lookup_does_not_conflate_case_or_trailing_spaces()
+    {
+        var store = await NewStoreAsync();
+        await store.TryRecordAsync(WellKnownTenants.Default, "Exact-Key", "AdjustInventory", default);
+        (await store.ExistsAsync(WellKnownTenants.Default, "Exact-Key", default)).Should().BeTrue();
+        (await store.ExistsAsync(WellKnownTenants.Default, "exact-key", default)).Should().BeFalse();
+        (await store.ExistsAsync(WellKnownTenants.Default, "Exact-Key ", default)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ExistsAsync_returns_false_for_an_unrecorded_key()
     {
         var store = await NewStoreAsync();

@@ -33,6 +33,22 @@ public abstract class EventStoreContractTests
     protected abstract Task<IEventStoreContractBackend> CreateBackendAsync();
 
     [Fact]
+    public async Task Command_receipt_is_committed_with_event_and_is_exact_and_stream_scoped()
+    {
+        await using var backend = await CreateBackendAsync();
+        var stream = ContractEnvelopes.NewStreamId();
+        var envelope = ContractEnvelopes.Build(stream, 1, new ContractOrderPlaced(Guid.NewGuid(), 10m));
+        envelope = envelope with { Metadata = envelope.Metadata with { IdempotencyKey = "Retry-Key" } };
+        (await backend.Store.HasCommittedCommandAsync(stream, "Retry-Key", default)).Should().BeFalse();
+        await backend.Store.AppendAsync(stream, 0, [envelope], default);
+        (await backend.Store.HasCommittedCommandAsync(stream, "Retry-Key", default)).Should().BeTrue();
+        (await backend.Store.HasCommittedCommandAsync(stream, "retry-key", default)).Should().BeFalse();
+        (await backend.Store.HasCommittedCommandAsync(stream, "Retry-Key ", default)).Should().BeFalse();
+        (await backend.Store.HasCommittedCommandAsync(ContractEnvelopes.NewStreamId(), "Retry-Key", default)).Should().BeFalse();
+        (await backend.Store.ReadStreamAsync(stream, 0, default))[0].Metadata.IdempotencyKey.Should().Be("Retry-Key");
+    }
+
+    [Fact]
     public async Task Append_then_read_returns_the_same_events_in_order_from_version_zero()
     {
         await using var backend = await CreateBackendAsync();

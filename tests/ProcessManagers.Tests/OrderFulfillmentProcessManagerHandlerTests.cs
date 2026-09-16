@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
 using EventSourcingCqrs.Application.Commands.Sales;
@@ -23,6 +24,146 @@ public sealed class OrderFulfillmentProcessManagerHandlerTests
 {
     private static readonly DateTime Now = new(2026, 5, 22, 12, 0, 0, DateTimeKind.Utc);
     private static readonly Address Destination = new("1 Main St", "Smalltown", "12345", "US");
+
+    [Fact]
+    public async Task Cancellation_recovers_reservation_committed_before_fanout_outcomes_were_saved()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        var line = Guid.NewGuid();
+        var inventoryId = Guid.NewGuid();
+        h.MapSku("sku", inventoryId);
+        await h.SeedOrder(BuildOrder(id, (line, "sku", 2)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(20), Now));
+        var pm = (await h.LoadPm(id))!;
+        await h.SeedPayment(Payment.Authorize(pm.PaymentId, id, Usd(20), "card", Now));
+        var inventory = Inventory.Create(inventoryId, "sku", Now);
+        inventory.Adjust(10, "stock", Now);
+        inventory.Reserve(id, line, 2, Now);
+        await h.SeedInventory(inventory);
+        h.Bus.OutcomeFor = command => command is ReserveInventory
+            ? throw new InvalidOperationException("crash after reservation commit") : CommandOutcome.Success();
+        Func<Task> receive = () => h.Receive(new PaymentAuthorized(pm.PaymentId, id, Usd(20), "card", Now));
+        await receive.Should().ThrowAsync<InvalidOperationException>();
+        (await h.LoadPm(id))!.Reservations.Should().BeEmpty();
+
+        h.Bus.OutcomeFor = command => command is ReleaseInventory
+            ? CommandOutcome.Failed(new DomainException("release temporarily rejected")) : CommandOutcome.Success();
+        Func<Task> cancel = () => h.Receive(new OrderCancelled(id, "customer cancelled", Guid.NewGuid(), Now));
+        await cancel.Should().ThrowAsync<DomainException>();
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.AwaitingInventory);
+        (await h.LoadPm(id))!.Reservations.Should().ContainKey(line);
+        h.Bus.OutcomeFor = _ => CommandOutcome.Success();
+        await cancel();
+        h.Dispatched.Should().Contain(d => d.Command is ReleaseInventory
+            && ((ReleaseInventory)d.Command).InventoryId == inventoryId);
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task Failed_order_completion_leaves_the_process_manager_retryable()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        var line = Guid.NewGuid();
+        h.MapSku("sku", Guid.NewGuid());
+        await h.SeedOrder(BuildOrder(id, (line, "sku", 1)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        await h.Receive(new PaymentAuthorized(Guid.NewGuid(), id, Usd(10), "card", Now));
+        var pm = (await h.LoadPm(id))!;
+        await h.SeedShipment(Shipment.Schedule(pm.ShipmentId, id, Destination,
+            [new ShipmentLine(id, line, "sku", 1)], Now));
+        await h.Receive(new ShipmentDispatched(pm.ShipmentId, "carrier", Now));
+        h.Bus.OutcomeFor = command => command is MarkOrderCompleted
+            ? CommandOutcome.Failed(new DomainException("completion rejected")) : CommandOutcome.Success();
+        Func<Task> delivered = () => h.Receive(new ShipmentDelivered(pm.ShipmentId, Now));
+        await delivered.Should().ThrowAsync<DomainException>();
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.AwaitingDelivery);
+        h.Bus.OutcomeFor = _ => CommandOutcome.Success();
+        await delivered();
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.Completed);
+    }
+
+    [Fact]
+    public async Task Failed_compensation_does_not_persist_a_cancelled_terminal()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        await h.SeedOrder(BuildOrder(id, (Guid.NewGuid(), "missing", 1)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        h.Bus.OutcomeFor = command => command is VoidPayment
+            ? CommandOutcome.Failed(new DomainException("void rejected")) : CommandOutcome.Success();
+        Func<Task> receive = () => h.Receive(new PaymentAuthorized(Guid.NewGuid(), id, Usd(10), "card", Now));
+        await receive.Should().ThrowAsync<DomainException>();
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.AwaitingInventory);
+        h.Bus.OutcomeFor = _ => CommandOutcome.Success();
+        await receive();
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task Cancellation_before_placement_delivery_never_authorizes_payment()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        var order = BuildOrder(id, (Guid.NewGuid(), "sku", 1));
+        order.Cancel("customer cancelled", Guid.NewGuid(), Now);
+        await h.SeedOrder(order);
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        h.Dispatched.Should().NotContain(d => d.Command is AuthorizePayment);
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task Customer_cancellation_voids_an_authorized_payment_and_releases_reservations()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        h.MapSku("sku", Guid.NewGuid());
+        await h.SeedOrder(BuildOrder(id, (Guid.NewGuid(), "sku", 1)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        var pm = (await h.LoadPm(id))!;
+        await h.SeedPayment(Payment.Authorize(pm.PaymentId, id, Usd(10), "card", Now));
+        await h.Receive(new PaymentAuthorized(pm.PaymentId, id, Usd(10), "card", Now));
+        await h.Receive(new OrderCancelled(id, "customer cancelled", Guid.NewGuid(), Now));
+        h.Dispatched.Should().Contain(d => d.Command is ReleaseInventory);
+        h.Dispatched.Should().Contain(d => d.Command is VoidPayment);
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.Cancelled);
+    }
+
+    [Fact]
+    public async Task Payment_timeout_does_not_cancel_when_authorization_event_is_delayed()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        await h.SeedOrder(BuildOrder(id, (Guid.NewGuid(), "sku", 1)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        var pm = (await h.LoadPm(id))!;
+        await h.SeedPayment(Payment.Authorize(pm.PaymentId, id, Usd(10), "card", Now));
+        await h.DispatchTimeoutAwaitingPayment(id);
+        h.Dispatched.Should().NotContain(d => d.Command is CancelOrder);
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.AwaitingPayment);
+    }
+
+    [Fact]
+    public async Task Dispatch_timeout_does_not_release_an_already_dispatched_shipment()
+    {
+        var h = new OrderFulfillmentTestHarness();
+        var id = Guid.NewGuid();
+        var line = Guid.NewGuid();
+        h.MapSku("sku", Guid.NewGuid());
+        await h.SeedOrder(BuildOrder(id, (line, "sku", 1)));
+        await h.Receive(new OrderPlaced(id, Guid.NewGuid(), Usd(10), Now));
+        await h.Receive(new PaymentAuthorized(Guid.NewGuid(), id, Usd(10), "card", Now));
+        var pm = (await h.LoadPm(id))!;
+        var shipment = Shipment.Schedule(pm.ShipmentId, id, Destination,
+            [new ShipmentLine(id, line, "sku", 1)], Now);
+        shipment.Dispatch("carrier", Now);
+        await h.SeedShipment(shipment);
+        await h.DispatchTimeoutAwaitingDispatch(id);
+        h.Dispatched.Should().NotContain(d => d.Command is ReleaseInventory || d.Command is VoidPayment || d.Command is CancelOrder);
+        (await h.LoadPm(id))!.State.Should().Be(OrderFulfillmentState.AwaitingDispatch);
+    }
 
     [Fact]
     public async Task Happy_path_runs_through_all_four_handlers_to_completed()

@@ -10,7 +10,7 @@ public sealed record ScheduleShipment(
     Guid ShipmentId,
     Guid OrderId,
     Address Destination,
-    IReadOnlyList<ShipmentLine> Lines) : IAuthorizedCommand
+    IReadOnlyList<ShipmentLine> Lines) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.ScheduleShipment;
 }

@@ -57,6 +57,9 @@ public sealed class SnapshottingEventStoreRepository<TAggregate, TSnapshot> : IE
     public async Task<TAggregate?> LoadAsync(Guid id, CancellationToken ct)
     {
         var streamId = StreamId.ForAggregate<TAggregate>(ResolveTenant(), id);
+        // Check durable receipts even when the event precedes the snapshot.
+        // The metadata lookup does not replace snapshot-plus-tail rehydration.
+        await CommittedCommandGuard.CheckAsync(_store, streamId, _accessor.Current, ct);
         var snapshot = await _snapshotStore.LoadAsync<TSnapshot>(streamId, _snapshotSchemaVersion, ct);
         if (snapshot is null)
         {
@@ -89,7 +92,21 @@ public sealed class SnapshottingEventStoreRepository<TAggregate, TSnapshot> : IE
         var tenant = ResolveTenant();
         var streamId = StreamId.ForAggregate<TAggregate>(tenant, aggregate.Id);
         var envelopes = BuildEnvelopes(streamId, expectedVersion, events, tenant);
-        await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
+        // Check before append as well: creation handlers do not load, and a
+        // concurrent retry may have loaded after the first operation committed.
+        if (!string.IsNullOrWhiteSpace(_accessor.Current?.IdempotencyKey))
+        {
+            await CommittedCommandGuard.CheckAsync(_store, streamId, _accessor.Current, ct);
+        }
+        try
+        {
+            await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
+        }
+        catch (ConcurrencyException)
+        {
+            await CommittedCommandGuard.CheckAsync(_store, streamId, _accessor.Current, ct);
+            throw;
+        }
 
         if (postVersion / _snapshotInterval > expectedVersion / _snapshotInterval)
         {
@@ -121,6 +138,7 @@ public sealed class SnapshottingEventStoreRepository<TAggregate, TSnapshot> : IE
     private async Task<TAggregate?> FullReplayAsync(StreamId streamId, CancellationToken ct)
     {
         var envelopes = await _store.ReadStreamAsync(streamId, fromVersion: 0, ct);
+        CommittedCommandGuard.Check(envelopes.Select(e => e.Metadata), _accessor.Current);
         if (envelopes.Count == 0)
         {
             return null;

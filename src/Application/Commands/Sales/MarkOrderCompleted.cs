@@ -9,7 +9,7 @@ namespace EventSourcingCqrs.Application.Commands.Sales;
 // delivered (Decision 13). A bounded-context command Sales owns, so it lives in
 // Application alongside the other Order commands, unlike the PM-internal timeout
 // commands that live in ProcessManagers.
-public sealed record MarkOrderCompleted(Guid OrderId) : IAuthorizedCommand
+public sealed record MarkOrderCompleted(Guid OrderId) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.MarkOrderCompleted;
 }
@@ -31,6 +31,7 @@ public sealed class MarkOrderCompletedHandler : ICommandHandler<MarkOrderComplet
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<MarkOrderCompleted>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.Complete(utcNow);
         await _repository.SaveAsync(order, ct);

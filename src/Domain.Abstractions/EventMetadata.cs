@@ -11,6 +11,10 @@ public sealed record EventMetadata(
     DateTime OccurredUtc,
     [property: JsonPropertyName("tenant_id")] TenantId Tenant)
 {
+    // Committed with the event, unlike the optional command-idempotency cache.
+    [JsonPropertyName("idempotency_key")]
+    public string? IdempotencyKey { get; init; }
+
     // Stamps metadata for the first event a command handler raises. The
     // command's bus-generated CommandId becomes the event's CausationId, so
     // every event's causation chain ultimately points back to a command. The
@@ -25,7 +29,7 @@ public sealed record EventMetadata(
             ActorId: context.ActorId,
             Source: context.ServiceName,
             OccurredUtc: context.UtcNow().UtcDateTime,
-            Tenant: tenant);
+            Tenant: tenant) { IdempotencyKey = context.IdempotencyKey };
 
     // Stamps metadata for an event caused by the prior event in the same
     // SaveAsync batch (Ch 8 line 1066). CausationId points to the prior event's
@@ -39,5 +43,5 @@ public sealed record EventMetadata(
             ActorId: ActorId,
             Source: Source,
             OccurredUtc: occurredUtc,
-            Tenant: Tenant);
+            Tenant: Tenant) { IdempotencyKey = IdempotencyKey };
 }

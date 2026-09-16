@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Application.Commands.Billing;
 using EventSourcingCqrs.Application.Commands.Fulfillment;
 using EventSourcingCqrs.Application.Commands.Sales;
@@ -11,7 +12,7 @@ using EventSourcingCqrs.Domain.Sales.Events;
 
 namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 
-// Drives OrderFulfillmentProcessManager across its four observed events. Forward
+// Drives OrderFulfillmentProcessManager across its observed events. Forward
 // dispatches follow R2 ordering (ADR 0015 editorial, F-0009-N): record-and-save a
 // minted id before the command that carries it dispatches. Reservation outcomes
 // are recorded after dispatch, since the outcome is the dispatch result; the PM
@@ -28,6 +29,7 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 // Not DI-registered here; registration and dispatcher routing land at commit 27.
 public sealed class OrderFulfillmentProcessManagerHandler :
     IProcessManagerHandler<OrderPlaced>,
+    IProcessManagerHandler<OrderCancelled>,
     IProcessManagerHandler<PaymentAuthorized>,
     IProcessManagerHandler<ShipmentDispatched>,
     IProcessManagerHandler<ShipmentDelivered>
@@ -54,6 +56,9 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     private readonly ISkuToInventoryIdStore _skuLookup;
     private readonly OrderFulfillmentCompensation _compensation;
     private readonly IDelayQueue _delayQueue;
+    private readonly IWorkflowLock _workflowLock;
+    private readonly IEventStoreRepository<Payment> _payments;
+    private readonly IEventStoreRepository<Inventory> _inventory;
 
     public OrderFulfillmentProcessManagerHandler(
         ICausedCommandBus bus,
@@ -62,7 +67,8 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         IEventStoreRepository<Shipment> shipments,
         ISkuToInventoryIdStore skuLookup,
         OrderFulfillmentCompensation compensation,
-        IDelayQueue delayQueue)
+        IDelayQueue delayQueue, IWorkflowLock workflowLock, IEventStoreRepository<Payment> payments,
+        IEventStoreRepository<Inventory> inventory)
     {
         _bus = bus;
         _pms = pms;
@@ -71,11 +77,21 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         _skuLookup = skuLookup;
         _compensation = compensation;
         _delayQueue = delayQueue;
+        _workflowLock = workflowLock;
+        _payments = payments;
+        _inventory = inventory;
     }
 
     // OrderPlaced opens the workflow: schedule the payment timeout and ask Billing
     // to authorize payment.
     public async Task HandleAsync(EventContext<OrderPlaced> context, CancellationToken ct)
+    {
+        var orderId = context.Event.OrderId;
+        await _workflowLock.RunAsync(context.Metadata.Tenant, orderId,
+            () => HandleCoreAsync(context, ct), ct);
+    }
+
+    private async Task HandleCoreAsync(EventContext<OrderPlaced> context, CancellationToken ct)
     {
         var e = context.Event;
         var stream = OrderFulfillmentStreams.For(context.Metadata.Tenant, e.OrderId);
@@ -90,6 +106,12 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             await _pms.SaveAsync(pm, ct);
         }
 
+        var order = await _orders.LoadAsync(e.OrderId, ct);
+        if (order?.Status == OrderStatus.Cancelled && pm.State == OrderFulfillmentState.AwaitingPayment)
+        {
+            await CancelAsync(pm, "Order cancelled by customer.", context.Metadata, ct);
+            return;
+        }
         if (pm.State == OrderFulfillmentState.AwaitingPayment)
         {
             var outcome = await _bus.TrySendAsync(
@@ -110,6 +132,13 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     // dispatch timeout and asks for shipment scheduling.
     public async Task HandleAsync(EventContext<PaymentAuthorized> context, CancellationToken ct)
     {
+        var orderId = context.Event.OrderId;
+        await _workflowLock.RunAsync(context.Metadata.Tenant, orderId,
+            () => HandleCoreAsync(context, ct), ct);
+    }
+
+    private async Task HandleCoreAsync(EventContext<PaymentAuthorized> context, CancellationToken ct)
+    {
         var e = context.Event;
         var stream = OrderFulfillmentStreams.For(context.Metadata.Tenant, e.OrderId);
         var pm = await _pms.LoadAsync(stream, OrderFulfillmentStreams.New, ct)
@@ -119,6 +148,15 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         await _delayQueue.CancelAsync(
             stream, OrderFulfillmentSteps.AwaitPaymentTimeout, "Payment authorized.", ct);
 
+        if (pm.State == OrderFulfillmentState.Cancelled)
+        {
+            var latePayment = await _payments.LoadAsync(e.PaymentId, ct);
+            if (latePayment?.Status == PaymentStatus.Authorized)
+                await _bus.SendAsync(new VoidPayment(e.PaymentId, "Late authorization after cancellation."),
+                    context.Metadata, Actor,
+                    IdempotencyKeys.ForProcessManager(stream, OrderFulfillmentSteps.VoidPayment), ct);
+            return;
+        }
         if (pm.State == OrderFulfillmentState.AwaitingPayment)
         {
             pm.RecordPaymentAuthorized();
@@ -133,6 +171,11 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                     $"Order {e.OrderId} not found handling PaymentAuthorized.");
         }
 
+        if (order?.Status == OrderStatus.Cancelled)
+        {
+            await CancelAsync(pm, "Order cancelled by customer.", context.Metadata, ct);
+            return;
+        }
         if (pm.State == OrderFulfillmentState.AwaitingInventory)
         {
             await FanOutReservationsAsync(pm, order!, context.Metadata, stream, ct);
@@ -178,6 +221,15 @@ public sealed class OrderFulfillmentProcessManagerHandler :
 
     public async Task HandleAsync(EventContext<ShipmentDispatched> context, CancellationToken ct)
     {
+        var shipment = await _shipments.LoadAsync(context.Event.ShipmentId, ct)
+            ?? throw new AggregateNotFoundException(context.Event.ShipmentId);
+        var orderId = shipment.OrderId;
+        await _workflowLock.RunAsync(context.Metadata.Tenant, orderId,
+            () => HandleCoreAsync(context, ct), ct);
+    }
+
+    private async Task HandleCoreAsync(EventContext<ShipmentDispatched> context, CancellationToken ct)
+    {
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
         await _delayQueue.CancelAsync(
             pm.StreamId, OrderFulfillmentSteps.AwaitDispatchTimeout, "Shipment dispatched.", ct);
@@ -190,6 +242,15 @@ public sealed class OrderFulfillmentProcessManagerHandler :
 
     public async Task HandleAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
     {
+        var shipment = await _shipments.LoadAsync(context.Event.ShipmentId, ct)
+            ?? throw new AggregateNotFoundException(context.Event.ShipmentId);
+        var orderId = shipment.OrderId;
+        await _workflowLock.RunAsync(context.Metadata.Tenant, orderId,
+            () => HandleCoreAsync(context, ct), ct);
+    }
+
+    private async Task HandleCoreAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
+    {
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
         if (pm.State == OrderFulfillmentState.AwaitingDelivery)
         {
@@ -199,13 +260,54 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             // save-before-dispatch (R2) is needed; the single save closes the orphan
             // window and a redelivery re-dispatches on the mark-completed key.
             pm.RecordShipmentDelivered();
-            await _bus.TrySendAsync(
+            await _bus.SendAsync(
                 new MarkOrderCompleted(pm.OrderId),
                 context.Metadata, Actor,
                 IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.MarkCompleted), ct);
             pm.Complete();                  // -> Completed
             await _pms.SaveAsync(pm, ct);
         }
+    }
+
+    public Task HandleAsync(EventContext<OrderCancelled> context, CancellationToken ct)
+        => _workflowLock.RunAsync(context.Metadata.Tenant, context.Event.OrderId, async () =>
+        {
+            var pm = await _pms.LoadAsync(OrderFulfillmentStreams.For(context.Metadata.Tenant,
+                context.Event.OrderId), OrderFulfillmentStreams.New, ct);
+            if (pm is null || pm.State is OrderFulfillmentState.Completed or OrderFulfillmentState.Cancelled)
+                return;
+            await CancelAsync(pm, context.Event.Reason, context.Metadata, ct);
+        }, ct);
+
+    private async Task CancelAsync(OrderFulfillmentProcessManager pm, string reason,
+        EventMetadata metadata, CancellationToken ct)
+    {
+        // A reservation can commit before the fan-out outcomes are saved. Under
+        // the order gate no new fan-out can race this reconciliation. Recover
+        // those effects from Inventory before choosing the compensation set.
+        if (pm.State == OrderFulfillmentState.AwaitingInventory)
+        {
+            var order = await _orders.LoadAsync(pm.OrderId, ct)
+                ?? throw new AggregateNotFoundException(pm.OrderId);
+            foreach (var line in order.Lines.Where(l => !pm.Reservations.ContainsKey(l.LineId)))
+            {
+                var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, ct);
+                if (inventoryId is null) continue;
+                var inventory = await _inventory.LoadAsync(inventoryId.Value, ct);
+                var reserved = inventory?.Reservations.SingleOrDefault(
+                    r => r.OrderId == pm.OrderId && r.LineId == line.LineId);
+                if (reserved is not null)
+                    pm.RecordLineReserved(line.LineId, reserved.Sku, reserved.Quantity, inventoryId.Value);
+            }
+            // Persist recovery before releasing anything: a retry must still
+            // know which releases succeeded before a later compensation failed.
+            await _pms.SaveAsync(pm, ct);
+        }
+        var payment = await _payments.LoadAsync(pm.PaymentId, ct);
+        if (payment is null)
+            await _compensation.CompensateAuthorizeFailureAsync(pm, reason, metadata, ct);
+        else
+            await _compensation.CompensateWithReleasesAsync(pm, reason, metadata, ct);
     }
 
     private Task ScheduleTimeoutAsync(

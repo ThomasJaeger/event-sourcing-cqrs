@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\Domain\Domain.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Postgres\EventStore.Postgres.csproj" />

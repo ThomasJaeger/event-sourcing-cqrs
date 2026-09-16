@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using System.Text.Json;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Domain.Abstractions;
@@ -44,6 +45,8 @@ public static class DemoStartup
         services.AddPostgresSnapshotStore(eventStoreConnectionString);
         services.AddPostgresIdempotencyStore(eventStoreConnectionString);
         services.AddApplication();
+        services.AddSingleton<IWorkflowLock>(sp => new PostgresWorkflowLock(
+            new NpgsqlReadModelConnectionFactory(sp.GetRequiredService<NpgsqlDataSource>())));
         return services.BuildServiceProvider();
     }
 

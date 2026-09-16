@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         // read-model options and registers the connection factory, the checkpoint store, and the
         // current-roles store. AddReadModels adds the rest of the read-model surface on top.
         services.AddCurrentRolesReadModel(configure);
+        services.AddSingleton<IWorkflowLock, PostgresWorkflowLock>();
 
         // The name-only roster, single-sourced in AddProjectionRoster: the projection
         // identities (their checkpoint names) without the projection instances.

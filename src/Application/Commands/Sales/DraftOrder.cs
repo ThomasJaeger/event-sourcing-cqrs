@@ -5,7 +5,7 @@ using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record DraftOrder(Guid OrderId, Guid CustomerId) : IAuthorizedCommand
+public sealed record DraftOrder(Guid OrderId, Guid CustomerId) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.DraftOrder;
 }
@@ -33,6 +33,7 @@ public sealed class DraftOrderHandler : ICommandHandler<DraftOrder>
         // The channel a draft enters through. For a server-initiated draft the honest value is the
         // composing host's own name, which the command context carries as ServiceName.
         var context = _accessor.Current ?? CommandContext.System;
+        OrderCommandAuthorization.EnsureOwnership<DraftOrder>(command.CustomerId, context);
         var order = Order.Draft(
             command.OrderId, command.CustomerId, context.UtcNow().UtcDateTime, context.ServiceName);
         return _repository.SaveAsync(order, ct);

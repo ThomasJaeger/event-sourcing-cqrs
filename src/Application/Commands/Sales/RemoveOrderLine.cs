@@ -5,7 +5,7 @@ using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record RemoveOrderLine(Guid OrderId, Guid LineId) : IAuthorizedCommand
+public sealed record RemoveOrderLine(Guid OrderId, Guid LineId) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.ManageOrderLines;
 }
@@ -27,6 +27,7 @@ public sealed class RemoveOrderLineHandler : ICommandHandler<RemoveOrderLine>
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<RemoveOrderLine>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.RemoveLine(command.LineId, utcNow);
         await _repository.SaveAsync(order, ct);

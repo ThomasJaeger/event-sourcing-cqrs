@@ -5,7 +5,7 @@ using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record PlaceOrder(Guid OrderId) : IAuthorizedCommand
+public sealed record PlaceOrder(Guid OrderId) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.PlaceOrder;
 }
@@ -27,6 +27,7 @@ public sealed class PlaceOrderHandler : ICommandHandler<PlaceOrder>
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<PlaceOrder>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.Place(utcNow);
         await _repository.SaveAsync(order, ct);

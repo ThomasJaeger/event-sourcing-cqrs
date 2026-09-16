@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 
@@ -7,7 +8,7 @@ namespace EventSourcingCqrs.ProcessManagers.OrderFulfillment;
 // OrderId routes to the PM. A PM-internal orchestration command, so it lives with
 // the PM rather than in Application alongside the bounded-context commands the PM
 // dispatches outward.
-public sealed record TimeoutAwaitingPaymentForOrder(Guid OrderId) : ICommand;
+public sealed record TimeoutAwaitingPaymentForOrder(Guid OrderId) : IOrderWorkflowCommand;
 
 public sealed class TimeoutAwaitingPaymentForOrderHandler : ICommandHandler<TimeoutAwaitingPaymentForOrder>
 {
@@ -15,17 +16,19 @@ public sealed class TimeoutAwaitingPaymentForOrderHandler : ICommandHandler<Time
     private readonly OrderFulfillmentCompensation _compensation;
     private readonly ICommandContextAccessor _accessor;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly IEventStoreRepository<Payment> _outcomes;
 
     public TimeoutAwaitingPaymentForOrderHandler(
         IProcessManagerRepository<OrderFulfillmentProcessManager> pms,
         OrderFulfillmentCompensation compensation,
         ICommandContextAccessor accessor,
-        ICurrentTenantAccessor tenantAccessor)
+        ICurrentTenantAccessor tenantAccessor, IEventStoreRepository<Payment> outcomes)
     {
         _pms = pms;
         _compensation = compensation;
         _accessor = accessor;
         _tenantAccessor = tenantAccessor;
+        _outcomes = outcomes;
     }
 
     public async Task HandleAsync(TimeoutAwaitingPaymentForOrder command, CancellationToken ct)
@@ -48,6 +51,11 @@ public sealed class TimeoutAwaitingPaymentForOrderHandler : ICommandHandler<Time
         {
             return;
         }
+
+        // An undelivered event is not a failed operation. The command pipeline
+        // holds the order lock against authorization/dispatch and cancellation.
+        if (await _outcomes.LoadAsync(pm.PaymentId, ct) is not null)
+            return;
 
         var causing = context is null
             ? EventMetadata.ForCommand(CommandContext.System, WellKnownTenants.Default)

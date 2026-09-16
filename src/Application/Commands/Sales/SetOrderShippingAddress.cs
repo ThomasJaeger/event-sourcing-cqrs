@@ -6,7 +6,7 @@ using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record SetOrderShippingAddress(Guid OrderId, Address ShippingAddress) : IAuthorizedCommand
+public sealed record SetOrderShippingAddress(Guid OrderId, Address ShippingAddress) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.ManageOrderLines;
 }
@@ -28,6 +28,7 @@ public sealed class SetOrderShippingAddressHandler : ICommandHandler<SetOrderShi
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<SetOrderShippingAddress>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.SetShippingAddress(command.ShippingAddress, utcNow);
         await _repository.SaveAsync(order, ct);

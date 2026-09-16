@@ -27,6 +27,28 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         _fixture = fixture;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failure_or_quarantine_blocks_later_events(bool quarantine)
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await AppendOneAsync(connStr);
+        await AppendOneAsync(connStr);
+        var dispatcher = new SqlServerRecordingDispatcher
+        {
+            Evaluate = (_, _) => Task.FromResult<Exception?>(new IOException("consumer failed"))
+        };
+        var clock = new FixedTimeProvider();
+        var processor = NewProcessor(connStr, dispatcher, maxAttempts: quarantine ? 1 : 10, clock: clock);
+        (await processor.ProcessBatchAsync(default)).Should().Be(1);
+        dispatcher.Received.Should().ContainSingle();
+        // A second worker must respect the persisted retry/quarantine barrier too.
+        var next = new SqlServerRecordingDispatcher();
+        (await NewProcessor(connStr, next, clock: clock).ProcessBatchAsync(default)).Should().Be(0);
+        next.Received.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Append_writes_the_outbox_row_alongside_the_event_in_one_transaction()
     {
@@ -201,7 +223,7 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
     }
 
     [Fact]
-    public async Task Concurrent_claimants_take_disjoint_rows_and_neither_blocks()
+    public async Task Locked_predecessors_block_later_rows_until_the_claim_is_released()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();
         var store = NewStore(connStr);
@@ -213,20 +235,21 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
                 CancellationToken.None);
         }
 
-        // A holds its batch open, so its rows are locked. B must step over them under READPAST
-        // rather than block on them, and must not see them.
+        // A holds earlier rows open. B must wait to preserve global delivery order.
         await using var connA = new SqlConnection(connStr);
         await connA.OpenAsync();
         await using var txA = (SqlTransaction)await connA.BeginTransactionAsync();
         var claimedByA = await ClaimAsync(connA, txA, 2);
 
         var second = new SqlServerRecordingDispatcher();
-        var processedByB = await NewProcessor(connStr, second, batchSize: 4)
+        var processing = NewProcessor(connStr, second, batchSize: 4)
             .ProcessBatchAsync(CancellationToken.None);
-
-        processedByB.Should().Be(2);
-        second.Received.Select(m => m.OutboxId).Should().NotIntersectWith(claimedByA);
+        await Task.Delay(100);
+        processing.IsCompleted.Should().BeFalse("later rows must not overtake a locked predecessor");
         await txA.RollbackAsync();
+        (await processing.WaitAsync(TimeSpan.FromSeconds(10))).Should().Be(4);
+        second.Received.Select(m => m.OutboxId).Should().Contain(claimedByA);
+        second.Received.Select(m => m.OutboxId).Should().BeInAscendingOrder();
     }
 
     [Fact]
@@ -345,7 +368,7 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
         IMessageDispatcher dispatcher,
         int maxAttempts = 10,
         int batchSize = 100,
-        EventUpcasterPipeline? pipeline = null)
+        EventUpcasterPipeline? pipeline = null, TimeProvider? clock = null)
         => new(
             new SqlServerConnectionFactory(connStr),
             dispatcher,
@@ -357,9 +380,15 @@ public class SqlServerOutboxProcessorTests : IClassFixture<SqlServerFixture>
                 MaxAttempts = maxAttempts,
                 BatchSize = batchSize,
                 Jitter = () => 1.0,
+                TimeProvider = clock ?? TimeProvider.System,
             }),
             NullLogger<SqlServerOutboxProcessor>.Instance,
             pipeline ?? new EventUpcasterPipeline(NewRegistry(), []));
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 9, 15, 12, 0, 0, TimeSpan.Zero);
+    }
 
     private static async Task AppendOneAsync(string connStr)
     {

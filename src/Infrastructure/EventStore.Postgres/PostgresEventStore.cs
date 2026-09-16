@@ -53,6 +53,17 @@ public sealed class PostgresEventStore : IEventStore
         _pipeline = pipeline;
     }
 
+    public async Task<bool> HasCommittedCommandAsync(StreamId streamId, string key, CancellationToken ct)
+    {
+        await using var connection = await _factory.OpenConnectionAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS (SELECT 1 FROM event_store.events " +
+            "WHERE stream_id = @stream AND metadata->>'idempotency_key' = @key)";
+        command.Parameters.AddWithValue("stream", streamId.Value);
+        command.Parameters.AddWithValue("key", key);
+        return (bool)(await command.ExecuteScalarAsync(ct))!;
+    }
+
     public async Task AppendAsync(
         StreamId streamId,
         int expectedVersion,

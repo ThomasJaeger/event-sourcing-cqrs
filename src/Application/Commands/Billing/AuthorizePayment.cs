@@ -10,7 +10,7 @@ public sealed record AuthorizePayment(
     Guid PaymentId,
     Guid OrderId,
     Money Amount,
-    string PaymentMethodReference) : IAuthorizedCommand
+    string PaymentMethodReference) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.AuthorizePayment;
 }

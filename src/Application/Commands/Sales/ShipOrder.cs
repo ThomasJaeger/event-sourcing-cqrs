@@ -5,7 +5,7 @@ using EventSourcingCqrs.Domain.Sales;
 
 namespace EventSourcingCqrs.Application.Commands.Sales;
 
-public sealed record ShipOrder(Guid OrderId, string Carrier, string TrackingNumber) : IAuthorizedCommand
+public sealed record ShipOrder(Guid OrderId, string Carrier, string TrackingNumber) : IAuthorizedCommand, IOrderWorkflowCommand
 {
     public static Permission RequiredPermission => Permission.ShipOrder;
 }
@@ -27,6 +27,7 @@ public sealed class ShipOrderHandler : ICommandHandler<ShipOrder>
     {
         var order = await _repository.LoadAsync(command.OrderId, ct)
             ?? throw new AggregateNotFoundException(command.OrderId);
+        OrderCommandAuthorization.EnsureOwnership<ShipOrder>(order.CustomerId, _accessor.Current);
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         order.Ship(command.Carrier, command.TrackingNumber, utcNow);
         await _repository.SaveAsync(order, ct);

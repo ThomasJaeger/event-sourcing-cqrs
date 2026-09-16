@@ -81,6 +81,7 @@ public sealed class PipelineBehaviorTests
             typeof(LoggingCommandBehavior<>),
             typeof(AuthorizationCommandBehavior<>),
             typeof(IdempotencyBehavior<>),
+            typeof(WorkflowCommandBehavior<>),
             typeof(ValidationCommandBehavior<>));
     }
 

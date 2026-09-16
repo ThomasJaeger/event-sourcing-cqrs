@@ -11,6 +11,7 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
     private Guid _customerId;
     private Address? _shippingAddress;
 
+    public Guid CustomerId => _customerId;
     public IReadOnlyList<OrderLine> Lines => _lines;
     public OrderStatus Status => _status;
     public Money Total => _lines.Aggregate(Money.Zero(Currency.USD), (sum, l) => sum + l.Subtotal);

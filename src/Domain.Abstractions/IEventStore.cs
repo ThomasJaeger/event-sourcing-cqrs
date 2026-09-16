@@ -2,6 +2,11 @@ namespace EventSourcingCqrs.Domain.Abstractions;
 
 public interface IEventStore
 {
+    // A receipt is part of the event append, never a separately committed cache.
+    // Engines may optimize this metadata lookup without hydrating event payloads.
+    async Task<bool> HasCommittedCommandAsync(StreamId streamId, string key, CancellationToken ct)
+        => (await ReadStreamAsync(streamId, 0, ct)).Any(e => e.Metadata.IdempotencyKey == key);
+
     Task AppendAsync(
         StreamId streamId,
         int expectedVersion,

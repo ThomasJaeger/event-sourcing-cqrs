@@ -1,6 +1,6 @@
+using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Context;
-using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
 using EventSourcingCqrs.Infrastructure.EventStore.InMemory;
@@ -28,7 +28,7 @@ internal sealed class OrderTestFixture
     {
         Store = new InMemoryEventStore();
         Accessor = new StubCommandContextAccessor();
-        Repository = new EventStoreRepository<Order>(Store, Accessor, new StubTenantAccessor(), new StubCurrentVersions());
+        Repository = new EventStoreRepository<Order>(Store, Accessor, new StubTenantAccessor { Current = WellKnownTenants.Default }, new StubCurrentVersions());
     }
 
     public async Task SeedDraftedAsync()

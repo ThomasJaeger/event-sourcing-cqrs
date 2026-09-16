@@ -46,16 +46,16 @@ public sealed class OrderFulfillmentCompensation
         await _delayQueue.CancelAsync(pm.StreamId, OrderFulfillmentSteps.AwaitPaymentTimeout, reason, ct);
 
         pm.StartCancellation(reason);
-        await _bus.TrySendAsync(
+        await _bus.SendAsync(
             new CancelOrder(pm.OrderId, reason, Actor.Id),
             causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.CancelOrder), ct);
         pm.CompleteAsCancelled();
         await _pms.SaveAsync(pm, ct);
     }
 
-    // Branches 2, 3, and 4-collapsed: release the reserved lines (none for the
-    // all-failed case), void the authorization, cancel the order, in
-    // release-before-void-before-cancel order (Decision 11). The release set is
+    // Cancel first to durably fence further fulfillment, then release reserved
+    // lines and void the authorization. The terminal PM save follows successful
+    // completion of every command. The release set is
     // captured before ReleaseReservation flips line statuses, and the dispatch
     // reads that captured list, so the save need not precede the dispatch and no
     // post-save-pre-dispatch orphan window opens.
@@ -77,16 +77,21 @@ public sealed class OrderFulfillmentCompensation
         pm.RequestVoid(reason);              // -> VoidingPayment
         pm.CompleteAsCancelled();            // -> Cancelled
 
-        await Task.WhenAll(linesToRelease.Select(line => _bus.TrySendAsync(
-            new ReleaseInventory(
-                line.InventoryId, line.LineId, "Order fulfillment released the reservation during compensation."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.Release, line.LineId), ct)));
-        await _bus.TrySendAsync(
-            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.VoidPayment), ct);
-        await _bus.TrySendAsync(
+        await _bus.SendAsync(
             new CancelOrder(pm.OrderId, reason, Actor.Id),
             causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.CancelOrder), ct);
+        // Successful earlier steps are recovered by their durable command receipts.
+        // A rejected or conflicting step propagates; never save a false terminal.
+        foreach (var line in linesToRelease)
+        {
+            await _bus.SendAsync(
+                new ReleaseInventory(line.InventoryId, line.LineId,
+                    "Order fulfillment released the reservation during compensation."),
+                causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.Release, line.LineId), ct);
+        }
+        await _bus.SendAsync(
+            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
+            causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.VoidPayment), ct);
 
         await _pms.SaveAsync(pm, ct);
     }

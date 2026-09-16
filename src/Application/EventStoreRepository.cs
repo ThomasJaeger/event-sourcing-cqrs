@@ -37,6 +37,7 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
     {
         var streamId = StreamId.ForAggregate<TAggregate>(ResolveTenant(), id);
         var envelopes = await _store.ReadStreamAsync(streamId, fromVersion: 0, ct);
+        CommittedCommandGuard.Check(envelopes.Select(e => e.Metadata), _accessor.Current);
         if (envelopes.Count == 0)
         {
             return null;
@@ -62,7 +63,21 @@ public sealed class EventStoreRepository<TAggregate> : IEventStoreRepository<TAg
         var tenant = ResolveTenant();
         var streamId = StreamId.ForAggregate<TAggregate>(tenant, aggregate.Id);
         var envelopes = BuildEnvelopes(streamId, expectedVersion, events, tenant);
-        await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
+        // Check before append as well: creation handlers do not load, and a
+        // concurrent retry may have loaded after the first operation committed.
+        if (!string.IsNullOrWhiteSpace(_accessor.Current?.IdempotencyKey))
+        {
+            await CommittedCommandGuard.CheckAsync(_store, streamId, _accessor.Current, ct);
+        }
+        try
+        {
+            await _store.AppendAsync(streamId, expectedVersion, envelopes, ct);
+        }
+        catch (ConcurrencyException)
+        {
+            await CommittedCommandGuard.CheckAsync(_store, streamId, _accessor.Current, ct);
+            throw;
+        }
     }
 
     // The tenant is sourced from the accessor, the single source the command bus

@@ -26,6 +26,34 @@ public class OutboxProcessorTests : IClassFixture<PostgresFixture>
         _fixture = fixture;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failure_or_quarantine_blocks_later_events(bool quarantine)
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var time = new FakeTimeProvider(BaseTime);
+        await SeedOutboxRowAsync(dataSource, Guid.NewGuid(), new TestPayload(Guid.NewGuid(), 1m), globalPosition: 100);
+        await SeedOutboxRowAsync(dataSource, Guid.NewGuid(), new TestPayload(Guid.NewGuid(), 1m), globalPosition: 101);
+        var dispatcher = new RecordingDispatcher
+        {
+            Evaluate = (_, _) => Task.FromResult<Exception?>(new IOException("consumer failed"))
+        };
+        var processor = BuildProcessor(dataSource, dispatcher, time, maxAttempts: quarantine ? 1 : 10);
+        (await processor.ProcessBatchAsync(default)).Should().Be(1);
+        dispatcher.Received.Should().ContainSingle();
+        var next = new RecordingDispatcher();
+        (await BuildProcessor(dataSource, next, time).ProcessBatchAsync(default)).Should().Be(0);
+        next.Received.Should().BeEmpty();
+        if (!quarantine)
+        {
+            time.Advance(TimeSpan.FromSeconds(2));
+            (await BuildProcessor(dataSource, next, time).ProcessBatchAsync(default)).Should().Be(2);
+            next.Received.Select(e => e.GlobalPosition).Should().Equal(100, 101);
+        }
+    }
+
     [Fact]
     public async Task Drains_pending_row_marks_sent()
     {

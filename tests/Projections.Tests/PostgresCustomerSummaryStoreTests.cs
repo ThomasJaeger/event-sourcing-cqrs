@@ -24,6 +24,30 @@ public class PostgresCustomerSummaryStoreTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Concurrent_duplicate_waits_for_checkpoint_and_does_not_increment_twice()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var factory = new NpgsqlReadModelConnectionFactory(dataSource);
+        var store = new PostgresCustomerSummaryStore(factory, new PostgresCheckpointStore(factory),
+            TestNotificationPublisher.Create(), new StubTenantAccessor { Current = WellKnownTenants.Default });
+        var customerId = Guid.NewGuid();
+        await using var first = await store.BeginAsync(default);
+        (await first.GetCheckpointAsync(ProjectionName, default)).Should().Be(0);
+        await first.ApplyPlacementAsync(customerId, new Money(50, Currency.USD), PlacedAt, SystemAt, default);
+        await using var second = await store.BeginAsync(default);
+        var secondRead = second.GetCheckpointAsync(ProjectionName, default);
+        // The second read cannot complete until the first transaction's effect and receipt commit.
+        await Task.Delay(100);
+        secondRead.IsCompleted.Should().BeFalse();
+        await first.CommitAsync(ProjectionName, 1, default);
+        (await secondRead.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(1);
+        var row = await store.GetAsync(customerId, default);
+        row!.OrderCount.Should().Be(1);
+        row.LifetimeValue.Amount.Should().Be(50);
+    }
+
+    [Fact]
     public async Task ApplyPlacement_inserts_a_row_and_round_trips()
     {
         var connStr = await _fixture.CreateMigratedDatabaseAsync();

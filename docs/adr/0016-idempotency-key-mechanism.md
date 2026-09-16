@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (May 2026)
+Accepted (May 2026). Correctness mechanism amended by [ADR 0055](0055-command-and-workflow-recovery.md): durable event metadata, rather than a post-dispatch cache insert, prevents repeated effects.
 
 ## Context
 

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
+    <ProjectReference Include="..\..\ProcessManagers\ProcessManagers.csproj" />
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.DynamoDb\EventStore.DynamoDb.csproj" />
     <ProjectReference Include="..\..\Infrastructure\EventStore.Kurrent\EventStore.Kurrent.csproj" />

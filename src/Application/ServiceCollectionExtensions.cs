@@ -75,6 +75,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(LoggingCommandBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(AuthorizationCommandBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(IdempotencyBehavior<>));
+        services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(WorkflowCommandBehavior<>));
         services.AddSingleton(typeof(ICommandPipelineBehavior<>), typeof(ValidationCommandBehavior<>));
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>));
         services.AddSingleton(typeof(IQueryPipelineBehavior<,>), typeof(AuthorizationQueryBehavior<,>));

@@ -35,6 +35,11 @@ public sealed class IdempotencyBehavior<TCommand> : ICommandPipelineBehavior<TCo
             return;
         }
 
+        // The narrowest shipped store uses a 200-byte UTF-8 key. Reject before
+        // executing any effects, rather than discovering an oversized key afterward.
+        if (System.Text.Encoding.UTF8.GetByteCount(key) > 200)
+            throw new ValidationException([new ValidationError("IdempotencyKey", "Must not exceed 200 UTF-8 bytes.")]);
+
         var tenant = _tenantAccessor.Current ?? throw new MissingTenantContextException();
 
         if (await _store.ExistsAsync(tenant, key, ct))
@@ -42,13 +47,17 @@ public sealed class IdempotencyBehavior<TCommand> : ICommandPipelineBehavior<TCo
             return;
         }
 
-        await next();
+        try
+        {
+            await next();
+        }
+        catch (CommandAlreadyCommittedException)
+        {
+            // The event stream is the receipt; rebuild the optional cache below.
+        }
 
-        // Recorded only after the handler succeeds, so a failed command stays
-        // retryable. The table is a best-effort short-circuit, not the
-        // correctness layer: on a false return or a record that never lands,
-        // the event store's per-stream version constraint is the backstop
-        // against a double-apply on retry (ADR 0016).
+        // This is an optimization. Repositories enforce the key against metadata
+        // committed atomically with the effects, including after a crash here.
         await _store.TryRecordAsync(tenant, key, typeof(TCommand).Name, ct);
     }
 }

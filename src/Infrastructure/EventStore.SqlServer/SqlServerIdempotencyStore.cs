@@ -27,7 +27,9 @@ public sealed class SqlServerIdempotencyStore : IIdempotencyStore
         await using var connection = await _factory.OpenConnectionAsync(ct);
         await using var cmd = new SqlCommand(
             "SELECT 1 FROM event_store.command_idempotency " +
-            "WHERE tenant_id = @tenant AND idempotency_key = @key",
+            "WHERE tenant_id = @tenant AND idempotency_key = @key " +
+            "AND CONVERT(varbinary(max), CONVERT(nvarchar(max), idempotency_key)) = " +
+            "CONVERT(varbinary(max), CONVERT(nvarchar(max), @key))",
             connection);
         AddUuid(cmd, "tenant", tenant.Value);
         AddKey(cmd, "key", idempotencyKey);

@@ -16,7 +16,7 @@ public sealed class CancelOrderHandlerTests
     {
         var fixture = new OrderTestFixture();
         await fixture.SeedDraftedAsync();
-        var handler = new CancelOrderHandler(fixture.Repository, fixture.Accessor);
+        var handler = new CancelOrderHandler(fixture.Repository, fixture.Accessor, new NoShipmentCancellationGuard());
 
         await handler.HandleAsync(
             new CancelOrder(OrderTestFixture.OrderId, "Customer changed mind", IssuedBy),
@@ -30,7 +30,7 @@ public sealed class CancelOrderHandlerTests
     public async Task HandleAsync_throws_AggregateNotFoundException_when_the_order_does_not_exist()
     {
         var fixture = new OrderTestFixture();
-        var handler = new CancelOrderHandler(fixture.Repository, fixture.Accessor);
+        var handler = new CancelOrderHandler(fixture.Repository, fixture.Accessor, new NoShipmentCancellationGuard());
 
         var act = () => handler.HandleAsync(
             new CancelOrder(OrderTestFixture.UnknownId, "n/a", IssuedBy),

@@ -1,3 +1,4 @@
+using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
@@ -125,6 +126,8 @@ internal sealed class OrderFulfillmentTestHarness
     private readonly StubSkuToInventoryIdStore _skuLookup = new();
     private readonly EventStoreRepository<Order> _orders;
     private readonly EventStoreRepository<Shipment> _shipments;
+    private readonly EventStoreRepository<Payment> _payments;
+    private readonly EventStoreRepository<Inventory> _inventory;
     private readonly ProcessManagerRepository<OrderFulfillmentProcessManager> _pms;
     private readonly OrderFulfillmentProcessManagerHandler _handler;
     private readonly TimeoutAwaitingPaymentForOrderHandler _paymentTimeoutHandler;
@@ -135,16 +138,18 @@ internal sealed class OrderFulfillmentTestHarness
     {
         _orders = new EventStoreRepository<Order>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
+        _payments = new EventStoreRepository<Payment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
+        _inventory = new EventStoreRepository<Inventory>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _pms = new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor, _tenantAccessor);
         Bus = new RecordingCausedCommandBus();
         DelayQueue = new RecordingDelayQueue();
         var compensation = new OrderFulfillmentCompensation(Bus, _pms, DelayQueue);
         _handler = new OrderFulfillmentProcessManagerHandler(
-            Bus, _pms, _orders, _shipments, _skuLookup, compensation, DelayQueue);
+            Bus, _pms, _orders, _shipments, _skuLookup, compensation, DelayQueue, new TestWorkflowLock(), _payments, _inventory);
         _paymentTimeoutHandler =
-            new TimeoutAwaitingPaymentForOrderHandler(_pms, compensation, _accessor, _tenantAccessor);
+            new TimeoutAwaitingPaymentForOrderHandler(_pms, compensation, _accessor, _tenantAccessor, _payments);
         _dispatchTimeoutHandler =
-            new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor, _tenantAccessor);
+            new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor, _tenantAccessor, _shipments);
     }
 
     public RecordingCausedCommandBus Bus { get; }
@@ -156,6 +161,10 @@ internal sealed class OrderFulfillmentTestHarness
     public void MapSku(string sku, Guid inventoryId) => _skuLookup.Map(sku, inventoryId);
 
     public Task SeedOrder(Order order) => _orders.SaveAsync(order, CancellationToken.None);
+
+    public Task SeedInventory(Inventory inventory) => _inventory.SaveAsync(inventory, CancellationToken.None);
+
+    public Task SeedPayment(Payment payment) => _payments.SaveAsync(payment, CancellationToken.None);
 
     public Task SeedShipment(Shipment shipment) => _shipments.SaveAsync(shipment, CancellationToken.None);
 
@@ -239,4 +248,9 @@ internal sealed class OrderFulfillmentTestHarness
         Source: "test",
         OccurredUtc: DateTime.UtcNow,
         Tenant: WellKnownTenants.Default);
+}
+
+internal sealed class TestWorkflowLock : IWorkflowLock
+{
+    public Task RunAsync(TenantId tenant, Guid orderId, Func<Task> action, CancellationToken ct) => action();
 }
