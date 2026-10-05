@@ -25,9 +25,16 @@ public sealed class Shipment : AggregateRoot
         IReadOnlyList<ShipmentLine> lines,
         DateTime utcNow)
     {
-        if (lines.Count == 0)
+        CommandInput.RequireAddress(destination);
+        if (lines is null || lines.Count == 0)
         {
             throw new DomainException("Cannot schedule shipment: at least one line is required.");
+        }
+        foreach (var line in lines)
+        {
+            if (line is null || line.Quantity <= 0)
+                throw new DomainException("Shipment lines require a positive quantity.");
+            CommandInput.RequireText(line.Sku, "Shipment SKU");
         }
         var shipment = new Shipment();
         shipment.Raise(new ShipmentScheduled(shipmentId, orderId, destination, lines, utcNow));
@@ -44,6 +51,7 @@ public sealed class Shipment : AggregateRoot
         {
             throw new DomainException($"Cannot dispatch shipment {Id}: carrier reference must be non-empty.");
         }
+        CommandInput.RequireSupportedText(carrierReference, "Carrier reference");
         Raise(new ShipmentDispatched(Id, carrierReference, utcNow));
     }
 
@@ -69,6 +77,7 @@ public sealed class Shipment : AggregateRoot
         {
             throw new DomainException($"Cannot return shipment {Id}: reason must be non-empty.");
         }
+        CommandInput.RequireSupportedText(reason, "Return reason");
         Raise(new ShipmentReturned(Id, reason, utcNow));
     }
 

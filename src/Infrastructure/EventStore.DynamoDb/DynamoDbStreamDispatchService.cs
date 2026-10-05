@@ -254,14 +254,13 @@ public sealed class DynamoDbStreamDispatchService : BackgroundService
     private async Task<bool> AcquireNewShardIteratorsAsync(
         string streamArn, ShardWalk shards, CancellationToken ct)
     {
-        var described = await _streams.DescribeStreamAsync(
-            new DescribeStreamRequest { StreamArn = streamArn }, ct);
         shards.NeedsDiscovery = false;
         var acquired = false;
 
-        foreach (var shard in described.StreamDescription.Shards)
+        await foreach (var shardId in DynamoDbShardDiscovery.ReadAllAsync(
+            (after, token) => ReadShardPageAsync(streamArn, after, token), ct))
         {
-            if (!shards.ShouldAcquire(shard.ShardId))
+            if (!shards.ShouldAcquire(shardId))
             {
                 continue;
             }
@@ -270,15 +269,28 @@ public sealed class DynamoDbStreamDispatchService : BackgroundService
                 new GetShardIteratorRequest
                 {
                     StreamArn = streamArn,
-                    ShardId = shard.ShardId,
+                    ShardId = shardId,
                     ShardIteratorType = ShardIteratorType.LATEST,
                 },
                 ct);
-            shards.Iterators[shard.ShardId] = iterator.ShardIterator;
+            shards.Iterators[shardId] = iterator.ShardIterator;
             acquired = true;
         }
 
         return acquired;
+    }
+
+    private async Task<DynamoDbShardPage> ReadShardPageAsync(
+        string streamArn, string? after, CancellationToken ct)
+    {
+        var response = await _streams.DescribeStreamAsync(new DescribeStreamRequest
+        {
+            StreamArn = streamArn,
+            ExclusiveStartShardId = after,
+        }, ct);
+        var description = response.StreamDescription;
+        return new DynamoDbShardPage(
+            description.Shards.Select(s => s.ShardId).ToArray(), description.LastEvaluatedShardId);
     }
 
     // Walks every live shard once. Returns whether anything arrived, which is the whole question the

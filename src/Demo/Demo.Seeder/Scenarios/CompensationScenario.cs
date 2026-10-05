@@ -1,6 +1,7 @@
 using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Application.Queries.Sales;
-using EventSourcingCqrs.Domain.Sales.Events;
+using EventSourcingCqrs.Domain.Billing.Events;
+using EventSourcingCqrs.Domain.Sales;
 using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Demo.Seeder.Scenarios;
@@ -17,9 +18,8 @@ namespace EventSourcingCqrs.Demo.Seeder.Scenarios;
 // What the compensation does, read from the process manager rather than assumed. The payment is
 // authorized first, because authorization happens on OrderPlaced and the reservations come after
 // it, so there is a real authorization to undo. The fan-out records the line as failed rather than
-// reserved, and with no line reserved the compensation has nothing to release. It then voids the
-// authorized payment and cancels the order, in that order. Three commands are dispatched in the
-// clean case and two here, because the release set is empty.
+// reserved, and with no line reserved the compensation has nothing to release. It cancels the
+// order before voiding the authorization, fencing further fulfillment first (ADR 0055).
 //
 // So the events this leaves behind are PaymentVoided on the payment's stream and OrderCancelled on
 // the order's, plus the process manager's own transitions on its stream. No inventory event is
@@ -27,11 +27,9 @@ namespace EventSourcingCqrs.Demo.Seeder.Scenarios;
 // model. That is what makes a fresh SKU per run free here where it would not be in the clean
 // scenario: nothing creates inventory for it, so nothing accumulates.
 //
-// One wait, and it names OrderCancelled deliberately. That is the last event of the compensation a
-// projection observes: the process manager's own events follow it and the projection feed excludes
-// them. All four projections that subscribe to OrderCancelled handle it, so all four can reach the
-// position the wait targets. Naming PaymentVoided instead would derive the order-detail projection
-// alone and target a position two events short of the one the run cares about.
+// Wait for this order's cancelled state and payment void in its detail timeline. A global feed
+// head is not a workflow-completion condition: Sales projections stop at OrderCancelled while
+// PaymentVoided advances that head, and catching up to OrderPlaced says nothing about compensation.
 public static class CompensationScenario
 {
     private const int Quantity = 3;
@@ -82,10 +80,9 @@ public static class CompensationScenario
         Console.WriteLine("  2. What the process manager does with it.");
         Console.WriteLine("     it authorizes payment first, because authorization happens on OrderPlaced.");
         Console.WriteLine("     then it resolves each line's SKU through the lookup projection, and finds nothing.");
-        Console.WriteLine("     with no line reserved there is nothing to release, so it voids and cancels.");
+        Console.WriteLine("     with no line reserved there is nothing to release, so it cancels and voids.");
 
-        // OrderCancelled is the last event of the compensation a projection observes.
-        await WaitAsync(context, "the cancelled order", [typeof(OrderCancelled)], ct);
+        await WaitForCompensationAsync(context, orderId, ct);
 
         await NarrateFinalStateAsync(context, orderId, ct);
     }
@@ -119,23 +116,31 @@ public static class CompensationScenario
     private static string Stamp(DateTime? value)
         => value is null ? "never" : value.Value.ToString("u");
 
-    private static async Task WaitAsync(
-        SeederContext context, string label, Type[] eventTypes, CancellationToken ct)
+    private static async Task WaitForCompensationAsync(
+        SeederContext context, Guid orderId, CancellationToken ct)
     {
-        Console.WriteLine($"     waiting on the projections that handle {label}.");
+        Console.WriteLine("     waiting for this order's cancellation and payment void.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(WaitBudget);
         try
         {
-            var names = await context.Waiter.WaitForCatchUpAsync(
-                eventTypes, WaitBudget, WaitPollInterval, ct);
-            Console.WriteLine($"     caught up: {string.Join(", ", names)}.");
+            while (true)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                var view = await context.Queries.AskAsync(new GetOrderDetail(orderId), deadline.Token);
+                if (view?.Header.Status == OrderStatus.Cancelled
+                    && view.Timeline.Any(row => row.EventType == nameof(PaymentVoided)))
+                {
+                    Console.WriteLine("     compensation observed: the order is cancelled and its payment is voided.");
+                    return;
+                }
+                await Task.Delay(WaitPollInterval, deadline.Token);
+            }
         }
-        catch (TimeoutException ex)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && deadline.IsCancellationRequested)
         {
-            Console.Error.WriteLine(
-                $"     the wait on {label} ended on its bound of {WaitBudget.TotalSeconds:N0}s " +
-                "rather than on catch up. Nothing below this line ran.");
-            Console.Error.WriteLine($"     {ex.Message}");
-            throw;
+            throw new TimeoutException(
+                $"Order {orderId} did not reach cancelled state with a voided payment within {WaitBudget}.", ex);
         }
     }
 }

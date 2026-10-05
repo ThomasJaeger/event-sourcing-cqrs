@@ -8,6 +8,34 @@ namespace EventSourcingCqrs.Domain.Tests.SharedKernel;
 
 public class MoneyTests
 {
+    [Theory]
+    [InlineData(-0.05, 2)]
+    [InlineData(-0.01, 3)]
+    [InlineData(-10.01, 7)]
+    public void Negative_allocations_conserve_the_amount(decimal amount, int parts)
+    {
+        var money = new Money(amount, Currency.USD);
+        money.Allocate(parts).Sum(share => share.Amount).Should().Be(amount);
+        money.Allocate(Enumerable.Repeat(1, parts).ToArray()).Sum(share => share.Amount).Should().Be(amount);
+    }
+
+    [Fact]
+    public void Large_ratios_do_not_overflow_the_total_weight()
+    {
+        new Money(1m, Currency.USD).Allocate([int.MaxValue, int.MaxValue])
+            .Should().Equal(new Money(0.5m, Currency.USD), new Money(0.5m, Currency.USD));
+    }
+
+    [Theory]
+    [InlineData(0.01)]
+    [InlineData(-0.01)]
+    public void Allocation_remainders_skip_zero_weight_recipients(decimal amount)
+    {
+        var parts = new Money(amount, Currency.USD).Allocate([0, 1, 1]);
+        parts[0].Amount.Should().Be(0m);
+        parts.Sum(share => share.Amount).Should().Be(amount);
+    }
+
     [Fact]
     public void Addition_returns_sum_when_currencies_match()
     {

@@ -1,6 +1,7 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Access.ReadModels;
 using EventSourcingCqrs.Domain.Billing.ReadModels;
+using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Infrastructure.SignalR;
@@ -34,6 +35,7 @@ public static class ServiceCollectionExtensions
         // current-roles store. AddReadModels adds the rest of the read-model surface on top.
         services.AddCurrentRolesReadModel(configure);
         services.AddSingleton<IWorkflowLock, PostgresWorkflowLock>();
+        services.AddSingleton<IInventorySkuRegistry, PostgresInventorySkuRegistry>();
 
         // The name-only roster, single-sourced in AddProjectionRoster: the projection
         // identities (their checkpoint names) without the projection instances.

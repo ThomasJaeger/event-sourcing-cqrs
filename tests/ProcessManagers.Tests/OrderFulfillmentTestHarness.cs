@@ -128,7 +128,7 @@ internal sealed class OrderFulfillmentTestHarness
     private readonly EventStoreRepository<Shipment> _shipments;
     private readonly EventStoreRepository<Payment> _payments;
     private readonly EventStoreRepository<Inventory> _inventory;
-    private readonly ProcessManagerRepository<OrderFulfillmentProcessManager> _pms;
+    private readonly BoundedPmRepository _pms;
     private readonly OrderFulfillmentProcessManagerHandler _handler;
     private readonly TimeoutAwaitingPaymentForOrderHandler _paymentTimeoutHandler;
     private readonly TimeoutAwaitingDispatchForOrderHandler _dispatchTimeoutHandler;
@@ -140,7 +140,7 @@ internal sealed class OrderFulfillmentTestHarness
         _shipments = new EventStoreRepository<Shipment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _payments = new EventStoreRepository<Payment>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
         _inventory = new EventStoreRepository<Inventory>(_store, _accessor, _tenantAccessor, new StubCurrentVersions());
-        _pms = new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor, _tenantAccessor);
+        _pms = new BoundedPmRepository(new ProcessManagerRepository<OrderFulfillmentProcessManager>(_store, _accessor, _tenantAccessor));
         Bus = new RecordingCausedCommandBus();
         DelayQueue = new RecordingDelayQueue();
         var compensation = new OrderFulfillmentCompensation(Bus, _pms, DelayQueue);
@@ -151,6 +151,8 @@ internal sealed class OrderFulfillmentTestHarness
         _dispatchTimeoutHandler =
             new TimeoutAwaitingDispatchForOrderHandler(_pms, compensation, _accessor, _tenantAccessor, _shipments);
     }
+
+    public BoundedPmRepository Persistence => _pms;
 
     public RecordingCausedCommandBus Bus { get; }
 
@@ -253,4 +255,33 @@ internal sealed class OrderFulfillmentTestHarness
 internal sealed class TestWorkflowLock : IWorkflowLock
 {
     public Task RunAsync(TenantId tenant, Guid orderId, Func<Task> action, CancellationToken ct) => action();
+}
+
+// The repository port is owned by this codebase. This decorator exercises the
+// workflow against the narrowest shipped append capacity without mocking an SDK.
+internal sealed class BoundedPmRepository(
+    IProcessManagerRepository<OrderFulfillmentProcessManager> inner)
+    : IProcessManagerRepository<OrderFulfillmentProcessManager>
+{
+    public int MaximumEvents { get; set; } = int.MaxValue;
+    public Action<OrderFulfillmentProcessManager>? BeforeSave { get; set; }
+    public List<int> SavedBatchSizes { get; } = [];
+
+    public Task<OrderFulfillmentProcessManager?> LoadAsync(StreamId stream,
+        Func<StreamId, OrderFulfillmentProcessManager> factory, CancellationToken ct)
+        => inner.LoadAsync(stream, factory, ct);
+
+    public Task<OrderFulfillmentProcessManager> LoadOrNewAsync(StreamId stream,
+        Func<StreamId, OrderFulfillmentProcessManager> factory, CancellationToken ct)
+        => inner.LoadOrNewAsync(stream, factory, ct);
+
+    public async Task SaveAsync(OrderFulfillmentProcessManager pm, CancellationToken ct)
+    {
+        var size = pm.GetUncommittedEvents().Count;
+        if (size > MaximumEvents)
+            throw new InvalidOperationException($"Append contains {size} events; limit is {MaximumEvents}.");
+        BeforeSave?.Invoke(pm);
+        await inner.SaveAsync(pm, ct);
+        if (size > 0) SavedBatchSizes.Add(size);
+    }
 }

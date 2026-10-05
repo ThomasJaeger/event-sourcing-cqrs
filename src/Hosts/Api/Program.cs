@@ -8,6 +8,7 @@ using EventSourcingCqrs.Application.Commands.Sales;
 using EventSourcingCqrs.Application.Queries.Fulfillment;
 using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Domain.Access;
 using EventSourcingCqrs.Domain.Billing;
 using EventSourcingCqrs.Domain.Fulfillment;
 using EventSourcingCqrs.Domain.Sales;
@@ -61,6 +62,8 @@ builder.Services.AddSingleton<IEventTypeProvider, SalesEventTypeProvider>();
 builder.Services.AddSingleton<IEventUpcaster, OrderDraftedV1ToV2>();
 builder.Services.AddSingleton<IEventTypeProvider, FulfillmentEventTypeProvider>();
 builder.Services.AddSingleton<IEventTypeProvider, BillingEventTypeProvider>();
+// SKU ownership initialization reads the authoritative feed, including bootstrap role events.
+builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();
 
 // Query types so the /queries endpoint (Commit 14) resolves an envelope
 // discriminator to a CLR query type through QueryTypeRegistry (ADR 0022).

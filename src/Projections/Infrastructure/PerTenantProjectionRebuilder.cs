@@ -12,26 +12,27 @@ namespace EventSourcingCqrs.Projections.Infrastructure;
 // ceiling keeps the replay from reaching events the projection has not globally
 // processed, which would otherwise pull the global checkpoint forward.
 //
-// The rebuild is non-transactional reset-then-replay against a consumer quiesced for the
-// tenant: between the reset and the end of the replay the tenant's read model is
-// partially populated, which is why the operational contract runs it while the tenant's
-// catch-up is paused.
+// The coordinator excludes live handlers and other rebuilds for this projection until
+// replay finishes. Its checkpoint lease captures the ceiling under that same lock, so a
+// live write cannot commit between capturing the ceiling and resetting the tenant.
+// Reset and replay are separate transactions: queries can see partial results, and a
+// failed rebuild must be rerun. The shared checkpoint remains unchanged throughout.
 public sealed class PerTenantProjectionRebuilder
 {
     private readonly IEventStore _eventStore;
-    private readonly ICheckpointStore _checkpointStore;
+    private readonly IProjectionRebuildCoordinator _coordinator;
     private readonly ICurrentTenantAccessor _tenantAccessor;
 
     public PerTenantProjectionRebuilder(
         IEventStore eventStore,
-        ICheckpointStore checkpointStore,
+        IProjectionRebuildCoordinator coordinator,
         ICurrentTenantAccessor tenantAccessor)
     {
         ArgumentNullException.ThrowIfNull(eventStore);
-        ArgumentNullException.ThrowIfNull(checkpointStore);
+        ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(tenantAccessor);
         _eventStore = eventStore;
-        _checkpointStore = checkpointStore;
+        _coordinator = coordinator;
         _tenantAccessor = tenantAccessor;
     }
 
@@ -54,11 +55,14 @@ public sealed class PerTenantProjectionRebuilder
         // Read the live global position once and bound the replay at it; never advance
         // it. A replay past it would pull the shared checkpoint forward over other
         // tenants' unprocessed events, which the next catch-up would then skip.
-        var ceiling = await _checkpointStore.GetPositionAsync(projection.Name, ct);
+        await using var lease = await _coordinator.AcquireAsync(projection.Name, ct);
 
+        await lease.EnsureHeldAsync(ct);
         await reset.ResetTenantAsync(tenant, ct);
+        await lease.EnsureHeldAsync(ct);
 
         await new ProjectionReplayer(_eventStore, projection, _tenantAccessor)
-            .ReplayForTenantAsync(tenant, 0, ceiling, ct);
+            .ReplayForTenantAsync(tenant, 0, lease, ct);
+        await lease.EnsureHeldAsync(ct);
     }
 }

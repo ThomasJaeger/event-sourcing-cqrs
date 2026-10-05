@@ -47,7 +47,8 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
 
         // State guard: a late timeout, after ShipmentDispatched already advanced
         // the PM, loads a PM past AwaitingDispatch and no-ops.
-        if (pm is null || pm.State != OrderFulfillmentState.AwaitingDispatch)
+        if (pm is null || pm.State is OrderFulfillmentState.Completed or OrderFulfillmentState.Cancelled
+            || (pm.State != OrderFulfillmentState.AwaitingDispatch && pm.CancellationReason is null))
         {
             return;
         }
@@ -55,13 +56,13 @@ public sealed class TimeoutAwaitingDispatchForOrderHandler : ICommandHandler<Tim
         // An undelivered event is not a failed operation. The command pipeline
         // holds the order lock against authorization/dispatch and cancellation.
         var shipment = await _outcomes.LoadAsync(pm.ShipmentId, ct);
-        if (shipment is { Status: not ShipmentStatus.Scheduled })
+        if (pm.CancellationReason is null && shipment is { Status: not ShipmentStatus.Scheduled })
             return;
 
         var causing = context is null
             ? EventMetadata.ForCommand(CommandContext.System, WellKnownTenants.Default)
             : EventMetadata.ForCommand(context, tenant);
         await _compensation.CompensateWithReleasesAsync(
-            pm, $"Shipment dispatch timed out for order {command.OrderId}.", causing, ct);
+            pm, pm.CancellationReason ?? $"Shipment dispatch timed out for order {command.OrderId}.", causing, ct);
     }
 }

@@ -76,7 +76,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         pendingDef.Should().Contain("sent_utc IS NULL");
 
         var rows = await ReadSchemaMigrationsAsync(connStr);
-        rows.Should().HaveCount(28);
+        rows.Should().HaveCount(29);
         rows[0].Version.Should().Be(1);
         rows[0].Name.Should().Be("initial_event_store");
         rows[0].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
@@ -161,6 +161,9 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         rows[27].Version.Should().Be(28);
         rows[27].Name.Should().Be("tenant_scoped_order_id_to_payment_id_key");
         rows[27].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
+        rows[28].Version.Should().Be(29);
+        rows[28].Name.Should().Be("create_inventory_sku_registry");
+        rows[28].Checksum.Should().MatchRegex("^[0-9a-f]{64}$");
 
         log.Should().Contain("Applying 0001 initial_event_store.");
         log.Should().Contain("Applying 0002 add_outbox_global_position.");
@@ -190,7 +193,8 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain("Applying 0026 tenant_scoped_inventory_dashboard_keys.");
         log.Should().Contain("Applying 0027 tenant_scoped_order_list_keys.");
         log.Should().Contain("Applying 0028 tenant_scoped_order_id_to_payment_id_key.");
-        log.Should().Contain("Applied 28 migration(s).");
+        log.Should().Contain("Applying 0029 create_inventory_sku_registry.");
+        log.Should().Contain("Applied 29 migration(s).");
     }
 
     [Fact]
@@ -210,7 +214,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, Log = log.Add },
             CancellationToken.None);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(28);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(29);
         log.Should().Contain("No pending migrations.");
     }
 
@@ -266,11 +270,11 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         }
         await Task.WhenAll(taskA, taskB);
 
-        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(28);
+        (await ReadSchemaMigrationsAsync(connStr)).Should().HaveCount(29);
 
         // Across the two logs combined: exactly one "Applying 0001..." and
         // exactly one "No pending migrations." One runner applies the whole
-        // pending batch (0001 through 0028); the other sees nothing pending.
+        // pending batch (0001 through 0029); the other sees nothing pending.
         // That signature is what the advisory lock produces and nothing else does.
         var combined = logA.Concat(logB).ToList();
         combined.Count(m => m == "Applying 0001 initial_event_store.").Should().Be(1);
@@ -322,7 +326,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
             new MigrationRunnerOptions { ConnectionString = connStr, DryRun = true, Log = log.Add },
             CancellationToken.None);
 
-        log.Should().Contain("Dry run: 28 migration(s) pending.");
+        log.Should().Contain("Dry run: 29 migration(s) pending.");
         log.Should().Contain(m => m.EndsWith("0001 initial_event_store"));
         log.Should().Contain(m => m.EndsWith("0002 add_outbox_global_position"));
         log.Should().Contain(m => m.EndsWith("0003 initial_read_models"));
@@ -351,6 +355,7 @@ public class PostgresMigrationRunnerTests : IClassFixture<PostgresFixture>
         log.Should().Contain(m => m.EndsWith("0026 tenant_scoped_inventory_dashboard_keys"));
         log.Should().Contain(m => m.EndsWith("0027 tenant_scoped_order_list_keys"));
         log.Should().Contain(m => m.EndsWith("0028 tenant_scoped_order_id_to_payment_id_key"));
+        log.Should().Contain(m => m.EndsWith("0029 create_inventory_sku_registry"));
 
         (await TableExistsAsync(connStr, "event_store.events")).Should().BeFalse();
         (await TableExistsAsync(connStr, "event_store.schema_migrations")).Should().BeFalse();

@@ -149,7 +149,7 @@ internal static class CrossTenantCommandCases
 
     // The minimal creating event for each aggregate's other-tenant twin.
     private static OrderDrafted OrderTwin(Guid id) => new(id, Guid.NewGuid(), SeededAt, "web");
-    private static InventoryCreated InventoryTwin(Guid id) => new(id, "SKU-OTHER", SeededAt);
+    private static InventoryCreated InventoryTwin(Guid id) => new(id, "SKU-OTHER-" + id.ToString("N"), SeededAt);
     private static ShipmentScheduled ShipmentTwin(Guid id) =>
         new(id, Guid.NewGuid(), TwinDestination,
             new[] { new ShipmentLine(Guid.NewGuid(), Guid.NewGuid(), "SKU-001", 1) }, SeededAt);

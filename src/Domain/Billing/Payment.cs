@@ -27,6 +27,7 @@ public sealed class Payment : AggregateRoot
         string paymentMethodReference,
         DateTime utcNow)
     {
+        CommandInput.RequireAmount(amount, "Payment amount");
         if (amount.IsNegative || amount.IsZero)
         {
             throw new DomainException(
@@ -37,6 +38,7 @@ public sealed class Payment : AggregateRoot
             throw new DomainException(
                 $"Cannot authorize payment {paymentId}: payment method reference must be non-empty.");
         }
+        CommandInput.RequireSupportedText(paymentMethodReference, "Payment method reference");
         var payment = new Payment();
         payment.Raise(new PaymentAuthorized(paymentId, orderId, amount, paymentMethodReference, utcNow));
         return payment;
@@ -64,6 +66,7 @@ public sealed class Payment : AggregateRoot
         {
             throw new DomainException($"Cannot refund payment {Id}: reason must be non-empty.");
         }
+        CommandInput.RequireSupportedText(reason, "Refund reason");
         // Full-refund-only for v1. The status-check guarantees _capturedAmount
         // is non-null. Partial refunds deferred to Phase 15.
         Raise(new PaymentRefunded(Id, _capturedAmount!, reason, utcNow));
@@ -82,6 +85,7 @@ public sealed class Payment : AggregateRoot
         {
             throw new DomainException($"Cannot void payment {Id}: reason must be non-empty.");
         }
+        CommandInput.RequireSupportedText(reason, "Void reason");
         Raise(new PaymentVoided(Id, reason, utcNow));
     }
 

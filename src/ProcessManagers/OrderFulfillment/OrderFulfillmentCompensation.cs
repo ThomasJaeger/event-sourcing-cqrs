@@ -45,7 +45,7 @@ public sealed class OrderFulfillmentCompensation
     {
         await _delayQueue.CancelAsync(pm.StreamId, OrderFulfillmentSteps.AwaitPaymentTimeout, reason, ct);
 
-        pm.StartCancellation(reason);
+        reason = await StartCancellationAsync(pm, reason, ct);
         await _bus.SendAsync(
             new CancelOrder(pm.OrderId, reason, Actor.Id),
             causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.CancelOrder), ct);
@@ -53,46 +53,54 @@ public sealed class OrderFulfillmentCompensation
         await _pms.SaveAsync(pm, ct);
     }
 
-    // Cancel first to durably fence further fulfillment, then release reserved
-    // lines and void the authorization. The terminal PM save follows successful
-    // completion of every command. The release set is
-    // captured before ReleaseReservation flips line statuses, and the dispatch
-    // reads that captured list, so the save need not precede the dispatch and no
-    // post-save-pre-dispatch orphan window opens.
+    // Cancellation intent is durable before side effects. Each successful release
+    // joins a bounded batch; retries resume unreleased lines with the same keys.
+    // Terminal state follows all effects, so an interrupted batch remains retryable.
     public async Task CompensateWithReleasesAsync(
         OrderFulfillmentProcessManager pm, string reason, EventMetadata causing, CancellationToken ct)
     {
         await _delayQueue.CancelAsync(pm.StreamId, OrderFulfillmentSteps.AwaitDispatchTimeout, reason, ct);
-
-        var linesToRelease = pm.Reservations
-            .Where(r => r.Value.Status == ReservationLineStatus.Reserved)
-            .Select(r => (LineId: r.Key, InventoryId: r.Value.InventoryId!.Value))
-            .ToList();
-
-        pm.StartCancellation(reason);
-        foreach (var (lineId, _) in linesToRelease)
-        {
-            pm.ReleaseReservation(lineId);   // -> ReleasingInventory
-        }
-        pm.RequestVoid(reason);              // -> VoidingPayment
-        pm.CompleteAsCancelled();            // -> Cancelled
-
+        reason = await StartCancellationAsync(pm, reason, ct);
         await _bus.SendAsync(
             new CancelOrder(pm.OrderId, reason, Actor.Id),
             causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.CancelOrder), ct);
-        // Successful earlier steps are recovered by their durable command receipts.
-        // A rejected or conflicting step propagates; never save a false terminal.
-        foreach (var line in linesToRelease)
+
+        await ReleaseReservationsAsync(pm, causing, ct);
+        await _bus.SendAsync(
+            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
+            causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.VoidPayment), ct);
+        pm.RequestVoid(reason);
+        pm.CompleteAsCancelled();
+        await _pms.SaveAsync(pm, ct);
+    }
+
+    private async Task ReleaseReservationsAsync(
+        OrderFulfillmentProcessManager pm, EventMetadata causing, CancellationToken ct)
+    {
+        var lines = pm.Reservations
+            .Where(r => r.Value.Status == ReservationLineStatus.Reserved)
+            .Select(r => (LineId: r.Key, InventoryId: r.Value.InventoryId!.Value))
+            .ToList();
+        foreach (var line in lines)
         {
             await _bus.SendAsync(
                 new ReleaseInventory(line.InventoryId, line.LineId,
                     "Order fulfillment released the reservation during compensation."),
                 causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.Release, line.LineId), ct);
+            pm.ReleaseReservation(line.LineId);
+            await OrderFulfillmentPersistence.SaveBatchIfFullAsync(pm, _pms, ct);
         }
-        await _bus.SendAsync(
-            new VoidPayment(pm.PaymentId, "Order fulfillment voided the authorized payment during compensation."),
-            causing, Actor, IdempotencyKeys.ForProcessManager(pm.StreamId, OrderFulfillmentSteps.VoidPayment), ct);
-
         await _pms.SaveAsync(pm, ct);
+    }
+
+    private async Task<string> StartCancellationAsync(
+        OrderFulfillmentProcessManager pm, string reason, CancellationToken ct)
+    {
+        if (pm.CancellationReason is null)
+        {
+            pm.StartCancellation(reason);
+            await _pms.SaveAsync(pm, ct);
+        }
+        return pm.CancellationReason!;
     }
 }

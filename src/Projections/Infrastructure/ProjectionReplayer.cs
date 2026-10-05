@@ -47,11 +47,15 @@ public sealed class ProjectionReplayer
     // The rebuilder bounds the window at the captured global checkpoint, so the replay
     // never reaches events the projection has not globally processed.
     public async Task ReplayForTenantAsync(
-        TenantId tenant, long fromPosition, long toPositionInclusive, CancellationToken ct)
+        TenantId tenant, long fromPosition, IProjectionRebuildLease lease, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(lease);
         await foreach (var envelope in _eventStore.ReadAllForTenantAsync(
-            tenant, fromPosition, toPositionInclusive, ct))
+            tenant, fromPosition, lease.Position, ct))
         {
+            // Replay writes use separate transactions. Stop at the next event boundary
+            // if the connection excluding live writers has died; never report success.
+            await lease.EnsureHeldAsync(ct);
             await ApplyAsync(envelope, ct);
         }
     }

@@ -86,7 +86,7 @@ public sealed record Money(decimal Amount, Currency Currency)
         var result = new Money[n];
         for (var i = 0; i < n; i++)
         {
-            var minor = baseMinor + (i < remainder ? 1 : 0);
+            var minor = baseMinor + (i < Math.Abs(remainder) ? Math.Sign(remainder) : 0);
             result[i] = new Money(minor / scale, Currency);
         }
         return result;
@@ -98,7 +98,7 @@ public sealed record Money(decimal Amount, Currency Currency)
         {
             throw new DomainException("Cannot allocate Money with no ratios.");
         }
-        var total = 0;
+        long total = 0;
         foreach (var r in ratios)
         {
             if (r < 0)
@@ -129,9 +129,12 @@ public sealed record Money(decimal Amount, Currency Currency)
         }
 
         var remainder = (int)(totalMinor - allocated);
-        for (var i = 0; i < remainder; i++)
+        var remaining = Math.Abs(remainder);
+        for (var i = 0; remaining > 0; i++)
         {
-            result[i] = new Money(result[i].Amount + 1m / scale, Currency);
+            if (ratios[i] == 0) continue;
+            result[i] = new Money(result[i].Amount + Math.Sign(remainder) / scale, Currency);
+            remaining--;
         }
         return result;
     }

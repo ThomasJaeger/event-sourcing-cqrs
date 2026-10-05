@@ -15,24 +15,33 @@ public sealed record CreateInventory(Guid InventoryId, string Sku) : IAuthorized
 // SaveAsync appends with expectedVersion = 0; if the stream already exists,
 // the event store throws ConcurrencyException, which is the right signal
 // that "this InventoryId is already created, send a different command."
-// Mirrors DraftOrderHandler's shape.
+// A durable SKU claim precedes the append so two ids cannot create the same tenant's SKU.
 public sealed class CreateInventoryHandler : ICommandHandler<CreateInventory>
 {
     private readonly IEventStoreRepository<Inventory> _repository;
     private readonly ICommandContextAccessor _accessor;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly IInventorySkuRegistry _skuRegistry;
 
     public CreateInventoryHandler(
         IEventStoreRepository<Inventory> repository,
-        ICommandContextAccessor accessor)
+        ICommandContextAccessor accessor,
+        ICurrentTenantAccessor tenantAccessor,
+        IInventorySkuRegistry skuRegistry)
     {
         _repository = repository;
         _accessor = accessor;
+        _tenantAccessor = tenantAccessor;
+        _skuRegistry = skuRegistry;
     }
 
-    public Task HandleAsync(CreateInventory command, CancellationToken ct)
+    public async Task HandleAsync(CreateInventory command, CancellationToken ct)
     {
         var utcNow = (_accessor.Current ?? CommandContext.System).UtcNow().UtcDateTime;
         var inventory = Inventory.Create(command.InventoryId, command.Sku, utcNow);
-        return _repository.SaveAsync(inventory, ct);
+        var tenant = _tenantAccessor.Current
+            ?? (_accessor.Current is null ? WellKnownTenants.Default : throw new MissingTenantContextException());
+        await _skuRegistry.ClaimAsync(tenant, command.InventoryId, command.Sku, ct);
+        await _repository.SaveAsync(inventory, ct);
     }
 }

@@ -1,5 +1,6 @@
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.Events;
+using EventSourcingCqrs.Domain.SharedKernel;
 
 namespace EventSourcingCqrs.Domain.Fulfillment;
 
@@ -27,6 +28,7 @@ public sealed class Inventory : AggregateRoot
         {
             throw new DomainException("Cannot create inventory: SKU must be non-empty.");
         }
+        CommandInput.RequireSupportedText(sku, "SKU");
         var inventory = new Inventory();
         inventory.Raise(new InventoryCreated(inventoryId, sku, utcNow));
         return inventory;
@@ -46,7 +48,11 @@ public sealed class Inventory : AggregateRoot
         {
             throw new DomainException($"Cannot adjust inventory {_sku}: reason must be non-empty.");
         }
-        if (_totalAdjusted + quantityDelta - Reserved < 0)
+        CommandInput.RequireSupportedText(reason, "Adjustment reason");
+        var adjusted = (long)_totalAdjusted + quantityDelta;
+        if (adjusted > int.MaxValue)
+            throw new DomainException("Inventory quantity exceeds the supported range.");
+        if (adjusted - Reserved < 0)
         {
             throw new DomainException(
                 $"Cannot adjust inventory {_sku} by {quantityDelta}: would make available stock negative.");
@@ -80,6 +86,7 @@ public sealed class Inventory : AggregateRoot
             throw new DomainException(
                 $"Cannot release reservation from inventory {_sku}: reason must be non-empty.");
         }
+        CommandInput.RequireSupportedText(reason, "Release reason");
         var reservation = _reservations.FirstOrDefault(r => r.LineId == lineId);
         if (reservation is null)
         {

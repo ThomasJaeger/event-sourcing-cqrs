@@ -58,7 +58,25 @@ export READ_MODEL_CONNECTION_STRING='Host=localhost;Port=5432;Database=esrcq;Use
 export FORWARDED_IDENTITY_SIGNING_SECRET='local-development-secret-not-for-any-other-environment'
 export API_BASE_URL='http://localhost:5000'
 export BootstrapAdministrator__AdministratorUserId='11111111-1111-1111-1111-111111111111'
+export OperatorAuthentication__PasswordHash='<generated password hash>'
 ```
+
+Generate the operator password hash before starting Web:
+
+```
+dotnet run --project src/Hosts/Web -- --hash-operator-password
+```
+
+Enter a password of 16 to 1024 characters at the prompt, then put the emitted hash in
+`OperatorAuthentication__PasswordHash`. The prompt hides interactive input. The password never goes
+in a command-line argument or configuration; configuration holds its salted ASP.NET Core Identity
+hash. The hashing command exits without starting the host or opening database connections.
+
+The `/login` form requires that password in every environment. Upgrading invalidates cookies from
+the former passwordless login, requiring operators to sign in again. Login attempts are limited to ten
+per minute per remote address per Web instance. Deployments behind a proxy share the proxy's address
+unless trusted forwarding is configured by the operator; the application does not trust arbitrary
+forwarded-address headers.
 
 Then start the hosts, one per terminal, in this order:
 
@@ -94,6 +112,7 @@ Every host reads its configuration from the environment. There are no `appsettin
 | `API_BASE_URL` | Web | Where the Api host is listening |
 | `FORWARDED_IDENTITY_SIGNING_SECRET` | Api, Web | Signs the identity the Web host forwards to Api |
 | `BootstrapAdministrator:AdministratorUserId` | Web, Workers | The first administrator's user id |
+| `OperatorAuthentication:PasswordHash` | Web | Required salted Identity V3 password hash; generate with `--hash-operator-password` |
 
 A missing required key throws at startup with the key named. Nothing falls back silently.
 
@@ -102,6 +121,26 @@ A missing required key throws at startup with the key named. Nothing falls back 
 Set `EVENT_STORE_PROVIDER` and restart. No domain code changes. An unrecognized value fails
 the host at startup with the value named, rather than falling back, because a typo that
 silently composed the other engine would write events to the wrong database.
+
+### Upgrading an existing deployment
+
+Stop old Web, API, Workers, AdminConsole, and seeder processes before installing this revision.
+Old Web instances still permit passwordless login; old AdminConsole instances rebuild without
+coordinating with live projections. Configure the operator password hash and restart only upgraded
+hosts before reopening traffic or rebuild operations.
+
+Inventory creation now uses an authoritative SKU registry in the shared PostgreSQL companion
+database; old binaries bypass that registry. The normal Workers migration run installs migration
+0029 there for every event-store provider. The first inventory creation backfills the registry from
+authoritative events under a database lock. Conflicting historical mappings stop initialization and
+require operator reconciliation.
+
+A SKU claim survives an uncertain or failed event append. Retry with the same tenant, SKU, and
+inventory ID; changing the ID is a conflicting creation. The `write_side` schema is durable write-side
+state and must be backed up with the deployment. Projection rebuilds never reset it.
+
+See [ADR 0056](docs/adr/0056-reference-review-corrections.md) for recovery behavior and remaining
+operational limits.
 
 ### Applying migrations by hand
 

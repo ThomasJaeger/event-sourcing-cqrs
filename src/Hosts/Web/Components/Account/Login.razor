@@ -17,10 +17,13 @@
         </form>
     </Authorized>
     <NotAuthorized>
-        <p>Sign in as the configured operator to use the console.</p>
+        <p>Enter the operator password to sign in.</p>
         <form method="post" action="/account/login">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <label for="operator-password">Password</label>
+            <input id="operator-password" name="password" type="password"
+                   autocomplete="current-password" required maxlength="1024" />
             <button type="submit">Sign in</button>
         </form>
     </NotAuthorized>

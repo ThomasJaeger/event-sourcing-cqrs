@@ -2,6 +2,7 @@ extern alias WebHost;
 using System;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -59,6 +60,8 @@ public class ResourceNotificationCompositionTests
                 "FORWARDED_IDENTITY_SIGNING_SECRET",
                 "resource-notification-composition-tests-forwarded-identity-secret");
             builder.UseSetting("BootstrapAdministrator:AdministratorUserId", Guid.NewGuid().ToString());
+            builder.UseSetting("OperatorAuthentication:PasswordHash",
+                new PasswordHasher<string>().HashPassword("operator", "A test-only operator password!"));
             builder.UseSetting(
                 "READ_MODEL_CONNECTION_STRING", "Host=localhost;Database=unused;Username=u;Password=p");
 

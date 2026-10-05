@@ -159,6 +159,7 @@ builder.Services.AddSingleton<IEventTypeProvider, AccessEventTypeProvider>();
 builder.Services.AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>();
 builder.Services.TryAddSingleton<PostgresPgNotifyPublisher>();
 builder.Services.AddSingleton<IOrderThroughputStore, PostgresOrderThroughputStore>();
+builder.Services.AddSingleton<IProjectionRebuildCoordinator, PostgresProjectionRebuildCoordinator>();
 builder.Services.AddSingleton<PerTenantProjectionRebuilder>();
 builder.Services.AddSingleton<IOrderThroughputRebuild, OrderThroughputRebuild>();
 builder.Services.AddSingleton<IStreamInspector, StreamInspector>();

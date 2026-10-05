@@ -19,6 +19,30 @@ public class OrderTests
     private static readonly Address Shipping = new("1 Main St", "Smalltown", "12345", "US");
     private static readonly Money TenUsd = new(10m, Currency.USD);
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void AddLine_rejects_missing_sku_before_recording_an_event(string? sku)
+    {
+        var order = Order.Draft(OrderId, CustomerId, At, "web");
+        order.DequeueUncommittedEvents();
+        Action add = () => order.AddLine(LineId1, sku!, 1, TenUsd, At);
+        add.Should().Throw<DomainException>();
+        order.DequeueUncommittedEvents().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Complete_accepts_an_order_already_marked_shipped()
+    {
+        new AggregateTest<Order>()
+            .Given(new OrderDrafted(OrderId, CustomerId, At, "web"),
+                new OrderPlaced(OrderId, CustomerId, TenUsd, At),
+                new OrderShipped(OrderId, "UPS", "tracking", At))
+            .When(order => order.Complete(At))
+            .Then(new OrderCompleted(OrderId, At));
+    }
+
     [Fact]
     public void Draft_creates_an_order_with_Draft_status()
     {
@@ -303,21 +327,6 @@ public class OrderTests
             .When(o => o.Complete(At))
             .ThenThrows<DomainException>()
             .WithMessage("*order is Draft*");
-    }
-
-    [Fact]
-    public void Complete_throws_when_order_is_Shipped()
-    {
-        new AggregateTest<Order>()
-            .Given(
-                new OrderDrafted(OrderId, CustomerId, At, "web"),
-                new OrderLineAdded(OrderId, LineId1, "SKU-1", 1, TenUsd, At),
-                new ShippingAddressSet(OrderId, Shipping, At),
-                new OrderPlaced(OrderId, CustomerId, TenUsd, At),
-                new OrderShipped(OrderId, "UPS", "1Z999", At))
-            .When(o => o.Complete(At))
-            .ThenThrows<DomainException>()
-            .WithMessage("*order is Shipped*");
     }
 
     [Fact]

@@ -63,7 +63,9 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         defaultBBefore.Should().NotBeNull();
 
         var rebuilder = new PerTenantProjectionRebuilder(
-            ctx.EventStore, ctx.CheckpointStore, ctx.TenantAccessor);
+            ctx.EventStore,
+            new PostgresProjectionRebuildCoordinator(new NpgsqlReadModelConnectionFactory(dataSource), ctx.CheckpointStore),
+            ctx.TenantAccessor);
         await rebuilder.RebuildAsync(
             ctx.ProjectionFactory, (ITenantResettable)ctx.OrderListStore, WellKnownTenants.Default,
             CancellationToken.None);
@@ -107,7 +109,9 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         otherBefore.Should().NotBeEmpty();
 
         var rebuilder = new PerTenantProjectionRebuilder(
-            ctx.EventStore, ctx.CheckpointStore, ctx.TenantAccessor);
+            ctx.EventStore,
+            new PostgresProjectionRebuildCoordinator(new NpgsqlReadModelConnectionFactory(dataSource), ctx.CheckpointStore),
+            ctx.TenantAccessor);
         await rebuilder.RebuildAsync(
             ctx.ProjectionFactory, (ITenantResettable)ctx.Store, WellKnownTenants.Default,
             CancellationToken.None);
@@ -121,6 +125,121 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
         (await ctx.Store.GetBucketsAsync(CancellationToken.None)).Should().BeEquivalentTo(otherBefore);
         (await ctx.CheckpointStore.GetPositionAsync(ctx.ProjectionName, CancellationToken.None))
             .Should().Be(checkpointBefore);
+    }
+
+    [Fact]
+    public async Task A_live_writer_waits_until_the_tenant_reset_and_replay_finish()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var ctx = await ArrangeThroughputAsync(dataSource);
+        var before = await ctx.Store.GetBucketsAsync(CancellationToken.None);
+        var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, Guid.NewGuid());
+        await ctx.EventStore.AppendAsync(stream, 0,
+            [Env(stream, 1, new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), BaseTime, "web"),
+                WellKnownTenants.Default)], CancellationToken.None);
+        var envelope = (await ctx.EventStore.ReadStreamAsync(stream)).Single();
+
+        // Gate the existing reset port, not the production path. The live writer uses a
+        // separate connection and real PostgreSQL locks, as another host would.
+        var reset = new PausedTenantReset((ITenantResettable)ctx.Store);
+        var rebuilder = new PerTenantProjectionRebuilder(
+            ctx.EventStore,
+            new PostgresProjectionRebuildCoordinator(new NpgsqlReadModelConnectionFactory(dataSource), ctx.CheckpointStore),
+            ctx.TenantAccessor);
+        var rebuilding = rebuilder.RebuildAsync(ctx.ProjectionFactory, reset, WellKnownTenants.Default);
+        await reset.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var liveProjection = new OrderThroughputProjection(ctx.Store);
+        var context = new EventContext<OrderDrafted>(
+            (OrderDrafted)envelope.Payload, envelope.Metadata, envelope.GlobalPosition);
+        try
+        {
+            using var blockedWrite = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            Func<Task> write = () => liveProjection.HandleAsync(context, blockedWrite.Token);
+            await write.Should().ThrowAsync<OperationCanceledException>(
+                "a live projection must not commit between the rebuild's ceiling and reset");
+        }
+        finally
+        {
+            reset.Continue.TrySetResult();
+            await rebuilding;
+        }
+
+        // Once replay finishes, the same event succeeds and both old and new counts survive.
+        await liveProjection.HandleAsync(context, CancellationToken.None);
+        var after = await ctx.Store.GetBucketsAsync(CancellationToken.None);
+        after.Sum(row => row.Count).Should().Be(before.Sum(row => row.Count) + 1);
+        (await ctx.CheckpointStore.GetPositionAsync(ctx.ProjectionName, CancellationToken.None))
+            .Should().Be(envelope.GlobalPosition);
+    }
+
+    [Fact]
+    public async Task Losing_the_checkpoint_lock_fails_the_rebuild_instead_of_reporting_success()
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var ctx = await ArrangeThroughputAsync(dataSource);
+        const string leaseApplication = "projection-rebuild-loss-test";
+        await using var leaseSource = NpgsqlDataSource.Create(
+            new NpgsqlConnectionStringBuilder(connStr) { ApplicationName = leaseApplication }.ConnectionString);
+        var rebuilder = new PerTenantProjectionRebuilder(
+            ctx.EventStore,
+            new PostgresProjectionRebuildCoordinator(new NpgsqlReadModelConnectionFactory(leaseSource), ctx.CheckpointStore),
+            ctx.TenantAccessor);
+        var reset = new PausedTenantReset((ITenantResettable)ctx.Store);
+        var rebuilding = rebuilder.RebuildAsync(ctx.ProjectionFactory, reset, WellKnownTenants.Default);
+        await reset.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            await using var terminate = dataSource.CreateCommand(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+                "WHERE datname = current_database() AND application_name = @application");
+            terminate.Parameters.AddWithValue("application", leaseApplication);
+            (await terminate.ExecuteScalarAsync()).Should().Be(true);
+        }
+        finally
+        {
+            reset.Continue.TrySetResult();
+        }
+
+        Func<Task> rebuild = () => rebuilding;
+        await rebuild.Should().ThrowAsync<ProjectionRebuildLeaseLostException>();
+    }
+
+    [Fact]
+    public async Task A_failed_rebuild_releases_the_live_writer_lock()
+        => await AssertInterruptedRebuildReleasesLockAsync(cancel: false);
+
+    [Fact]
+    public async Task A_cancelled_rebuild_releases_the_live_writer_lock()
+        => await AssertInterruptedRebuildReleasesLockAsync(cancel: true);
+
+    private async Task AssertInterruptedRebuildReleasesLockAsync(bool cancel)
+    {
+        var connStr = await _fixture.CreateMigratedDatabaseAsync();
+        await using var dataSource = NpgsqlDataSource.Create(connStr);
+        var ctx = await ArrangeThroughputAsync(dataSource);
+        var checkpoint = await ctx.CheckpointStore.GetPositionAsync(ctx.ProjectionName, CancellationToken.None);
+        var rebuilder = new PerTenantProjectionRebuilder(
+            ctx.EventStore,
+            new PostgresProjectionRebuildCoordinator(new NpgsqlReadModelConnectionFactory(dataSource), ctx.CheckpointStore),
+            ctx.TenantAccessor);
+        using var interruption = new CancellationTokenSource();
+        Func<Task> rebuild = () => rebuilder.RebuildAsync(ctx.ProjectionFactory,
+            new InterruptingTenantReset(cancel ? interruption : null), WellKnownTenants.Default, interruption.Token);
+        if (cancel)
+            await rebuild.Should().ThrowAsync<OperationCanceledException>();
+        else
+            await rebuild.Should().ThrowAsync<IOException>();
+
+        // An independent live handler must be able to acquire the checkpoint after either exit.
+        var envelope = Env(StreamId.ForAggregate<Order>(WellKnownTenants.Default, Guid.NewGuid()), 1,
+            new OrderDrafted(Guid.NewGuid(), Guid.NewGuid(), BaseTime, "web"), WellKnownTenants.Default);
+        using var writerDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        Func<Task> write = () => new OrderThroughputProjection(ctx.Store).HandleAsync(
+            new EventContext<OrderDrafted>((OrderDrafted)envelope.Payload, envelope.Metadata, checkpoint + 1),
+            writerDeadline.Token);
+        await write.Should().NotThrowAsync("failed and cancelled rebuilds must release their database lock");
     }
 
     [Fact]
@@ -304,6 +423,32 @@ public class PerTenantRebuildTests : IClassFixture<PostgresFixture>
 
 
     private sealed record RebuildPmTestEvent(int Step) : IProcessManagerEvent;
+
+    private sealed class PausedTenantReset(ITenantResettable inner) : ITenantResettable
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+        {
+            Entered.TrySetResult();
+            await Continue.Task.WaitAsync(ct);
+            await inner.ResetTenantAsync(tenant, ct);
+        }
+    }
+
+    private sealed class InterruptingTenantReset(CancellationTokenSource? cancellation) : ITenantResettable
+    {
+        public Task ResetTenantAsync(TenantId tenant, CancellationToken ct = default)
+        {
+            if (cancellation is not null)
+            {
+                cancellation.Cancel();
+                ct.ThrowIfCancellationRequested();
+            }
+            throw new IOException("Injected reset failure.");
+        }
+    }
 
     private sealed record RebuildContext(
         PostgresEventStore EventStore,

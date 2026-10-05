@@ -92,13 +92,14 @@ public class CommandsEndpointTests : IClassFixture<ApiFixture>
     {
         var client = _fixture.Factory.CreateClient();
         var inventoryId = Guid.NewGuid();
+        var sku = "SKU-" + inventoryId.ToString("N");
 
         var first = await client.PostCommandAsync(
-            "CreateInventory", new { inventoryId, sku = "SKU-1" }, Guid.NewGuid().ToString());
+            "CreateInventory", new { inventoryId, sku }, Guid.NewGuid().ToString());
         first.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         var second = await client.PostCommandAsync(
-            "CreateInventory", new { inventoryId, sku = "SKU-1" }, Guid.NewGuid().ToString());
+            "CreateInventory", new { inventoryId, sku }, Guid.NewGuid().ToString());
         second.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
@@ -107,17 +108,18 @@ public class CommandsEndpointTests : IClassFixture<ApiFixture>
     {
         var client = _fixture.Factory.CreateClient();
         var inventoryId = Guid.NewGuid();
+        var sku = "SKU-" + inventoryId.ToString("N");
         var idempotencyKey = Guid.NewGuid().ToString();
 
         var first = await client.PostCommandAsync(
-            "CreateInventory", new { inventoryId, sku = "SKU-1" }, idempotencyKey);
+            "CreateInventory", new { inventoryId, sku }, idempotencyKey);
         first.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         // Same key: the behavior dedupes before the would-conflict append. Without
         // dedup, a second create on the same stream returns 409; the 202 proves the
         // idempotency short-circuit fired ahead of the append.
         var second = await client.PostCommandAsync(
-            "CreateInventory", new { inventoryId, sku = "SKU-1" }, idempotencyKey);
+            "CreateInventory", new { inventoryId, sku }, idempotencyKey);
         second.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 }

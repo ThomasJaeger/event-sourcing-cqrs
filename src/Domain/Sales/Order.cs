@@ -24,6 +24,7 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
 
     public static Order Draft(Guid orderId, Guid customerId, DateTime utcNow, string channel)
     {
+        CommandInput.RequireText(channel, "Order channel");
         var order = new Order();
         order.Raise(new OrderDrafted(orderId, customerId, utcNow, channel));
         return order;
@@ -35,6 +36,7 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
         {
             throw new DomainException($"Cannot add line to order {Id}: order is {_status}.");
         }
+        CommandInput.RequireText(sku, "SKU");
         if (quantity <= 0)
         {
             throw new DomainException($"Cannot add line {lineId}: quantity must be positive.");
@@ -43,7 +45,18 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
         {
             throw new DomainException($"Line {lineId} already exists on order {Id}.");
         }
+        EnsureValidLinePrice(quantity, unitPrice);
         Raise(new OrderLineAdded(Id, lineId, sku, quantity, unitPrice, utcNow));
+    }
+
+    private void EnsureValidLinePrice(int quantity, Money unitPrice)
+    {
+        CommandInput.RequireAmount(unitPrice, "Unit price");
+        if (unitPrice.IsNegative)
+            throw new DomainException("Unit price must not be negative.");
+        if (unitPrice.Currency != Currency.USD)
+            throw new DomainException("Order line currency must be USD.");
+        CommandInput.RequireAmount(Total + unitPrice * quantity, "Order total");
     }
 
     public void RemoveLine(Guid lineId, DateTime utcNow)
@@ -65,6 +78,7 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
         {
             throw new DomainException($"Cannot set shipping address on order {Id}: order is {_status}.");
         }
+        CommandInput.RequireAddress(address);
         Raise(new ShippingAddressSet(Id, address, utcNow));
     }
 
@@ -99,6 +113,7 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
         {
             throw new DomainException($"Cannot cancel order {Id}: already completed.");
         }
+        CommandInput.RequireText(reason, "Cancellation reason");
         Raise(new OrderCancelled(Id, reason, issuedByUserId, utcNow));
     }
 
@@ -108,16 +123,17 @@ public sealed class Order : AggregateRoot, ISnapshotSource<OrderSnapshot>
         {
             throw new DomainException($"Cannot ship order {Id}: order is {_status}.");
         }
+        CommandInput.RequireText(carrier, "Carrier");
+        CommandInput.RequireText(trackingNumber, "Tracking number");
         Raise(new OrderShipped(Id, carrier, trackingNumber, utcNow));
     }
 
     // The OrderFulfillment process manager marks the order completed when its
-    // shipment is delivered (Decision 13). The order is Placed at that point, not
-    // Shipped: shipping is the Shipment aggregate's lifecycle, not the Order's, so
-    // the Order's own status goes Placed -> Completed with no Shipped step.
+    // shipment is delivered (Decision 13). Sales may already have recorded
+    // ShipOrder; both supported lifecycle paths converge at Completed.
     public void Complete(DateTime utcNow)
     {
-        if (_status != OrderStatus.Placed)
+        if (_status is not (OrderStatus.Placed or OrderStatus.Shipped))
         {
             throw new DomainException($"Cannot complete order {Id}: order is {_status}.");
         }

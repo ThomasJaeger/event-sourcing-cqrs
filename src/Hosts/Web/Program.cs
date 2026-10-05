@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Authentication;
 using EventSourcingCqrs.Application.Commands.Billing;
@@ -15,8 +16,14 @@ using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Infrastructure.SignalR;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+
+if (args is ["--hash-operator-password"])
+{
+    OperatorPasswordTool.Run();
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,6 +48,21 @@ var loginActorId =
         && configuredActorId != Guid.Empty
         ? configuredActorId
         : throw new InvalidOperationException("BootstrapAdministrator:AdministratorUserId is not set.");
+
+var operatorPassword = new OperatorPassword(builder.Configuration[OperatorPassword.ConfigurationKey]);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("operator-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+});
 
 // Blazor Server only. The optimistic-UI patterns at
 // Cluster 4 Commit 23 are pure server-circuit concerns; no WASM render mode buys
@@ -129,17 +151,17 @@ builder.Services.AddSingleton(new ForwardedIdentitySigningKey(
 builder.Services.AddSingleton<ForwardedIdentitySigner>();
 builder.Services.AddScoped<ICircuitForwardedIdentityProvider, CircuitForwardedIdentityProvider>();
 
-// Cookie authentication for the operator login (P9.3b). The configured-actor login is a development
-// and same-trust-boundary credential, not proof of identity; real proof is deferred to an external
-// identity provider (out of scope, ADR 0028). The cookie is HttpOnly and Secure-always, so the host
+// Cookie authentication for the operator login. The password is verified against the configured
+// salted hash before this identity is issued, in every environment. External identity-provider
+// integration remains separate. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint (it expects ASPNETCORE_URLS to carry https; no launch profile ships).
 // The framework seeds the InteractiveServer circuit's authentication state from this cookie's
 // principal through the default ServerAuthenticationStateProvider on .NET 10, so no explicit
 // AuthenticationStateProvider registration and no auth-state serialization are needed for a
 // Server-only host. No revalidating provider: revalidation is the external identity provider's
 // concern, not faked here.
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+builder.Services.AddAuthentication(OperatorPassword.AuthenticationScheme)
+    .AddCookie(OperatorPassword.AuthenticationScheme, options =>
     {
         options.Cookie.Name = ".EventSourcingCqrs.Web.Auth";
         options.Cookie.HttpOnly = true;
@@ -178,13 +200,14 @@ var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 // The operator login and logout. SignInAsync establishes a name-identifier-only principal for the
-// configured actor; the framework seeds the circuit from it. Antiforgery is validated in the handler
+// configured actor after password verification; the framework seeds the circuit from it. Antiforgery is validated in the handler
 // rather than relying on UseAntiforgery: the middleware validates Razor Component form handlers and
 // form-binding minimal-API endpoints, not a plain form post read through HttpContext.Request.Form, so
 // the explicit ValidateRequestAsync is the single validation site for these two endpoints.
@@ -199,14 +222,18 @@ app.MapPost("/account/login", async (HttpContext httpContext, IAntiforgery antif
         return Results.BadRequest("The antiforgery token was missing or invalid.");
     }
 
+    var form = await httpContext.Request.ReadFormAsync(httpContext.RequestAborted);
+    if (!operatorPassword.Verify(form["password"].ToString()))
+        return Results.Unauthorized();
+
     var claims = new[] { new Claim(ClaimTypes.NameIdentifier, loginActorId.ToString()) };
     var principal = new ClaimsPrincipal(
-        new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
-    await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+        new ClaimsIdentity(claims, OperatorPassword.AuthenticationScheme));
+    await httpContext.SignInAsync(OperatorPassword.AuthenticationScheme, principal);
 
-    var returnUrl = httpContext.Request.Form["returnUrl"].ToString();
-    return Results.LocalRedirect(string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl);
-});
+    var returnUrl = form["returnUrl"].ToString();
+    return Results.LocalRedirect(string.IsNullOrWhiteSpace(returnUrl) ? "/orders" : returnUrl);
+}).RequireRateLimiting("operator-login");
 
 app.MapPost("/account/logout", async (HttpContext httpContext, IAntiforgery antiforgery) =>
 {
@@ -219,7 +246,7 @@ app.MapPost("/account/logout", async (HttpContext httpContext, IAntiforgery anti
         return Results.BadRequest("The antiforgery token was missing or invalid.");
     }
 
-    await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    await httpContext.SignOutAsync(OperatorPassword.AuthenticationScheme);
     return Results.LocalRedirect("/login");
 });
 

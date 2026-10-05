@@ -40,3 +40,27 @@ The throughput store stops being the lone tenant-scoped store without ITenantRes
 ## Revisit when
 
 A consumer needs an all-tenant rebuild, at which point it iterates the per-tenant primitive over a tenant-enumeration source decided at that consumer. Or an operator role below Admin is introduced, at which point the rebuild permission's grant is decided for that role against this record.
+
+## October 2026: coordinate rebuilds with live projection writes
+
+Checkpoint neutrality alone does not protect a rebuild from live writes. A worker could commit an
+event after the replay ceiling was read but before the tenant reset, leaving that event deleted
+from the read model and below an already-advanced checkpoint.
+
+`PerTenantProjectionRebuilder` now acquires an `IProjectionRebuildCoordinator` lease before reset.
+The PostgreSQL adapter locks the same checkpoint row each live projection handler locks, captures
+the ceiling under that lock, and holds the transaction until replay finishes. Other hosts and
+concurrent rebuilds therefore wait. The rebuild-mode checkpoint store remains inert, allowing
+replay's separate read-model transactions to proceed without reacquiring the held checkpoint lock.
+The lease is released on completion, cancellation, and failure. Because checkpoint rows are global
+per projection, a rebuild pauses that projection for every tenant, although it resets only the
+selected tenant's data.
+
+This coordinates writers; it does not make the reset and replay one atomic transaction. Queries
+can observe partial results during replay. After a failure, rerun the rebuild to restore the
+selected tenant's read model. All hosts must use the same read-model database, and the database
+connection holding the lease must remain available throughout the operation. The rebuilder verifies
+that connection before and after reset, before every replayed event, and before reporting success.
+Losing it raises `ProjectionRebuildLeaseLostException` and stops replay at the next event boundary.
+A write already in flight when the connection dies can still commit: this detects lease loss,
+not atomic rollback of all rebuild writes. The failure surface directs the operator to rerun.

@@ -106,6 +106,12 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             await _pms.SaveAsync(pm, ct);
         }
 
+        if (pm.CancellationReason is not null
+            && pm.State is not (OrderFulfillmentState.Cancelled or OrderFulfillmentState.Completed))
+        {
+            await CancelAsync(pm, pm.CancellationReason, context.Metadata, ct);
+            return;
+        }
         var order = await _orders.LoadAsync(e.OrderId, ct);
         if (order?.Status == OrderStatus.Cancelled && pm.State == OrderFulfillmentState.AwaitingPayment)
         {
@@ -155,6 +161,12 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 await _bus.SendAsync(new VoidPayment(e.PaymentId, "Late authorization after cancellation."),
                     context.Metadata, Actor,
                     IdempotencyKeys.ForProcessManager(stream, OrderFulfillmentSteps.VoidPayment), ct);
+            return;
+        }
+        if (pm.CancellationReason is not null)
+        {
+            await _compensation.CompensateWithReleasesAsync(
+                pm, pm.CancellationReason, context.Metadata, ct);
             return;
         }
         if (pm.State == OrderFulfillmentState.AwaitingPayment)
@@ -233,7 +245,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
         await _delayQueue.CancelAsync(
             pm.StreamId, OrderFulfillmentSteps.AwaitDispatchTimeout, "Shipment dispatched.", ct);
-        if (pm.State == OrderFulfillmentState.AwaitingDispatch)
+        if (pm.CancellationReason is null && pm.State == OrderFulfillmentState.AwaitingDispatch)
         {
             pm.RecordShipmentDispatched();  // -> AwaitingDelivery
             await _pms.SaveAsync(pm, ct);
@@ -252,7 +264,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     private async Task HandleCoreAsync(EventContext<ShipmentDelivered> context, CancellationToken ct)
     {
         var (pm, _) = await CorrelateByShipmentAsync(context.Event.ShipmentId, context.Metadata.Tenant, ct);
-        if (pm.State == OrderFulfillmentState.AwaitingDelivery)
+        if (pm.CancellationReason is null && pm.State == OrderFulfillmentState.AwaitingDelivery)
         {
             // Pattern A with an internal dispatch: record delivery, dispatch
             // MarkOrderCompleted, record the terminal, one save. MarkOrderCompleted
@@ -282,6 +294,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     private async Task CancelAsync(OrderFulfillmentProcessManager pm, string reason,
         EventMetadata metadata, CancellationToken ct)
     {
+        reason = pm.CancellationReason ?? reason;
         // A reservation can commit before the fan-out outcomes are saved. Under
         // the order gate no new fan-out can race this reconciliation. Recover
         // those effects from Inventory before choosing the compensation set.
@@ -297,7 +310,10 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 var reserved = inventory?.Reservations.SingleOrDefault(
                     r => r.OrderId == pm.OrderId && r.LineId == line.LineId);
                 if (reserved is not null)
+                {
                     pm.RecordLineReserved(line.LineId, reserved.Sku, reserved.Quantity, inventoryId.Value);
+                    await OrderFulfillmentPersistence.SaveBatchIfFullAsync(pm, _pms, ct);
+                }
             }
             // Persist recovery before releasing anything: a retry must still
             // know which releases succeeded before a later compensation failed.
@@ -327,7 +343,10 @@ public sealed class OrderFulfillmentProcessManagerHandler :
     {
         // Parallel dispatch, one ReserveInventory per line, latency bounded by the
         // slowest single reservation rather than the line count (Decision 10).
-        var results = await Task.WhenAll(order.Lines.Select(async line =>
+        // An outcome already saved is final for this attempt. In particular,
+        // retrying a failed line could reserve stock that compensation cannot see.
+        var pending = order.Lines.Where(line => !pm.Reservations.ContainsKey(line.LineId));
+        var results = await Task.WhenAll(pending.Select(async line =>
         {
             var inventoryId = await _skuLookup.GetInventoryIdAsync(line.Sku, ct);
             if (inventoryId is null)
@@ -344,16 +363,10 @@ public sealed class OrderFulfillmentProcessManagerHandler :
             return (line, inventoryId, outcome: (CommandOutcome?)outcome);
         }));
 
-        // End-of-fan-out save: record every outcome once, then a single save. A
-        // line already recorded on an earlier delivery is skipped, so the keyed
-        // re-dispatch above stays the only redelivery cost.
+        // Persist bounded batches of outcomes. A retry dispatches only lines
+        // whose outcomes were not saved, using their original command keys.
         foreach (var (line, inventoryId, outcome) in results)
         {
-            if (pm.Reservations.ContainsKey(line.LineId))
-            {
-                continue;
-            }
-
             if (inventoryId is null)
             {
                 pm.RecordLineReservationFailed(
@@ -368,6 +381,7 @@ public sealed class OrderFulfillmentProcessManagerHandler :
                 pm.RecordLineReservationFailed(
                     line.LineId, line.Sku, line.Quantity, outcome.Failure!.Message);
             }
+            await OrderFulfillmentPersistence.SaveBatchIfFullAsync(pm, _pms, ct);
         }
 
         await _pms.SaveAsync(pm, ct);   // no-ops when every line was already recorded

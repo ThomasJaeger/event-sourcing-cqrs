@@ -331,13 +331,15 @@ public sealed class DynamoDbEventStore : IEventStore
     {
         ArgumentNullException.ThrowIfNull(streamId);
 
-        var rows = await QueryPartitionAsync(
-            streamId.Value,
+        var rows = QueryPartitionAsync(
             $"{DynamoDbSchema.PartitionKeyAttribute} = :pk AND {DynamoDbSchema.SortKeyAttribute} > :from",
             new() { [":pk"] = new AttributeValue { S = streamId.Value }, [":from"] = Number(fromVersion) },
             ct);
 
-        return rows.Select(HydrateAggregate).ToList();
+        var events = new List<EventEnvelope>();
+        await foreach (var row in rows)
+            events.Add(HydrateAggregate(row));
+        return events;
     }
 
     public async Task<IReadOnlyList<ProcessManagerEventEnvelope>> ReadProcessManagerStreamAsync(
@@ -360,21 +362,22 @@ public sealed class DynamoDbEventStore : IEventStore
                 nameof(streamId));
         }
 
-        var rows = await QueryPartitionAsync(
-            streamId.Value,
+        var rows = QueryPartitionAsync(
             $"{DynamoDbSchema.PartitionKeyAttribute} = :pk AND {DynamoDbSchema.SortKeyAttribute} > :from",
             new() { [":pk"] = new AttributeValue { S = streamId.Value }, [":from"] = Number(fromVersion) },
             ct);
 
-        return rows.Select(HydrateProcessManager).ToList();
+        var events = new List<ProcessManagerEventEnvelope>();
+        await foreach (var row in rows)
+            events.Add(HydrateProcessManager(row));
+        return events;
     }
 
     public async IAsyncEnumerable<EventEnvelope> ReadAllAsync(
         long fromPosition,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var rows = await QueryPartitionAsync(
-            DynamoDbSchema.LogPartitionKey,
+        var rows = QueryPartitionAsync(
             $"{DynamoDbSchema.PartitionKeyAttribute} = :pk AND {DynamoDbSchema.SortKeyAttribute} > :from",
             new()
             {
@@ -383,9 +386,10 @@ public sealed class DynamoDbEventStore : IEventStore
             },
             ct);
 
-        foreach (var row in rows.Where(IsAggregateRow))
+        await foreach (var row in rows)
         {
-            yield return HydrateAggregate(row);
+            if (IsAggregateRow(row))
+                yield return HydrateAggregate(row);
         }
     }
 
@@ -402,8 +406,7 @@ public sealed class DynamoDbEventStore : IEventStore
         // wire or get deserialized, which is the part that matters on a partition carrying every
         // tenant's traffic. Narrowing the capacity too would need the tenant in a key, and no key
         // on this table can carry it without giving up the single ordered feed.
-        var rows = await QueryPartitionAsync(
-            DynamoDbSchema.LogPartitionKey,
+        var rows = QueryPartitionAsync(
             $"{DynamoDbSchema.PartitionKeyAttribute} = :pk " +
             $"AND {DynamoDbSchema.SortKeyAttribute} BETWEEN :from AND :to",
             new()
@@ -418,9 +421,10 @@ public sealed class DynamoDbEventStore : IEventStore
             ct,
             filterExpression: $"{DynamoDbSchema.TenantAttribute} = :tenant");
 
-        foreach (var row in rows.Where(IsAggregateRow))
+        await foreach (var row in rows)
         {
-            yield return HydrateAggregate(row);
+            if (IsAggregateRow(row))
+                yield return HydrateAggregate(row);
         }
     }
 
@@ -434,14 +438,13 @@ public sealed class DynamoDbEventStore : IEventStore
 
     // A filtered page can come back empty with a continuation key, because the filter runs after
     // the page is read: the loop keys on LastEvaluatedKey and never on the item count.
-    private async Task<List<Dictionary<string, AttributeValue>>> QueryPartitionAsync(
-        string partitionKey,
+    // Yield each page before fetching its successor so catch-up and rebuild keep bounded memory.
+    private async IAsyncEnumerable<Dictionary<string, AttributeValue>> QueryPartitionAsync(
         string keyCondition,
         Dictionary<string, AttributeValue> values,
-        CancellationToken ct,
+        [EnumeratorCancellation] CancellationToken ct,
         string? filterExpression = null)
     {
-        var rows = new List<Dictionary<string, AttributeValue>>();
         Dictionary<string, AttributeValue>? start = null;
 
         do
@@ -460,12 +463,14 @@ public sealed class DynamoDbEventStore : IEventStore
                 },
                 ct);
 
-            rows.AddRange(page.Items);
+            foreach (var row in page.Items)
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return row;
+            }
             start = page.LastEvaluatedKey is { Count: > 0 } ? page.LastEvaluatedKey : null;
         }
         while (start is not null);
-
-        return rows;
     }
 
     private EventEnvelope HydrateAggregate(Dictionary<string, AttributeValue> row)

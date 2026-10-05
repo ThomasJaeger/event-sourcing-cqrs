@@ -52,6 +52,19 @@ internal sealed class DynamoDbContractBackend : IEventStoreContractBackend, IUpc
     // reason its fixture hands out a container rather than a composed store.
     public IEventStoreHeadPosition HeadReader { get; }
 
+    // Read-path observations still reach the real client and table. The observer is supplied
+    // by the fact through the same constructor seam the production store already exposes.
+    public IAmazonDynamoDB Client => _client;
+
+    public IEventStore CreateStore(IAmazonDynamoDB client)
+        => new DynamoDbEventStore(
+            client,
+            _provider.GetRequiredService<EventTypeRegistry>(),
+            _provider.GetRequiredService<ProcessManagerEventTypeRegistry>(),
+            _provider.GetRequiredService<JsonSerializerOptions>(),
+            _provider.GetRequiredService<IOptions<DynamoDbEventStoreOptions>>(),
+            _provider.GetRequiredService<EventUpcasterPipeline>());
+
     public static async Task<DynamoDbContractBackend> CreateAsync(LocalStackFixture fixture)
     {
         var tableName = LocalStackFixture.NewTableName();
