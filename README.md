@@ -92,8 +92,15 @@ event store and for the read models, and because it seeds the bootstrap administ
 calls. Web serves the UI. The two URLs are stated rather than left to the default because both
 hosts default to port 5000 and the second one to start would fail to bind.
 
-Then open `https://localhost:5101/login`. There is no route at `/`, and the application requires
-an established identity, so the sign-in page is the entry point rather than a redirect target.
+Then open `https://localhost:5101/login` to sign in. The workspace at `/` links to orders,
+your orders, inventory, and throughput. Navigation stays available on each screen, and order
+and customer identifiers link to their detail views. Use Account to sign out.
+
+AdminConsole has its own navigation for stream inspection, correlation tracing, projection
+status, and replay. Its host-wide permission gate and authentication cookie are separate from
+Web. The interactive AdminConsole sign-in flow is still unfinished; signing in to Web does not
+sign you in to AdminConsole. See [ADR 0040](docs/adr/0040-adminconsole-host-authorization-posture.md)
+and the [UI revision record](docs/ui-revision-2026-10-07.md) for scope and verification.
 
 The credentials in the compose file are dev-only defaults, stated as such in its own header.
 They are not for any other environment.

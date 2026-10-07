@@ -19,7 +19,7 @@ namespace EventSourcingCqrs.Hosts.AdminConsole.Tests.Components;
 public class ProjectionStatusDashboardTests : BunitContext
 {
     [Fact]
-    public void Renders_one_row_per_projection_with_the_four_lag_columns()
+    public void Shows_positions_behind_next_to_each_projection_before_the_underlying_positions()
     {
         var reader = new ProjectionLagReader(
             new StubHead(10),
@@ -29,10 +29,15 @@ public class ProjectionStatusDashboardTests : BunitContext
 
         var cut = Render<ProjectionStatusDashboard>();
 
+        cut.FindAll("thead th").Select(th => th.TextContent.Trim())
+            .Should().Equal("Projection", "Positions Behind", "Head", "Checkpoint");
         cut.FindAll("tbody tr").Should().HaveCount(2);
         var firstRow = cut.FindAll("tbody tr")[0].QuerySelectorAll("td")
             .Select(td => td.TextContent.Trim());
-        firstRow.Should().Equal("proj-a", "10", "7", "3");
+        firstRow.Should().Equal("proj-a", "3", "10", "7");
+        var secondRow = cut.FindAll("tbody tr")[1].QuerySelectorAll("td")
+            .Select(td => td.TextContent.Trim());
+        secondRow.Should().Equal("proj-b", "0", "10", "10");
     }
 
     [Fact]

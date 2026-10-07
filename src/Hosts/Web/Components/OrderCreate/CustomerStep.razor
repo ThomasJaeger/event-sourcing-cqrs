@@ -10,7 +10,7 @@
         </label>
         <input id="customerIdInput"
                type="text"
-               class="border border-gray-300 rounded px-3 py-2 w-full max-w-md"
+               class="border border-slate-300 rounded px-3 py-2 w-full max-w-md min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                @bind="customerIdInput"
                @bind:event="oninput"
                disabled="@isDispatching" />
@@ -26,7 +26,7 @@
     }
 
     <button type="button"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            class="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
             @onclick="HandleSubmit"
             disabled="@(!CanSubmit)">
         @(isDispatching ? "Starting order..." : "Start order")

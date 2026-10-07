@@ -5,33 +5,39 @@
 
 <PageTitle>Customer @CustomerId</PageTitle>
 
+<nav aria-label="Breadcrumb" class="mb-5 text-sm">
+    <a href="/orders" class="rounded text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">Orders</a>
+    <span aria-hidden="true" class="mx-2 text-slate-400">/</span><span class="text-slate-600">Customer</span>
+</nav>
+<header class="mb-7">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Customer <span class="mt-2 block break-all font-mono text-sm font-normal tracking-normal text-slate-600">@CustomerId</span></h1>
+</header>
+
 @if (loading)
 {
-    <p class="text-gray-500">Loading...</p>
+    <p role="status" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Loading...</p>
 }
 else if (summary is null)
 {
-    <p class="text-gray-500">No order activity for this customer.</p>
+    <p class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">No order activity for this customer.</p>
 }
 else
 {
-    <h1 class="text-2xl font-bold mb-4">Customer @summary.CustomerId</h1>
-
-    <div class="mb-6 grid grid-cols-2 gap-4">
+    <div class="grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-2">
         <div>
-            <p class="text-sm text-gray-600">Order Count</p>
+            <p class="text-sm text-slate-600">Order Count</p>
             <p class="font-semibold">@summary.OrderCount</p>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Lifetime Value</p>
+            <p class="text-sm text-slate-600">Lifetime Value</p>
             <p>@summary.LifetimeValue</p>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Last Order</p>
+            <p class="text-sm text-slate-600">Last Order</p>
             <p>@summary.LastOrderUtc.ToString("u")</p>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Last Updated</p>
+            <p class="text-sm text-slate-600">Last Updated</p>
             <p>@summary.LastUpdatedUtc.ToString("u")</p>
         </div>
     </div>

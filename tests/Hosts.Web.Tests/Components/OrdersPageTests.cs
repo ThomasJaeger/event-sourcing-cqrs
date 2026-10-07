@@ -31,7 +31,7 @@ public class OrdersPageTests : BunitContext
 
         var headers = cut.FindAll("th").Select(th => th.TextContent.Trim()).ToList();
         headers.Should().Equal(
-            "Order ID", "Customer ID", "Status", "Total",
+            "Order ID", "Status", "Total", "Customer ID",
             "Placed", "Last Updated", "Returned");
     }
 
@@ -98,7 +98,7 @@ public class OrdersPageTests : BunitContext
     }
 
     [Fact]
-    public void Orders_page_renders_customer_id_in_second_column()
+    public void Orders_page_renders_customer_id_in_fourth_column()
     {
         var customerId = Guid.NewGuid();
         stubApiClient.EnqueueQueryResult<ListOrders, IReadOnlyList<OrderListRow>>(
@@ -106,20 +106,31 @@ public class OrdersPageTests : BunitContext
 
         var cut = Render<Orders>();
 
-        var secondCell = cut.Find("tbody tr td:nth-child(2)");
-        secondCell.TextContent.Trim().Should().Be(customerId.ToString());
+        var customerCell = cut.Find("tbody tr td:nth-child(4)");
+        customerCell.TextContent.Trim().Should().Be(customerId.ToString());
     }
 
     [Fact]
-    public void Orders_page_renders_status_in_third_column()
+    public void Orders_page_renders_status_in_second_column()
     {
         stubApiClient.EnqueueQueryResult<ListOrders, IReadOnlyList<OrderListRow>>(
             new[] { SampleRow(Guid.NewGuid(), Guid.NewGuid(), status: OrderStatus.Placed) });
 
         var cut = Render<Orders>();
 
-        var thirdCell = cut.Find("tbody tr td:nth-child(3)");
-        thirdCell.TextContent.Trim().Should().Be("Placed");
+        var statusCell = cut.Find("tbody tr td:nth-child(2)");
+        statusCell.TextContent.Trim().Should().Be("Placed");
+    }
+
+    [Fact]
+    public void Orders_page_renders_total_in_third_column()
+    {
+        var row = SampleRow(Guid.NewGuid(), Guid.NewGuid());
+        stubApiClient.EnqueueQueryResult<ListOrders, IReadOnlyList<OrderListRow>>(new[] { row });
+
+        var cut = Render<Orders>();
+
+        cut.Find("tbody tr td:nth-child(3)").TextContent.Trim().Should().Be(row.Total.ToString());
     }
 
     [Fact]
@@ -132,6 +143,40 @@ public class OrdersPageTests : BunitContext
 
         var lastCell = cut.Find("tbody tr td:nth-child(7)");
         lastCell.TextContent.Trim().Should().Be("Yes");
+    }
+
+    [Fact]
+    public void Order_identifiers_link_to_each_orders_detail_page()
+    {
+        var rows = new[]
+        {
+            SampleRow(Guid.NewGuid(), Guid.NewGuid()),
+            SampleRow(Guid.NewGuid(), Guid.NewGuid()),
+        };
+        stubApiClient.EnqueueQueryResult<ListOrders, IReadOnlyList<OrderListRow>>(rows);
+
+        var cut = Render<Orders>();
+
+        cut.FindAll("tbody tr td:first-child a")
+            .Select(link => link.GetAttribute("href"))
+            .Should().Equal(rows.Select(row => $"/orders/{row.OrderId}"));
+    }
+
+    [Fact]
+    public void Customer_identifiers_link_to_each_customers_summary_page()
+    {
+        var rows = new[]
+        {
+            SampleRow(Guid.NewGuid(), Guid.NewGuid()),
+            SampleRow(Guid.NewGuid(), Guid.NewGuid()),
+        };
+        stubApiClient.EnqueueQueryResult<ListOrders, IReadOnlyList<OrderListRow>>(rows);
+
+        var cut = Render<Orders>();
+
+        cut.FindAll("tbody tr td:nth-child(4) a")
+            .Select(link => link.GetAttribute("href"))
+            .Should().Equal(rows.Select(row => $"/customers/{row.CustomerId}"));
     }
 
     private static OrderListRow SampleRow(

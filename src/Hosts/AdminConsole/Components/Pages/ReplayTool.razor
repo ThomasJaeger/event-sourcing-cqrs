@@ -5,38 +5,50 @@
 
 <PageTitle>Replay Tool</PageTitle>
 
-<h1 class="text-2xl font-bold p-6">Replay Tool</h1>
+<h1 class="mb-3 break-words text-3xl font-bold tracking-tight text-slate-900">Replay Tool</h1>
 
-@if (succeeded)
+@if (running)
 {
-    <p class="px-6 text-green-700">Rebuild complete. The order-throughput read model for the tenant was rebuilt.</p>
+    <p role="status" class="rounded-lg border border-teal-200 bg-teal-50 p-5 text-teal-900">Rebuild in progress for tenant <span class="break-all font-mono">@target!.Value</span>. Wait for the result before starting another rebuild.</p>
+}
+else if (succeeded)
+{
+    <p role="status" class="rounded-lg border border-teal-200 bg-teal-50 p-5 text-teal-900">Rebuild complete. The order-throughput read model for the tenant was rebuilt.</p>
+    <button type="button" @onclick="OnReset"
+            class="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
+        Start another rebuild
+    </button>
 }
 else if (failed)
 {
-    <p class="px-6 text-red-700">Rebuild failed. The order-throughput read model may be incomplete. Rerun the rebuild to restore it.</p>
+    <p role="alert" class="rounded-lg border border-red-200 bg-red-50 p-5 text-red-800">Rebuild failed. The order-throughput read model may be incomplete. Rerun the rebuild to restore it.</p>
+    <button type="button" @onclick="OnReset"
+            class="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
+        Try again
+    </button>
 }
 else if (confirming)
 {
-    <div class="px-6">
-        <p class="pb-4 text-gray-700">
-            Confirm: rebuild the order-throughput read model for tenant @target!.Value. This resets the
+    <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+        <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
+            Confirm: rebuild the order-throughput read model for tenant <span class="break-all font-mono">@target!.Value</span>. This resets the
             tenant's buckets and replays its events; every other tenant and the global checkpoint are left
             untouched.
         </p>
         <button type="button" @onclick="OnConfirmAsync"
-                class="rounded bg-red-700 px-4 py-2 text-white">
+                class="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">
             Confirm rebuild
         </button>
         <button type="button" @onclick="OnCancel"
-                class="ml-2 rounded border border-gray-300 px-4 py-2 text-gray-700">
+                class="ml-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
             Cancel
         </button>
     </div>
 }
 else
 {
-    <div class="px-6">
-        <p class="pb-4 text-gray-700">
+    <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+        <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
             Rebuild the order-throughput read model for one tenant by replaying that tenant's events. The
             rebuild clears only the named tenant's buckets and leaves every other tenant and the shared
             global checkpoint untouched.
@@ -44,18 +56,18 @@ else
 
         @if (validationError is not null)
         {
-            <p class="pb-2 text-red-700">@validationError</p>
+            <p role="alert" class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">@validationError</p>
         }
 
         <label class="block pb-4">
-            <span class="block pb-1 text-sm font-medium text-gray-700">Tenant id</span>
+            <span class="block pb-2 text-sm font-semibold text-slate-800">Tenant id</span>
             <input @bind="tenantId"
-                   class="block w-96 rounded border border-gray-300 px-2 py-1"
+                   class="block w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
                    placeholder="00000000-0000-0000-0000-000000000000" />
         </label>
 
         <button type="button" @onclick="OnRebuildClicked"
-                class="rounded bg-red-700 px-4 py-2 text-white">
+                class="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">
             Rebuild order-throughput
         </button>
     </div>
@@ -74,11 +86,13 @@ else
     private TenantId? target;
     private bool confirming;
     private string? validationError;
+    private bool running;
     private bool succeeded;
     private bool failed;
 
     private void OnRebuildClicked()
     {
+        if (running) return;
         validationError = null;
         try
         {
@@ -96,12 +110,15 @@ else
 
     private void OnCancel()
     {
+        if (running) return;
         confirming = false;
         target = null;
     }
 
     private async Task OnConfirmAsync()
     {
+        if (running || !confirming || target is null) return;
+        running = true;
         confirming = false;
         try
         {
@@ -112,5 +129,19 @@ else
         {
             failed = true;
         }
+        finally
+        {
+            running = false;
+        }
+    }
+
+    private void OnReset()
+    {
+        if (running) return;
+        succeeded = false;
+        failed = false;
+        confirming = false;
+        target = null;
+        validationError = null;
     }
 }

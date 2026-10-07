@@ -1,0 +1,38 @@
+@page "/"
+
+<PageTitle>Orders workspace</PageTitle>
+
+<section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="workspace-heading">
+    <div class="border-l-4 border-teal-700 px-6 py-8 sm:px-10 sm:py-12">
+        <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-teal-800">Workspace</p>
+        <h1 id="workspace-heading" class="max-w-2xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Orders and inventory.</h1>
+        <p class="mt-4 max-w-2xl text-base leading-7 text-slate-600">Create orders, review their history, and manage stock from one place.</p>
+        <div class="mt-7 flex flex-wrap gap-3">
+            <a href="/orders/new" class="rounded-lg bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Create an order</a>
+            <a href="/orders" class="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Browse orders</a>
+        </div>
+    </div>
+</section>
+
+<section class="mt-10" aria-labelledby="tasks-heading">
+    <h2 id="tasks-heading" class="text-lg font-semibold text-slate-950">Start with a task</h2>
+    <p class="mt-1 text-sm text-slate-600">Choose the view you need.</p>
+    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <a href="/orders" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Review orders <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Open an order to see its line items, status, and activity.</p>
+        </a>
+        <a href="/my-orders" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">My orders <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Review the orders available to your account.</p>
+        </a>
+        <a href="/inventory" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Manage inventory <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
+            <p class="mt-2 text-sm leading-6 text-slate-600">View stock levels, add a SKU, and record stock adjustments.</p>
+        </a>
+        <a href="/admin/throughput" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Order activity <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Check recent order activity and its last reported update.</p>
+        </a>
+    </div>
+</section>

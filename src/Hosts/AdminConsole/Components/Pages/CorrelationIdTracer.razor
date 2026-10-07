@@ -5,26 +5,26 @@
 
 <PageTitle>Correlation-ID Tracer</PageTitle>
 
-<h1 class="text-2xl font-bold p-6">Correlation-ID Tracer</h1>
+<h1 class="mb-3 break-words text-3xl font-bold tracking-tight text-slate-900">Correlation-ID Tracer</h1>
 
 @if (Availability.IsAvailable)
 {
-    <div class="px-6">
-        <p class="pb-4 text-gray-700">
+    <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+        <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
             Trace one workflow by its correlation id. Every event carrying that id comes back in one list, across
             every stream and every tenant, oldest first, with the process manager's own rows beside the aggregate
             events that drove them.
         </p>
 
         <label class="block pb-4">
-            <span class="block pb-1 text-sm font-medium text-gray-700">Correlation id</span>
+            <span class="block pb-2 text-sm font-semibold text-slate-800">Correlation id</span>
             <input @bind="correlationId"
-                   class="block w-96 rounded border border-gray-300 px-2 py-1"
+                   class="block w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
                    placeholder="0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8" />
         </label>
 
         <button type="button" @onclick="OnTraceAsync"
-                class="rounded bg-gray-800 px-4 py-2 text-white">
+                class="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
             Trace correlation
         </button>
     </div>
@@ -34,34 +34,34 @@ else
     @* The Correlation-ID Tracer is unavailable on this event store (KurrentDB has no cross-stream
        correlation-id index). The notice names the reason and the page renders no trace control, so the
        defense-in-depth throwing reader behind the seam is never reached. *@
-    <div class="px-6">
+    <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
         <p class="pb-4 font-medium text-red-700">Correlation tracing is not available on this deployment's event store.</p>
-        <p class="pb-4 text-gray-700">@Availability.UnavailableReason</p>
+        <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">@Availability.UnavailableReason</p>
     </div>
 }
 
 @if (error)
 {
-    <p class="px-6 pt-4 text-red-700">Unable to trace the correlation id.</p>
+    <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Unable to trace the correlation id.</p>
 }
 else if (view is not null)
 {
     @if (view.Outcome == CorrelationTraceOutcome.InvalidFormat)
     {
-        <p class="px-6 pt-4 text-red-700">
+        <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
             Enter a valid correlation id, for example 0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8.
         </p>
     }
     else if (view.Outcome == CorrelationTraceOutcome.SentinelRefused)
     {
-        <p class="px-6 pt-4 text-red-700">
+        <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
             The empty guid is a sentinel value, not a workflow identifier. The rows carrying it were written
             before correlation propagation reached the outbox route, so they are not traceable as a chain.
         </p>
     }
     else if (view.Outcome == CorrelationTraceOutcome.Empty)
     {
-        <p class="px-6 pt-4 text-gray-700">
+        <p role="status" class="mt-5 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
             No events found for this correlation id. Verify the id, and that the workflow it belongs to ran
             against this database.
         </p>
@@ -70,18 +70,18 @@ else if (view is not null)
     {
         @if (view.Truncated)
         {
-            <p class="px-6 pt-4 text-red-700">
+            <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
                 This trace was cut at the row cap. The rows below are the earliest ones; reading the
                 remainder needs a query tool.
             </p>
         }
-        <div class="px-6 pt-4">
+        <div class="mt-6 min-w-0">
             @for (var i = 0; i < view.Events.Count; i++)
             {
                 var index = i;
                 var evt = view.Events[index];
-                <div class="pb-6 mb-6 border-b border-gray-200">
-                    <div class="text-sm text-gray-700">
+                <div class="mb-5 min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-wrap gap-x-2 gap-y-1 break-all text-sm text-slate-600">
                         <span class="font-medium">@KindLabel(evt.Kind)</span>
                         <span class="pl-2">@evt.StreamId</span>
                         <span class="pl-2 font-medium">v@(evt.StreamVersion)</span>
@@ -91,14 +91,14 @@ else if (view is not null)
                         <span class="pl-2">position @evt.GlobalPosition</span>
                         <span class="pl-2">tenant @evt.Metadata.Tenant.Value</span>
                     </div>
-                    <pre class="mt-2 overflow-x-auto rounded bg-gray-100 p-2 text-xs">@evt.PayloadJson</pre>
+                    <pre class="mt-4 max-w-full overflow-x-auto rounded-lg bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100" tabindex="0" aria-label="Stored event payload">@evt.PayloadJson</pre>
                     <button type="button" @onclick="() => ToggleMetadata(index)"
-                            class="mt-2 text-sm text-blue-700 underline">
+                            aria-expanded="@(shownMetadata.Contains(index) ? "true" : "false")" aria-controls="event-metadata-@index" class="mt-4 rounded text-sm font-semibold text-teal-700 underline underline-offset-4 hover:text-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-600">
                         @(shownMetadata.Contains(index) ? "Hide metadata" : "Show metadata")
                     </button>
                     @if (shownMetadata.Contains(index))
                     {
-                        <dl class="mt-2 text-sm text-gray-700">
+                        <dl id="event-metadata-@index" class="mt-4 space-y-2 break-all rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">
                             <div><dt class="inline font-medium">Correlation id:</dt> <dd class="inline">@evt.Metadata.CorrelationId</dd></div>
                             <div><dt class="inline font-medium">Causation id:</dt> <dd class="inline">@evt.Metadata.CausationId</dd></div>
                             <div><dt class="inline font-medium">Actor id:</dt> <dd class="inline">@evt.Metadata.ActorId</dd></div>

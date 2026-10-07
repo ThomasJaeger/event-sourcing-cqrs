@@ -54,8 +54,8 @@ public sealed class OrderCreatePageTests : BunitContext
 
         var steps = cut.FindAll("nav ol li");
         steps.Should().HaveCount(4);
-        steps[0].ClassName.Should().Contain("font-bold");
-        steps[1].ClassName.Should().Contain("text-gray-400");
+        steps[0].GetAttribute("aria-current").Should().Be("step");
+        steps[1].GetAttribute("aria-current").Should().BeNull();
     }
 
     [Fact]

@@ -5,14 +5,14 @@
 
     <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div>
-            <dt class="text-sm font-medium text-gray-600">Order ID</dt>
-            <dd class="text-sm font-mono">@OrderId</dd>
+            <dt class="text-sm font-medium text-slate-600">Order ID</dt>
+            <dd class="break-all text-sm font-mono">@OrderId</dd>
         </div>
         @if (CustomerId != Guid.Empty)
         {
             <div>
-                <dt class="text-sm font-medium text-gray-600">Customer ID</dt>
-                <dd class="text-sm font-mono">@CustomerId</dd>
+                <dt class="text-sm font-medium text-slate-600">Customer ID</dt>
+                <dd class="break-all text-sm font-mono">@CustomerId</dd>
             </div>
         }
     </dl>
@@ -20,7 +20,7 @@
     @if (LineItems.Count > 0)
     {
         <div class="mb-4">
-            <h3 class="text-sm font-medium text-gray-600 mb-2">Line items</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-2">Line items</h3>
             <ul>
                 @foreach (var line in LineItems)
                 {
@@ -33,7 +33,7 @@
     @if (ShippingAddress is not null)
     {
         <div class="mb-4">
-            <h3 class="text-sm font-medium text-gray-600 mb-2">Shipping address</h3>
+            <h3 class="text-sm font-medium text-slate-600 mb-2">Shipping address</h3>
             <address class="text-sm not-italic">
                 @ShippingAddress.Street<br />
                 @ShippingAddress.City, @ShippingAddress.PostalCode<br />
@@ -47,10 +47,10 @@
         <p class="text-sm text-red-600 mb-3">@FailureMessage</p>
     }
 
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3">
         <button id="placeOrderButton"
                 type="button"
-                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                class="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                 @onclick="HandlePlace"
                 disabled="@(!CanPlace)">
             @(IsPlacing ? "Placing order..." : "Place order")

@@ -122,6 +122,27 @@ public class OrderDetailPageTests : BunitContext
         captured.OrderId.Should().Be(orderId);
     }
 
+    [Theory]
+    [InlineData("OrderPlaced", "Order placed")]
+    [InlineData("OrderLineAdded", "Item added")]
+    [InlineData("ShippingAddressSet", "Shipping address saved")]
+    [InlineData("ShipmentDelivered", "Shipment delivered")]
+    [InlineData("PaymentRefunded", "Refund issued")]
+    [InlineData("UnrecognizedEventType", "Other order activity")]
+    public void Timeline_uses_business_labels_without_exposing_event_type_names(string eventType, string label)
+    {
+        var detail = SampleDetail(Guid.NewGuid(), OrderStatus.Placed);
+        detail = detail with
+        {
+            Timeline = new[] { detail.Timeline[0] with { EventType = eventType } },
+        };
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(detail);
+
+        var cut = Render<OrderDetail>(parameters => parameters.Add(page => page.OrderId, detail.Header.OrderId));
+
+        cut.Find("ul li").TextContent.Should().Contain(label).And.NotContain(eventType);
+    }
+
     private static OrderDetailView SampleDetail(
         Guid orderId,
         OrderStatus status,

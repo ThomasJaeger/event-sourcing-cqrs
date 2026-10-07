@@ -60,6 +60,29 @@ public class ReplayToolActionTests : BunitContext
         cut.Markup.Should().Contain("Rebuild failed");
     }
 
+    [Fact]
+    public void Retrying_a_failed_rebuild_requires_a_new_confirmation()
+    {
+        var rebuild = new FailOnceRebuild();
+        Services.AddSingleton<IOrderThroughputRebuild>(rebuild);
+        var cut = Render<ReplayTool>();
+        cut.Find("input").Change(ValidTenant);
+        cut.Find("button").Click();
+        cut.FindAll("button").First(b => b.TextContent.Contains("Confirm")).Click();
+        cut.Markup.Should().Contain("Rebuild failed");
+
+        cut.FindAll("button").Single(b => b.TextContent.Contains("Try again")).Click();
+        cut.Find("input").GetAttribute("value").Should().Be(ValidTenant);
+        rebuild.Calls.Should().Be(1);
+        cut.Find("button").Click();
+        cut.Markup.Should().Contain("Confirm");
+        rebuild.Calls.Should().Be(1);
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Confirm")).Click();
+        rebuild.Calls.Should().Be(2);
+        cut.Markup.Should().Contain("Rebuild complete");
+    }
+
     [Theory]
     [InlineData("not-a-guid")]
     [InlineData("00000000-0000-0000-0000-000000000000")]
@@ -74,6 +97,45 @@ public class ReplayToolActionTests : BunitContext
 
         cut.Markup.Should().Contain("valid tenant id");
         rebuild.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_confirmed_rebuild_stays_visibly_running_until_completion()
+    {
+        var rebuild = new DelayedRebuild();
+        Services.AddSingleton<IOrderThroughputRebuild>(rebuild);
+        var cut = Render<ReplayTool>();
+        cut.Find("input").Change(ValidTenant);
+        cut.Find("button").Click();
+        var confirmation = cut.FindAll("button").First(b => b.TextContent.Contains("Confirm"))
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        try
+        {
+            cut.WaitForAssertion(() =>
+            {
+                cut.Find("[role='status']").TextContent.Should().Contain("Rebuild in progress");
+                cut.FindAll("input").Should().BeEmpty();
+                cut.FindAll("button").Should().BeEmpty();
+                rebuild.Calls.Should().Be(1);
+            });
+        }
+        finally
+        {
+            rebuild.Completion.SetResult();
+            await confirmation;
+        }
+        cut.Markup.Should().Contain("Rebuild complete");
+    }
+
+    private sealed class DelayedRebuild : IOrderThroughputRebuild
+    {
+        public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+        public Task RebuildOrderThroughputAsync(TenantId tenant, CancellationToken ct)
+        {
+            Calls++;
+            return Completion.Task;
+        }
     }
 
     private sealed class RecordingRebuild : IOrderThroughputRebuild
@@ -91,5 +153,17 @@ public class ReplayToolActionTests : BunitContext
     {
         public Task RebuildOrderThroughputAsync(TenantId tenant, CancellationToken ct)
             => throw new InvalidOperationException("rebuild failed");
+    }
+
+    private sealed class FailOnceRebuild : IOrderThroughputRebuild
+    {
+        public int Calls { get; private set; }
+        public Task RebuildOrderThroughputAsync(TenantId tenant, CancellationToken ct)
+        {
+            Calls++;
+            return Calls == 1
+                ? Task.FromException(new InvalidOperationException("rebuild failed"))
+                : Task.CompletedTask;
+        }
     }
 }

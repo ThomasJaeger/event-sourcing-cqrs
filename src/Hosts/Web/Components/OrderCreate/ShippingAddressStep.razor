@@ -10,7 +10,7 @@
             <label for="streetInput" class="block text-sm font-medium mb-1">Street</label>
             <input id="streetInput"
                    type="text"
-                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   class="border border-slate-300 rounded px-3 py-2 w-full min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                    @bind="streetInput"
                    disabled="@isDispatching" />
         </div>
@@ -18,7 +18,7 @@
             <label for="cityInput" class="block text-sm font-medium mb-1">City</label>
             <input id="cityInput"
                    type="text"
-                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   class="border border-slate-300 rounded px-3 py-2 w-full min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                    @bind="cityInput"
                    disabled="@isDispatching" />
         </div>
@@ -26,7 +26,7 @@
             <label for="postalCodeInput" class="block text-sm font-medium mb-1">Postal code</label>
             <input id="postalCodeInput"
                    type="text"
-                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   class="border border-slate-300 rounded px-3 py-2 w-full min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                    @bind="postalCodeInput"
                    disabled="@isDispatching" />
         </div>
@@ -34,7 +34,7 @@
             <label for="countryInput" class="block text-sm font-medium mb-1">Country</label>
             <input id="countryInput"
                    type="text"
-                   class="border border-gray-300 rounded px-3 py-2 w-full"
+                   class="border border-slate-300 rounded px-3 py-2 w-full min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                    @bind="countryInput"
                    disabled="@isDispatching" />
         </div>
@@ -46,7 +46,7 @@
     }
 
     <button type="button"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            class="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
             @onclick="HandleSubmit"
             disabled="@(!CanSubmit)">
         @(isDispatching ? "Saving..." : "Save shipping address")

@@ -11,36 +11,45 @@
 
 <PageTitle>Order @OrderId</PageTitle>
 
+<nav aria-label="Breadcrumb" class="mb-5 text-sm">
+    <a href="/orders" class="rounded text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">Orders</a>
+    <span aria-hidden="true" class="mx-2 text-slate-400">/</span><span class="text-slate-600">Order details</span>
+</nav>
+<header class="mb-7">
+    <div class="flex flex-wrap items-center gap-y-2">
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Order details <span class="mt-2 block break-all font-mono text-sm font-normal tracking-normal text-slate-600">@OrderId</span></h1>
+        @if (!loading && detail is not null)
+        {
+            <LiveBadge State="@liveness" />
+        }
+    </div>
+</header>
+
 @if (loading)
 {
-    <p class="text-gray-500">Loading...</p>
+    <p role="status" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Loading...</p>
 }
 else if (detail is null)
 {
-    <p class="text-gray-500">Order not found.</p>
+    <p class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Order not found.</p>
 }
 else
 {
-    <div class="flex items-center mb-4">
-        <h1 class="text-2xl font-bold">Order @detail.Header.OrderId</h1>
-        <LiveBadge State="@liveness" />
-    </div>
-
-    <div class="mb-6 grid grid-cols-2 gap-4">
+    <div class="mb-6 grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-2">
         <div>
-            <p class="text-sm text-gray-600">Customer</p>
-            <p class="font-mono">@detail.Header.CustomerId</p>
+            <p class="text-sm text-slate-600">Customer</p>
+            <a href="@($"/customers/{detail.Header.CustomerId}")" class="break-all font-mono text-sm text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">@detail.Header.CustomerId</a>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Status</p>
+            <p class="text-sm text-slate-600">Status</p>
             <p class="font-semibold">@detail.Header.Status</p>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Total</p>
+            <p class="text-sm text-slate-600">Total</p>
             <p>@(detail.Header.Total?.ToString() ?? "N/A")</p>
         </div>
         <div>
-            <p class="text-sm text-gray-600">Last Updated</p>
+            <p class="text-sm text-slate-600">Last Updated</p>
             <p>@detail.Header.LastUpdatedUtc.ToString("u")</p>
         </div>
     </div>
@@ -52,41 +61,43 @@ else
         </div>
     }
 
-    <h2 class="text-xl font-bold mb-2">Line Items</h2>
+    <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">Line Items</h2>
     @if (detail.Lines.Count == 0)
     {
-        <p class="text-gray-500 mb-6">No line items.</p>
+        <p class="text-slate-600 mb-6">No line items.</p>
     }
     else
     {
-        <table class="min-w-full border border-gray-300 mb-6">
-            <thead class="bg-gray-100">
+        <div class="mb-6 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" role="region" aria-label="Order line items" tabindex="0">
+        <table class="min-w-full whitespace-nowrap text-sm">
+            <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <tr>
-                    <th class="px-4 py-2 text-left">SKU</th>
-                    <th class="px-4 py-2 text-right">Quantity</th>
-                    <th class="px-4 py-2 text-right">Unit Price</th>
+                    <th scope="col" class="px-5 py-4 text-left">SKU</th>
+                    <th scope="col" class="px-5 py-4 text-right">Quantity</th>
+                    <th scope="col" class="px-5 py-4 text-right">Unit Price</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var line in detail.Lines)
                 {
-                    <tr class="border-t border-gray-200">
-                        <td class="px-4 py-2 font-mono text-sm">@line.Sku</td>
-                        <td class="px-4 py-2 text-right">@line.Quantity</td>
-                        <td class="px-4 py-2 text-right">@line.UnitPrice</td>
+                    <tr class="border-t border-slate-100 hover:bg-slate-50">
+                        <td class="px-5 py-4 font-mono text-sm">@line.Sku</td>
+                        <td class="px-5 py-4 text-right">@line.Quantity</td>
+                        <td class="px-5 py-4 text-right">@line.UnitPrice</td>
                     </tr>
                 }
             </tbody>
         </table>
+    </div>
     }
 
-    <h2 class="text-xl font-bold mb-2">Timeline</h2>
-    <ul class="space-y-2">
+    <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">Order activity</h2>
+    <ul class="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         @foreach (var entry in detail.Timeline)
         {
-            <li class="border-l-2 border-gray-300 pl-4">
-                <p class="font-semibold">@entry.EventType</p>
-                <p class="text-sm text-gray-600">@entry.OccurredUtc.ToString("u")</p>
+            <li class="border-l-2 border-teal-600 pl-4">
+                <p class="font-semibold">@OrderActivityLabels.For(entry.EventType)</p>
+                <p class="text-sm text-slate-600">@entry.OccurredUtc.ToString("u")</p>
             </li>
         }
     </ul>

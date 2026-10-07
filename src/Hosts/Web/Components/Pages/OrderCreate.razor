@@ -14,14 +14,21 @@
 
 <PageTitle>New Order</PageTitle>
 
-<div class="container mx-auto px-4 py-6">
-    <h1 class="text-2xl font-bold mb-6">New Order</h1>
+<nav aria-label="Breadcrumb" class="mb-5 text-sm">
+    <a href="/orders" class="rounded text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">Orders</a>
+    <span aria-hidden="true" class="mx-2 text-slate-400">/</span><span class="text-slate-600">New order</span>
+</nav>
+<header class="mb-7">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-950">New Order</h1>
+    <p class="mt-2 text-sm leading-6 text-slate-600">Add the customer, line items, and shipping address, then review your order.</p>
+</header>
+<div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
 
-    <nav aria-label="Wizard progress" class="mb-6">
-        <ol class="flex items-center space-x-4">
+    <nav aria-label="Wizard progress" class="mb-8 border-b border-slate-200 pb-5">
+        <ol class="flex flex-wrap items-center gap-3 sm:gap-6">
             @for (var step = 1; step <= StepLabels.Length; step++)
             {
-                <li class="@(step == currentStep ? "font-bold text-blue-600" : "text-gray-400")">
+                <li aria-current="@(step == currentStep ? "step" : null)" class="@(step == currentStep ? "rounded-md bg-teal-50 px-3 py-2 font-bold text-teal-800" : "px-3 py-2 text-slate-500")">
                     <span class="text-sm">@step. @StepLabels[step - 1]</span>
                 </li>
             }
@@ -69,7 +76,7 @@
     @if (currentStep > 1)
     {
         <button type="button"
-                class="mt-4 text-sm text-gray-600 hover:text-gray-800 underline"
+                class="mt-4 text-sm text-slate-600 hover:text-slate-800 underline min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
                 @onclick="() => currentStep -= 1">
             Back
         </button>

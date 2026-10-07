@@ -4,74 +4,74 @@
 
 <PageTitle>Event Store Browser</PageTitle>
 
-<h1 class="text-2xl font-bold p-6">Event Store Browser</h1>
+<h1 class="mb-3 break-words text-3xl font-bold tracking-tight text-slate-900">Event Store Browser</h1>
 
-<div class="px-6">
-    <p class="pb-4 text-gray-700">
+<div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+    <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
         Inspect one aggregate stream by its id. Enter the stream id and inspect to see the stream's events,
         each with its payload, and its metadata on demand.
     </p>
 
     <label class="block pb-4">
-        <span class="block pb-1 text-sm font-medium text-gray-700">Stream id</span>
+        <span class="block pb-2 text-sm font-semibold text-slate-800">Stream id</span>
         <input @bind="streamId"
-               class="block w-96 rounded border border-gray-300 px-2 py-1"
+               class="block w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
                placeholder="order:00000000000000000000000000000000" />
     </label>
 
     <button type="button" @onclick="OnInspectAsync"
-            class="rounded bg-gray-800 px-4 py-2 text-white">
+            class="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
         Inspect stream
     </button>
 </div>
 
 @if (error)
 {
-    <p class="px-6 pt-4 text-red-700">Unable to inspect the stream.</p>
+    <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Unable to inspect the stream.</p>
 }
 else if (result is not null)
 {
     @if (result.Outcome == StreamInspectionOutcome.InvalidFormat)
     {
-        <p class="px-6 pt-4 text-red-700">
+        <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
             Enter a valid stream id, for example order:0f8fad5b07d04015b9d063e8e9e7d6f8.
         </p>
     }
     else if (result.Outcome == StreamInspectionOutcome.ProcessManagerUnsupported)
     {
-        <p class="px-6 pt-4 text-gray-700">
+        <p role="status" class="mt-5 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
             Process-manager streams are not supported here. This tool inspects aggregate streams.
         </p>
     }
     else if (result.Outcome == StreamInspectionOutcome.Empty)
     {
-        <p class="px-6 pt-4 text-gray-700">
+        <p role="status" class="mt-5 rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
             No events found for this stream id. Verify the stream kind, the aggregate id, and the tenant.
         </p>
     }
     else
     {
-        <div class="px-6 pt-4">
+        <div class="mt-6 min-w-0">
             @for (var i = 0; i < result.Events.Count; i++)
             {
                 var index = i;
                 var evt = result.Events[index];
-                <div class="pb-6 mb-6 border-b border-gray-200">
-                    <div class="text-sm text-gray-700">
+                <div class="mb-5 min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-wrap gap-x-2 gap-y-1 break-all text-sm text-slate-600">
                         <span class="font-medium">v@(evt.StreamVersion)</span>
                         <span class="pl-2 font-medium">@evt.EventType</span>
                         <span class="pl-2">schema @evt.EventVersion</span>
                         <span class="pl-2">@evt.OccurredUtc.ToString("u")</span>
                         <span class="pl-2">position @evt.GlobalPosition</span>
                     </div>
-                    <pre class="mt-2 overflow-x-auto rounded bg-gray-100 p-2 text-xs">@evt.PayloadJson</pre>
+                    <pre class="mt-4 max-w-full overflow-x-auto rounded-lg bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100" tabindex="0" aria-label="Stored event payload">@evt.PayloadJson</pre>
                     <button type="button" @onclick="() => ToggleMetadata(index)"
-                            class="mt-2 text-sm text-blue-700 underline">
+                            aria-expanded="@(shownMetadata.Contains(index) ? "true" : "false")" aria-controls="event-metadata-@index" class="mt-4 rounded text-sm font-semibold text-teal-700 underline underline-offset-4 hover:text-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-600">
                         @(shownMetadata.Contains(index) ? "Hide metadata" : "Show metadata")
                     </button>
                     @if (shownMetadata.Contains(index))
                     {
-                        <dl class="mt-2 text-sm text-gray-700">
+                        <dl id="event-metadata-@index" class="mt-4 space-y-2 break-all rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">
                             <div><dt class="inline font-medium">Event id:</dt> <dd class="inline">@evt.Metadata.EventId</dd></div>
                             <div><dt class="inline font-medium">Correlation id:</dt> <dd class="inline">@evt.Metadata.CorrelationId</dd></div>
                             <div><dt class="inline font-medium">Causation id:</dt> <dd class="inline">@evt.Metadata.CausationId</dd></div>
