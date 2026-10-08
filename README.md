@@ -7,6 +7,22 @@ This is a production-grade reference implementation, not a sample. It exists to 
 run, read, and adapted, including for commercial services. It is tagged v1.0.0, the release the
 book describes, and development continues on main past the tag.
 
+## Workspaces
+
+The current application on `main` has two workspaces.
+
+**Orders workspace.** Create and manage orders, review inventory, and follow an order's history.
+
+![Orders workspace overview with order actions and business navigation](docs/ui-previews/2026-10-07-studio/business-home-desktop.png)
+
+**Operations console.** Inspect audit trails, event streams, and workflows. Compare recorded order
+versions and review projection recovery tools.
+
+![Operations console overview with audit, history, tracing, and recovery tools](docs/ui-previews/2026-10-07-studio/admin-home-desktop.png)
+
+See the [workspace gallery](docs/workspace-gallery.md) for the main screens and mobile views,
+or follow the [demo walkthrough](docs/event-sourcing-demo-guide.md) to try the workflows.
+
 ## What it demonstrates
 
 An order-management domain across five bounded contexts, built event-sourced end to end.
