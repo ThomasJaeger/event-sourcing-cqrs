@@ -47,7 +47,8 @@ teaching clarity (ADR 0025), and global position is commit-ordered (ADR 0044).
 
 ## Running it
 
-You need Docker and the .NET 10 SDK. From the repository root:
+You need Docker and the .NET 10 SDK. On Windows 11, run Docker Desktop with Linux
+containers and use PowerShell (including the VS Code integrated terminal). From the repository root:
 
 ```
 docker compose -f docker/docker-compose.yml up -d
@@ -63,18 +64,31 @@ The certificate is the second half of the same step. The Web host sets the antif
 policy to require a secure request, so it serves over HTTPS and every page returns 500 over
 plain HTTP.
 
-Every host reads its configuration from the environment and there are no `appsettings.json`
-files, so none of the values below is optional and a missing one throws at startup. Export
-them in each terminal you start a host from. The connection strings are the compose file's own
-dev-only defaults:
+Every host reads its application configuration from the environment. There are no
+`appsettings.json` files. Set the values below in **each terminal** you start a host from;
+a missing required value throws at startup. The connection strings are the compose file's
+dev-only defaults. Replace the password-hash placeholder after generating your hash below.
 
-```
+**Bash (Linux/macOS):**
+
+```bash
 export EVENT_STORE_CONNECTION_STRING='Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
 export READ_MODEL_CONNECTION_STRING='Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
 export FORWARDED_IDENTITY_SIGNING_SECRET='local-development-secret-not-for-any-other-environment'
 export API_BASE_URL='http://localhost:5000'
 export BootstrapAdministrator__AdministratorUserId='11111111-1111-1111-1111-111111111111'
 export OperatorAuthentication__PasswordHash='<generated password hash>'
+```
+
+**PowerShell (Windows):**
+
+```powershell
+$env:EVENT_STORE_CONNECTION_STRING = 'Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
+$env:READ_MODEL_CONNECTION_STRING = 'Host=localhost;Port=5432;Database=esrcq;Username=esrcq;Password=esrcq'
+$env:FORWARDED_IDENTITY_SIGNING_SECRET = 'local-development-secret-not-for-any-other-environment'
+$env:API_BASE_URL = 'http://localhost:5000'
+$env:BootstrapAdministrator__AdministratorUserId = '11111111-1111-1111-1111-111111111111'
+$env:OperatorAuthentication__PasswordHash = '<generated password hash>'
 ```
 
 Generate the operator password hash before starting Web:
@@ -98,10 +112,17 @@ Then start the hosts, one per terminal, in this order:
 
 ```
 dotnet run --project src/Hosts/Workers
-ASPNETCORE_URLS='http://localhost:5000' dotnet run --project src/Hosts/Api
-ASPNETCORE_URLS='https://localhost:5101' dotnet run --project src/Hosts/Web
-ASPNETCORE_URLS='https://localhost:5102' dotnet run --project src/Hosts/AdminConsole
+dotnet run --project src/Hosts/Api
+dotnet run --project src/Hosts/Web
+dotnet run --project src/Hosts/AdminConsole
 ```
+
+These commands work in both Bash and PowerShell. Each host ships a `Demo` profile in
+`Properties/launchSettings.json`. `dotnet run` selects it automatically, including with
+`--no-build` after a successful build. The profiles set `DOTNET_ENVIRONMENT` and
+`ASPNETCORE_ENVIRONMENT` to `Development`, Api to HTTP port 5000, Web to HTTPS port 5101,
+and AdminConsole to HTTPS port 5102. They contain no credentials. Use
+`--launch-profile Demo` to select the profile explicitly.
 
 Workers goes first because it applies the database migrations at startup, for the selected
 event store and for the read models, and because it seeds the bootstrap administrator that
@@ -133,6 +154,51 @@ and the [UI revision record](docs/ui-revision-2026-10-07.md) for scope and verif
 
 The credentials in the compose file are dev-only defaults, stated as such in its own header.
 They are not for any other environment.
+
+### Visual Studio Code
+
+Open the repository root and install Microsoft's C# Dev Kit extension. After configuring
+Docker, the HTTPS certificate, and the environment variables above, use the integrated
+terminals to run the four commands. Terminal sessions each need their own variables.
+
+For F5 debugging, C# Dev Kit discovers the `Demo` launch profiles. Select the host project
+and its `Demo` profile; start Workers first as above. The debugger inherits the environment
+of the **VS Code process**, not variables set later in an integrated terminal. To supply those
+values, close VS Code, set the variables in an external PowerShell or Bash terminal, then
+open the repository with `code .` from that terminal. See the
+[C# debugging documentation](https://code.visualstudio.com/docs/csharp/debugging).
+
+If you already have a custom `.vscode/launch.json`, ensure it loads the host's `Demo`
+profile or explicitly sets both environment names to `Development`, the project's working
+directory, and the HTTPS URL. A configuration that launches a DLL directly can bypass
+`launchSettings.json`.
+
+### Missing styles, oversized icons, or a Blazor script error
+
+Check the host startup log for `Hosting environment: Development` during the local demo.
+Running build output in `Production` can serve empty compressed CSS responses or fail to
+find `_framework/blazor.web.js`. A status-only check can miss this: browsers request
+compressed assets, and an empty response may still have status 200.
+
+Restart with the `Demo` profile above. `--no-build` still loads launch settings;
+`--no-launch-profile` and direct DLL execution do not. If you intentionally bypass profiles
+for local development, set both variables before starting the host:
+
+```powershell
+$env:DOTNET_ENVIRONMENT = 'Development'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+```
+
+```bash
+export DOTNET_ENVIRONMENT=Development
+export ASPNETCORE_ENVIRONMENT=Development
+```
+
+Also supply `ASPNETCORE_URLS` when bypassing profiles (HTTPS port 5101 for Web, 5102 for
+AdminConsole; HTTP port 5000 for Api). Real deployments should use `dotnet publish` and
+run the published output in `Production`. Launch profiles apply only to local tooling;
+[ASP.NET Core's static asset documentation](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/static-files?view=aspnetcore-10.0)
+explains the distinction between development build assets and published assets.
 
 ### Configuration
 
@@ -195,9 +261,10 @@ The seeder drives the system through named scenarios, so the read side has somet
 without arranging each case through the UI. Workers must already be running, because that host
 is where projections advance and no scenario finishes without it.
 
+With the environment variables above set in the seeder's terminal (Bash or PowerShell):
+
 ```
-EVENT_STORE_CONNECTION_STRING=... READ_MODEL_CONNECTION_STRING=... \
-  dotnet run --project src/Demo/Demo.Seeder -- all
+dotnet run --project src/Demo/Demo.Seeder -- all
 ```
 
 Its usage is `Demo.Seeder <scenario>`, where the scenario is `clean`, `compensation`, `tenants`
@@ -224,6 +291,11 @@ dotnet restore EventSourcingCqrs.slnx
 dotnet build EventSourcingCqrs.slnx --no-restore
 dotnet test EventSourcingCqrs.slnx --no-build --verbosity normal
 ```
+
+CI also runs `python scripts/check-demo-assets.py` on Windows and Linux after building Web
+and AdminConsole and running `dotnet dev-certs https`. This starts the real hosts with their
+default launch profiles and checks CSS plus Web's Blazor script with plain and gzip requests.
+It needs Python 3 and no database; it does not exercise authenticated AdminConsole tools.
 
 The integration tests stand up their own containers through Testcontainers and LocalStack, so
 Docker has to be running. They do not use the compose file above.

@@ -143,7 +143,7 @@ builder.Services.AddScoped<ICircuitForwardedIdentityProvider, CircuitForwardedId
 // Cookie authentication for the operator login. The password is verified against the configured
 // salted hash before this identity is issued, in every environment. External identity-provider
 // integration remains separate. The cookie is HttpOnly and Secure-always, so the host
-// requires an https endpoint (it expects ASPNETCORE_URLS to carry https; no launch profile ships).
+// requires an https endpoint (the local Demo launch profile supplies one).
 // The framework seeds the InteractiveServer circuit's authentication state from this cookie's
 // principal through the default ServerAuthenticationStateProvider on .NET 10, so no explicit
 // AuthenticationStateProvider registration and no auth-state serialization are needed for a

@@ -43,3 +43,27 @@ jobs:
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: dotnet test EventSourcingCqrs.slnx --no-build --verbosity normal
+
+  demo-assets:
+    name: Demo assets (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Build UI hosts
+        run: |
+          dotnet build src/Hosts/Web
+          dotnet build src/Hosts/AdminConsole
+      - name: Create local HTTPS certificate
+        run: dotnet dev-certs https
+      - name: Check demo launch profiles and compressed assets
+        run: python scripts/check-demo-assets.py
