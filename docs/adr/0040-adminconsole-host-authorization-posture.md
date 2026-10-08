@@ -91,9 +91,36 @@ the Api edge. This is why the handler-plus-IPermissionAuthorizer mechanism is de
 and a claim-materializing mechanism is not. The divergence is flagged for a later explicit
 ADR-0028 reconciliation.
 
+## Account surface amendment, 7 October 2026
+
+The deferred account consumer now exists. AdminConsole serves a static password form at `/login`
+and token-protected HTTP POSTs at `/account/login` and `/account/logout`. The account page is rendered
+outside the interactive application, so anonymous sign-in requires no anonymous hub access. These
+three account endpoints are the explicit exceptions to the host fallback. Every tool and the
+interactive connection retain the permission gate.
+
+The host requires a valid configured bootstrap actor and a salted Identity V3 password hash at
+startup. Web and AdminConsole compile the same small password-verifier source without referencing
+one another's executable. The existing hashing command generates the compatible credential. Login
+attempts are limited to ten per minute per remote address per instance. Antiforgery tokens protect
+both account POSTs, and a nonlocal return URL is rejected before cookie issuance.
+
+Successful login issues only the configured actor's name identifier under an Admin-specific,
+versioned cookie scheme. The cookie remains separate from Web, HttpOnly, Secure, and SameSite Lax.
+Roles are not copied into the cookie. Protected HTTP requests still resolve current roles through
+the existing handler. Authenticated callers without console permission receive a forbidden response
+with an account link, while the account and logout surfaces remain reachable after permission
+revocation. This does not add ongoing authorization revalidation to an already established circuit.
+
+Framework assets are mapped so admitted operators can establish the interactive connection. The
+static login response contains neither the framework script nor an interactive component marker.
+HTTP tests cover real cookie issuance, protected tools and hub negotiation, revoked permission,
+antiforgery rejection, rate limiting, local redirects, and authenticated script delivery. The older
+PostgreSQL admit fixture retains its test authentication scheme to isolate authoritative role reads;
+it is not a sign-in path for a running deployment.
+
 ## Revisit when
 
 An AdminConsole page needs per-operator page-level differentiation (one operator holds one page
 without another), at which point a page policy layers over the fallback and the per-page
-permission grain is decided at that consumer. Or the operator login flow is built out, at which
-point the deferred login page and logout surface land against this record.
+permission grain is decided at that consumer. Or the deployment needs an external identity provider or ongoing circuit authorization revalidation.

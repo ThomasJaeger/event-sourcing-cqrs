@@ -1,3 +1,6 @@
+@implements IDisposable
+@using Microsoft.JSInterop
+@using EventSourcingCqrs.Hosts.AdminConsole.Components.Browser
 @page "/streams"
 @using EventSourcingCqrs.Hosts.AdminConsole.Browser
 @inject IStreamInspector Inspector
@@ -6,26 +9,43 @@
 
 <h1 class="mb-3 break-words text-3xl font-bold tracking-tight text-slate-900">Event Store Browser</h1>
 
+<StreamCatalogPicker Selected="OnSelectedAsync" SelectedId="@(loadedId)" Disabled="@busy" />
+
 <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
     <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
-        Inspect one aggregate stream by its id. Enter the stream id and inspect to see the stream's events,
-        each with its payload, and its metadata on demand.
+        Or enter a known aggregate stream id. Inspect to see the stream's events,
+        each with its current interpreted payload and its metadata on demand. Use the audit trail for the original stored JSON.
     </p>
 
     <label class="block pb-4">
         <span class="block pb-2 text-sm font-semibold text-slate-800">Stream id</span>
-        <input @bind="streamId"
+        <input @bind="streamId" disabled="@busy"
                class="block w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
                placeholder="order:00000000000000000000000000000000" />
     </label>
 
-    <button type="button" @onclick="OnInspectAsync"
+    <button type="button" @onclick="OnInspectAsync" disabled="@busy"
             class="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
         Inspect stream
     </button>
 </div>
 
-@if (error)
+@if (loadedId is not null)
+{
+    <div class="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
+        <a href="@($"/audit?streamId={Uri.EscapeDataString(loadedId)}")" class="underline underline-offset-4">Open audit trail</a>
+        @if (loadedId.StartsWith("order:", StringComparison.Ordinal))
+        {
+            <a href="@($"/order-history?streamId={Uri.EscapeDataString(loadedId)}")" class="underline underline-offset-4">Compare order history</a>
+        }
+    </div>
+    <h2 @ref="detailHeading" data-detail-heading tabindex="-1" class="mt-6 break-all text-lg font-semibold text-slate-900 focus:outline-none">Stream events: <span class="font-mono text-base">@loadedId</span></h2>
+}
+@if (busy)
+{
+    <p role="status" class="mt-4 text-sm text-slate-600">Loading stream events...</p>
+}
+else if (error)
 {
     <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Unable to inspect the stream.</p>
 }
@@ -64,7 +84,7 @@ else if (result is not null)
                         <span class="pl-2">@evt.OccurredUtc.ToString("u")</span>
                         <span class="pl-2">position @evt.GlobalPosition</span>
                     </div>
-                    <pre class="mt-4 max-w-full overflow-x-auto rounded-lg bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100" tabindex="0" aria-label="Stored event payload">@evt.PayloadJson</pre>
+                    <pre class="mt-4 max-w-full overflow-x-auto rounded-lg bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100" tabindex="0" aria-label="Interpreted event payload">@evt.PayloadJson</pre>
                     <button type="button" @onclick="() => ToggleMetadata(index)"
                             aria-expanded="@(shownMetadata.Contains(index) ? "true" : "false")" aria-controls="event-metadata-@index" class="mt-4 rounded text-sm font-semibold text-teal-700 underline underline-offset-4 hover:text-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-600">
                         @(shownMetadata.Contains(index) ? "Hide metadata" : "Show metadata")
@@ -88,6 +108,18 @@ else if (result is not null)
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "streamId")] public string? LinkedStreamId { get; set; }
+    private string? lastLinkedId;
+    private string? queuedLinkedId;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LinkedStreamId is null || LinkedStreamId == lastLinkedId || disposed) return;
+        lastLinkedId = LinkedStreamId;
+        if (busy) { queuedLinkedId = LinkedStreamId; return; }
+        streamId = LinkedStreamId;
+        await OnInspectAsync();
+    }
+
     // The Event Store Browser: an operator enters a stream id and inspects one aggregate stream for
     // display. The page depends on the narrow IStreamInspector seam, which owns the parse guard, the
     // pm-prefix pre-detection, and the read; the page renders the outcome the seam returns. The payload is
@@ -98,23 +130,72 @@ else if (result is not null)
     private string streamId = string.Empty;
     private StreamInspectionResult? result;
     private bool error;
+    private bool busy;
+    private bool focusDetails;
+    private ElementReference detailHeading;
+    private bool disposed;
+    private string? loadedId;
+    private readonly CancellationTokenSource lifetime = new();
     private readonly HashSet<int> shownMetadata = [];
+
+    private Task OnSelectedAsync(string id)
+    {
+        if (busy || disposed) return Task.CompletedTask;
+        streamId = id;
+        return OnInspectAsync();
+    }
 
     private async Task OnInspectAsync()
     {
+        if (busy || disposed) return;
+        busy = true;
+        focusDetails = true;
         error = false;
+        result = null;
+        loadedId = streamId;
         shownMetadata.Clear();
         try
         {
-            result = await Inspector.InspectStreamAsync(streamId, CancellationToken.None);
+            var response = await Inspector.InspectStreamAsync(loadedId, lifetime.Token);
+            if (!disposed) result = response;
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // The four outcomes are classified by the seam, not thrown. An exception here is an unexpected
-            // read failure, surfaced as an operator-visible error rather than an escaping exception.
-            error = true;
-            result = null;
+            // The existing seam classifies input errors. A read failure remains visible to the operator.
+            if (!disposed) error = true;
         }
+        finally
+        {
+            busy = false;
+        }
+        if (!disposed && queuedLinkedId is { } nextId)
+        {
+            queuedLinkedId = null;
+            streamId = nextId;
+            await OnInspectAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusDetails || busy || disposed) return;
+        focusDetails = false;
+        try
+        {
+            // Selecting an id should bring its result into view, including on a phone.
+            await detailHeading.FocusAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (OperationCanceledException) when (disposed) { }
+    }
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        lifetime.Cancel();
+        lifetime.Dispose();
     }
 
     private void ToggleMetadata(int index)

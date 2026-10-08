@@ -62,8 +62,9 @@ internal sealed class ApiClient : IApiClient
         ArgumentNullException.ThrowIfNull(command);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         var typeName = _commandRegistry.NameFor(command.GetType());
+        // Serialize the concrete command, not the property-free ICommand contract.
         var content = JsonContent.Create(
-            new { type = typeName, payload = command },
+            new { type = typeName, payload = (object)command },
             options: JsonSerializerOptions.Web);
         var request = new HttpRequestMessage(HttpMethod.Post, "/commands")
         {
@@ -85,8 +86,9 @@ internal sealed class ApiClient : IApiClient
     {
         ArgumentNullException.ThrowIfNull(query);
         var typeName = _queryRegistry.NameFor(query.GetType());
+        // Serialize the concrete query so its parameters reach the API.
         var content = JsonContent.Create(
-            new { type = typeName, payload = query },
+            new { type = typeName, payload = (object)query },
             options: JsonSerializerOptions.Web);
         var request = new HttpRequestMessage(HttpMethod.Post, "/queries")
         {

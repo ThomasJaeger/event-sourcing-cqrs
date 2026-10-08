@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using FluentAssertions;
@@ -147,6 +148,46 @@ public class QueryAuthorizationTests : IClassFixture<ApiFixture>
         var otherResponse = await client.PostQueryAsAsync(
             "GetOrderDetail", new { orderId = othersOrderId }, customerActor);
         otherResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task History_uses_event_ownership_before_a_projection_exists_and_hides_foreign_orders()
+    {
+        var owner = Guid.NewGuid();
+        await _fixture.SeedRoleAsync(owner, Role.Customer);
+        var ownedOrder = Guid.NewGuid();
+        var foreignOrder = Guid.NewGuid();
+        var store = _fixture.Factory.Services.GetRequiredService<IEventStore>();
+        async Task SeedAsync(Guid orderId, Guid customerId)
+        {
+            var order = Order.Draft(orderId, customerId, SeededAt, "web");
+            order.AddLine(Guid.NewGuid(), "NOTEBOOK", 2, new Money(12.5m, Currency.USD), SeededAt);
+            var stream = StreamId.ForAggregate<Order>(WellKnownTenants.Default, orderId);
+            var events = order.DequeueUncommittedEvents().Select((payload, index) =>
+            {
+                var id = Guid.NewGuid();
+                var metadata = new EventMetadata(id, Guid.NewGuid(), Guid.NewGuid(), customerId,
+                    "test", SeededAt, WellKnownTenants.Default);
+                return new EventEnvelope(stream, index + 1, id, payload.GetType().Name,
+                    payload is OrderDrafted ? 2 : 1, payload, metadata, SeededAt, 0);
+            }).ToArray();
+            await store.AppendAsync(stream, 0, events, default);
+        }
+        await SeedAsync(ownedOrder, owner);
+        await SeedAsync(foreignOrder, Guid.NewGuid());
+        var client = _fixture.Factory.CreateClient();
+
+        var ownResponse = await client.PostQueryAsAsync("GetOrderHistory", new { orderId = ownedOrder }, owner);
+        ownResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var history = await ownResponse.Content.ReadFromJsonAsync<OrderHistoryView>();
+        history!.Steps.Should().HaveCount(2);
+        history.Steps[0].Snapshot.Lines.Should().BeEmpty();
+        history.Steps[1].Snapshot.Lines.Should().ContainSingle().Which.Sku.Should().Be("NOTEBOOK");
+        history.Steps[1].Total.Amount.Should().Be(25m);
+        (await client.PostQueryAsAsync("GetOrderHistory", new { orderId = foreignOrder }, owner))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.PostQueryAsAsync("GetOrderHistory", new { orderId = ownedOrder }, Guid.NewGuid()))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     private static OrderListRow SampleOrderRow(Guid customerId) => new OrderListRow(

@@ -18,8 +18,8 @@ namespace EventSourcingCqrs.IntegrationTests.AdminConsole;
 // The admit path queries the current-roles read model, so it needs a real database, unlike the deny
 // spec. One seeded (AdminActorId, Admin) row plus a test authentication scheme that emits that actor
 // as the NameIdentifier exercise the real fallback policy, AdminConsoleAccessHandler, and current-roles
-// read end to end. The test scheme stands in for cookie issuance, which is the deferred login surface's
-// concern (ADR 0040), so the seed actor id must equal the NameIdentifier the scheme emits.
+// read end to end. Cookie issuance is covered separately by AdminConsoleLoginFlowTests; the seed actor
+// id here must equal the NameIdentifier the test scheme emits.
 public sealed class AdminConsoleAdmitFixture : IAsyncLifetime
 {
     private readonly PostgresFixture _postgres = new();
@@ -35,6 +35,7 @@ public sealed class AdminConsoleAdmitFixture : IAsyncLifetime
         await SeedRoleAsync(AdminTestAuthHandler.AdminActorId, Role.Admin);
         Factory = new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder =>
         {
+            builder.WithOperatorCredentials();
             builder.UseSetting("READ_MODEL_CONNECTION_STRING", ConnectionString);
             // The Projection Status Dashboard's head reader needs the event-store connection; in v1 it
             // is the same migrated database, which carries event_store.events for the head read.
@@ -74,8 +75,8 @@ public sealed class AdminConsoleAdmitFixture : IAsyncLifetime
 // A test authentication scheme that authenticates every request as the seeded Admin actor, carrying
 // the actor id as the NameIdentifier the AdminConsoleAccessHandler reads. Registered as the default
 // scheme through ConfigureTestServices so the fallback policy authenticates against it. It exercises
-// the authorization path while standing in for cookie issuance and validation, which are the deferred
-// login surface's concern (ADR 0040).
+// the authorization path while standing in for cookie issuance and validation, which have separate
+// HTTP coverage in AdminConsoleLoginFlowTests.
 internal sealed class AdminTestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public const string SchemeName = "AdminConsoleAdmitTest";

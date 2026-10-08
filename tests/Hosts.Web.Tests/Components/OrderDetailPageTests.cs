@@ -143,6 +143,15 @@ public class OrderDetailPageTests : BunitContext
         cut.Find("ul li").TextContent.Should().Contain(label).And.NotContain(eventType);
     }
 
+    [Fact]
+    public void An_accessible_order_links_to_its_own_read_only_history()
+    {
+        var orderId = Guid.NewGuid();
+        stubApiClient.EnqueueQueryResult<GetOrderDetail, OrderDetailView?>(SampleDetail(orderId, OrderStatus.Placed));
+        var cut = Render<OrderDetail>(p => p.Add(x => x.OrderId, orderId));
+        cut.Find($"a[href='/orders/{orderId}/history']").TextContent.Should().Contain("history");
+    }
+
     private static OrderDetailView SampleDetail(
         Guid orderId,
         OrderStatus status,

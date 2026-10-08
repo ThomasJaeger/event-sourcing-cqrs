@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<IEventStore, PostgresEventStore>();
+        services.TryAddSingleton<IBoundedEventStreamReader, PostgresBoundedEventStreamReader>();
 
         // Command deduplication store (ADR 0016). Lives with the other Postgres
         // adapters because it consumes the same INpgsqlConnectionFactory; the
@@ -220,6 +221,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<IEventStore, PostgresEventStore>();
+        services.TryAddSingleton<IBoundedEventStreamReader, PostgresBoundedEventStreamReader>();
 
         return services;
     }

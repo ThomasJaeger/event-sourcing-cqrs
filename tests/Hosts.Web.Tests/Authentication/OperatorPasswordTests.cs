@@ -1,4 +1,4 @@
-using EventSourcingCqrs.Hosts.Web.Authentication;
+using EventSourcingCqrs.Hosts.Authentication;
 using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Xunit;

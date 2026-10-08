@@ -1,0 +1,52 @@
+@* This component is rendered by the anonymous HTTP account endpoint, outside App and its
+   interactive Routes. All account actions are ordinary token-protected POSTs. *@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/console.css?v=20261007-studio" />
+</head>
+<body class="console-shell console-account">
+    <main class="console-account-card">
+        <div class="console-account-brand"><svg class="console-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="16" height="16" rx="5" fill="#6946df"/><rect x="22" y="2" width="16" height="16" rx="5" fill="#d8ee8d"/><rect x="2" y="22" width="16" height="16" rx="5" fill="#f17054"/><path d="M24 30h12m-6-6v12" stroke="#24213a" stroke-width="3" stroke-linecap="round"/></svg><span>Operations console</span></div>
+        <h1 class="console-account-title">Admin account</h1>
+        @if (Error is not null)
+        {
+            <p role="alert" class="console-account-error">@Error</p>
+        }
+        @if (ActorId is not null)
+        {
+            <p class="console-account-copy">Signed in as <span class="break-all font-mono">@ActorId</span>.</p>
+            <a href="/" class="console-account-open">Open operations console</a>
+            <form method="post" action="/account/logout">
+                <input type="hidden" name="@TokenFieldName" value="@Token" />
+                <button type="submit" class="console-account-submit">Sign out</button>
+            </form>
+        }
+        else
+        {
+            <p class="console-account-copy">Enter the operator password for this console. Access also requires the current administrator permission.</p>
+            <form method="post" action="/account/login">
+                <input type="hidden" name="@TokenFieldName" value="@Token" />
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                <label for="operator-password" class="console-account-label">Password</label>
+                <input id="operator-password" name="password" type="password" autocomplete="current-password" required maxlength="1024"
+                       class="console-account-password" />
+                <button type="submit" class="console-account-submit">Sign in</button>
+            </form>
+        }
+    </main>
+    <p class="console-account-footnote">A closer look at your business, one recorded change at a time.</p>
+</body>
+</html>
+
+@code {
+    [Parameter] public string ReturnUrl { get; set; } = "/";
+    [Parameter] public string? ActorId { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string TokenFieldName { get; set; } = string.Empty;
+    [Parameter] public string Token { get; set; } = string.Empty;
+}

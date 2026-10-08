@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using Microsoft.AspNetCore.Identity;
 
-namespace EventSourcingCqrs.Hosts.Web.Authentication;
+namespace EventSourcingCqrs.Hosts.Authentication;
 
 // The single configured operator proves possession of a password before receiving a cookie.
 // Configuration holds a salted Identity password hash, never a plaintext credential.

@@ -15,6 +15,8 @@ namespace EventSourcingCqrs.Hosts.AdminConsole.Tests.Components;
 // and the notice is absent; the GREEN slice injects the capability and gates the surface on it.
 public class CorrelationIdTracerCapabilityTests : BunitContext
 {
+    public CorrelationIdTracerCapabilityTests() => Services.AddUnavailableCatalog();
+
     [Fact]
     public void Under_an_unavailable_capability_the_page_renders_the_notice_and_not_the_trace_control()
     {

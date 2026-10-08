@@ -1,3 +1,6 @@
+@implements IDisposable
+@using Microsoft.JSInterop
+@using EventSourcingCqrs.Hosts.AdminConsole.Components.Browser
 @page "/correlations"
 @using EventSourcingCqrs.Hosts.AdminConsole.Tracer
 @inject ICorrelationTracer Tracer
@@ -9,21 +12,22 @@
 
 @if (Availability.IsAvailable)
 {
+    <CorrelationCatalogPicker Selected="OnSelectedAsync" SelectedId="@(Guid.TryParse(loadedId, out var selectedCorrelation) ? selectedCorrelation : (Guid?)null)" Disabled="@busy" />
     <div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
         <p class="mb-5 max-w-3xl text-sm leading-6 text-slate-600">
-            Trace one workflow by its correlation id. Every event carrying that id comes back in one list, across
+            Or enter a known correlation id to trace one workflow. Every event carrying that id comes back in one list, across
             every stream and every tenant, oldest first, with the process manager's own rows beside the aggregate
             events that drove them.
         </p>
 
         <label class="block pb-4">
             <span class="block pb-2 text-sm font-semibold text-slate-800">Correlation id</span>
-            <input @bind="correlationId"
+            <input @bind="correlationId" disabled="@busy"
                    class="block w-full max-w-2xl rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-mono text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
                    placeholder="0f8fad5b-07d0-4015-b9d0-63e8e9e7d6f8" />
         </label>
 
-        <button type="button" @onclick="OnTraceAsync"
+        <button type="button" @onclick="OnTraceAsync" disabled="@busy"
                 class="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">
             Trace correlation
         </button>
@@ -40,7 +44,16 @@ else
     </div>
 }
 
-@if (error)
+@if (loadedId is not null)
+{
+    <a href="@($"/audit?correlationId={Uri.EscapeDataString(loadedId)}")" class="mt-5 inline-block text-sm font-semibold text-teal-700 underline underline-offset-4">Open audit trail for this workflow</a>
+    <h2 @ref="detailHeading" data-detail-heading tabindex="-1" class="mt-6 break-all text-lg font-semibold text-slate-900 focus:outline-none">Correlation events: <span class="font-mono text-base">@loadedId</span></h2>
+}
+@if (busy)
+{
+    <p role="status" class="mt-4 text-sm text-slate-600">Loading correlation events...</p>
+}
+else if (error)
 {
     <p role="alert" class="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Unable to trace the correlation id.</p>
 }
@@ -112,6 +125,18 @@ else if (view is not null)
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "correlationId")] public string? LinkedCorrelationId { get; set; }
+    private string? lastLinkedId;
+    private string? queuedLinkedId;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LinkedCorrelationId is null || LinkedCorrelationId == lastLinkedId || disposed) return;
+        lastLinkedId = LinkedCorrelationId;
+        if (busy) { queuedLinkedId = LinkedCorrelationId; return; }
+        correlationId = LinkedCorrelationId;
+        await OnTraceAsync();
+    }
+
     // The Correlation-ID Tracer: an operator enters a correlation id and sees every event the workflow
     // wrote, across streams and across tenants, oldest first. The page depends on the narrow
     // ICorrelationTracer seam, which owns the parse guard, the sentinel guard, the row cap, and the per-row
@@ -132,24 +157,72 @@ else if (view is not null)
     private string correlationId = string.Empty;
     private CorrelationTraceView? view;
     private bool error;
+    private bool busy;
+    private bool focusDetails;
+    private ElementReference detailHeading;
+    private bool disposed;
+    private string? loadedId;
+    private readonly CancellationTokenSource lifetime = new();
     private readonly HashSet<int> shownMetadata = [];
+
+    private Task OnSelectedAsync(Guid id)
+    {
+        if (busy || disposed) return Task.CompletedTask;
+        correlationId = id.ToString();
+        return OnTraceAsync();
+    }
 
     private async Task OnTraceAsync()
     {
+        if (busy || disposed || !Availability.IsAvailable) return;
+        busy = true;
+        focusDetails = true;
         error = false;
+        view = null;
+        loadedId = correlationId;
         shownMetadata.Clear();
         try
         {
-            view = await Tracer.TraceCorrelationAsync(correlationId, CancellationToken.None);
+            var response = await Tracer.TraceCorrelationAsync(loadedId, lifetime.Token);
+            if (!disposed) view = response;
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // Every expected input class is an outcome the seam classifies, so a throw here is the port's
-            // metadata read failing (ADR 0043). It surfaces as an operator-visible error rather than an
-            // escaping exception or a blank page.
-            error = true;
-            view = null;
+            // The existing seam classifies input errors. A read failure remains visible to the operator.
+            if (!disposed) error = true;
         }
+        finally
+        {
+            busy = false;
+        }
+        if (!disposed && queuedLinkedId is { } nextId)
+        {
+            queuedLinkedId = null;
+            correlationId = nextId;
+            await OnTraceAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusDetails || busy || disposed) return;
+        focusDetails = false;
+        try
+        {
+            // Selecting an id should bring its result into view, including on a phone.
+            await detailHeading.FocusAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (OperationCanceledException) when (disposed) { }
+    }
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        lifetime.Cancel();
+        lifetime.Dispose();
     }
 
     private void ToggleMetadata(int index)

@@ -36,6 +36,7 @@ public class CorrelationIdTracerTests : BunitContext
     public CorrelationIdTracerTests()
     {
         Services.AddSingleton(CorrelationTracerAvailability.Available);
+        Services.AddUnavailableCatalog();
     }
 
     [Fact]

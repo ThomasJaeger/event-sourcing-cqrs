@@ -32,6 +32,7 @@ public class AdminConsoleProviderCompositionTests
     private static WebApplicationFactory<AdminConsoleHost::Program> Factory(
         string provider, string eventStoreConnectionString)
         => new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder => builder
+            .WithOperatorCredentials()
             .UseSetting("EVENT_STORE_PROVIDER", provider)
             .UseSetting("EVENT_STORE_CONNECTION_STRING", eventStoreConnectionString)
             .UseSetting("READ_MODEL_CONNECTION_STRING", ReadModelConnectionString));
@@ -42,6 +43,7 @@ public class AdminConsoleProviderCompositionTests
     // not that conditional existed.
     private static WebApplicationFactory<AdminConsoleHost::Program> DynamoDbFactory()
         => new WebApplicationFactory<AdminConsoleHost::Program>().WithWebHostBuilder(builder => builder
+            .WithOperatorCredentials()
             .UseSetting("EVENT_STORE_PROVIDER", "DynamoDb")
             .UseSetting("EVENT_STORE_DYNAMODB_SERVICE_URL", "http://localhost:4566")
             .UseSetting("READ_MODEL_CONNECTION_STRING", ReadModelConnectionString));
@@ -78,6 +80,59 @@ public class AdminConsoleProviderCompositionTests
             .Should().BeOfType<PostgresEventStoreHeadReader>();
         services.GetRequiredService<ICorrelationTraceReader>()
             .Should().BeOfType<PostgresCorrelationTraceReader>();
+    }
+
+    [Fact]
+    public void Postgres_composes_an_available_metadata_catalog()
+    {
+        using var factory = Factory("Postgres", PostgresEventStoreConnectionString);
+        factory.Services.GetRequiredService<IEventCatalogReader>()
+            .Should().BeOfType<PostgresEventCatalogReader>();
+        factory.Services.GetRequiredService<AdminConsoleHost::EventSourcingCqrs.Hosts.AdminConsole.Browser.EventCatalogAvailability>()
+            .IsAvailable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Kurrent")]
+    [InlineData("DynamoDb")]
+    public async Task Providers_without_a_catalog_keep_discovery_unavailable_instead_of_scanning(string provider)
+    {
+        using var factory = provider == "Kurrent" ? Factory(provider, "esdb://localhost:2113?tls=false") : DynamoDbFactory();
+        var availability = factory.Services.GetRequiredService<AdminConsoleHost::EventSourcingCqrs.Hosts.AdminConsole.Browser.EventCatalogAvailability>();
+        availability.IsAvailable.Should().BeFalse();
+        availability.UnavailableReason.Should().Contain(provider);
+        var reader = factory.Services.GetRequiredService<IEventCatalogReader>();
+        var streams = () => reader.ListStreamsAsync(null, 25, CancellationToken.None);
+        var correlations = () => reader.ListCorrelationsAsync(null, 25, CancellationToken.None);
+        await streams.Should().ThrowAsync<NotSupportedException>();
+        await correlations.Should().ThrowAsync<NotSupportedException>();
+        factory.Services.GetRequiredService<AdminConsoleHost::EventSourcingCqrs.Hosts.AdminConsole.Browser.IStreamInspector>()
+            .Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("Postgres")]
+    [InlineData("Kurrent")]
+    [InlineData("DynamoDb")]
+    public async Task Audit_and_history_capabilities_match_the_configured_provider(string provider)
+    {
+        using var factory = provider == "DynamoDb" ? DynamoDbFactory()
+            : Factory(provider, provider == "Kurrent" ? "esdb://localhost:2113?tls=false" : PostgresEventStoreConnectionString);
+        var services = factory.Services;
+        var available = services.GetRequiredService<AdminConsoleHost::EventSourcingCqrs.Hosts.AdminConsole.Audit.AuditExplorerAvailability>();
+        available.IsAvailable.Should().Be(provider == "Postgres");
+        var history = services.GetRequiredService<IBoundedEventStreamReader>();
+        var audit = services.GetRequiredService<IAuditEventReader>();
+        if (provider == "Postgres")
+        {
+            history.Should().BeOfType<PostgresBoundedEventStreamReader>();
+            audit.Should().BeOfType<PostgresAuditEventReader>();
+        }
+        else
+        {
+            var read = () => history.ReadAsync(StreamId.Parse("order:11111111111111111111111111111111"), 1, CancellationToken.None);
+            await read.Should().ThrowAsync<EventSourcingCqrs.Application.Queries.Sales.OrderHistoryUnavailableException>();
+        }
     }
 
     [Fact]

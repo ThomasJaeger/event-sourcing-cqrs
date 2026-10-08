@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Threading.RateLimiting;
 using EventSourcingCqrs.Application;
 using EventSourcingCqrs.Application.Authentication;
@@ -10,12 +9,11 @@ using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Application.SignalR;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Hosts.Web;
+using EventSourcingCqrs.Hosts.Authentication;
 using EventSourcingCqrs.Hosts.Web.Authentication;
 using EventSourcingCqrs.Hosts.Web.Components;
 using EventSourcingCqrs.Hosts.Web.Hubs;
 using EventSourcingCqrs.Infrastructure.SignalR;
-using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
@@ -39,17 +37,8 @@ var apiBaseUrl = builder.Configuration["API_BASE_URL"]
 var signingSecret = builder.Configuration["FORWARDED_IDENTITY_SIGNING_SECRET"]
     ?? throw new InvalidOperationException("FORWARDED_IDENTITY_SIGNING_SECRET is not set.");
 
-// The actor the cookie login establishes. The same configuration key the Workers host's bootstrap
-// administrator seed reads, so the logged-in operator is the actor that seed granted Admin, and the
-// Api host loads that actor's authoritative roles. Throw-on-missing here, unlike the Workers'
-// tolerant empty-default: a login with no configured subject has no meaning.
-var loginActorId =
-    Guid.TryParse(builder.Configuration["BootstrapAdministrator:AdministratorUserId"], out var configuredActorId)
-        && configuredActorId != Guid.Empty
-        ? configuredActorId
-        : throw new InvalidOperationException("BootstrapAdministrator:AdministratorUserId is not set.");
-
-var operatorPassword = new OperatorPassword(builder.Configuration[OperatorPassword.ConfigurationKey]);
+// Validate the configured operator before the host starts accepting requests.
+var operatorAccount = new WebOperatorAccount(builder.Configuration);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -203,52 +192,12 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.UseAntiforgery();
 
+app.MapStaticAssets();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// The operator login and logout. SignInAsync establishes a name-identifier-only principal for the
-// configured actor after password verification; the framework seeds the circuit from it. Antiforgery is validated in the handler
-// rather than relying on UseAntiforgery: the middleware validates Razor Component form handlers and
-// form-binding minimal-API endpoints, not a plain form post read through HttpContext.Request.Form, so
-// the explicit ValidateRequestAsync is the single validation site for these two endpoints.
-app.MapPost("/account/login", async (HttpContext httpContext, IAntiforgery antiforgery) =>
-{
-    try
-    {
-        await antiforgery.ValidateRequestAsync(httpContext);
-    }
-    catch (AntiforgeryValidationException)
-    {
-        return Results.BadRequest("The antiforgery token was missing or invalid.");
-    }
-
-    var form = await httpContext.Request.ReadFormAsync(httpContext.RequestAborted);
-    if (!operatorPassword.Verify(form["password"].ToString()))
-        return Results.Unauthorized();
-
-    var claims = new[] { new Claim(ClaimTypes.NameIdentifier, loginActorId.ToString()) };
-    var principal = new ClaimsPrincipal(
-        new ClaimsIdentity(claims, OperatorPassword.AuthenticationScheme));
-    await httpContext.SignInAsync(OperatorPassword.AuthenticationScheme, principal);
-
-    var returnUrl = form["returnUrl"].ToString();
-    return Results.LocalRedirect(string.IsNullOrWhiteSpace(returnUrl) ? "/orders" : returnUrl);
-}).RequireRateLimiting("operator-login");
-
-app.MapPost("/account/logout", async (HttpContext httpContext, IAntiforgery antiforgery) =>
-{
-    try
-    {
-        await antiforgery.ValidateRequestAsync(httpContext);
-    }
-    catch (AntiforgeryValidationException)
-    {
-        return Results.BadRequest("The antiforgery token was missing or invalid.");
-    }
-
-    await httpContext.SignOutAsync(OperatorPassword.AuthenticationScheme);
-    return Results.LocalRedirect("/login");
-});
+operatorAccount.MapEndpoints(app);
 
 app.Run();
 

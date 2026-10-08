@@ -1,29 +1,38 @@
 @inherits LayoutComponentBase
 
-<div class="flex min-h-screen flex-col bg-slate-50 text-slate-900">
-    <a href="#main-content" class="sr-only rounded-md bg-white px-4 py-3 font-semibold text-teal-900 shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:outline focus:outline-2 focus:outline-teal-600">Skip to content</a>
-    <header class="border-b border-slate-200 bg-white">
-        <div class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
-            <div class="flex flex-wrap items-start justify-between gap-3 pb-5">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Event Sourcing &amp; CQRS</p>
-                    <a href="/" class="mt-1 inline-block rounded text-xl font-bold tracking-tight text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-600">Operations console</a>
+<div class="console-shell">
+    <a href="#main-content" class="console-skip">Skip to content</a>
+    <header class="console-header">
+        <div class="console-header-inner">
+            <div class="console-masthead">
+                <a href="/" class="console-brand" aria-label="Operations console overview">
+                    <svg class="console-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="2" y="2" width="16" height="16" rx="5" fill="#d8ee8d"/><rect x="22" y="2" width="16" height="16" rx="5" fill="#a78df2"/><rect x="2" y="22" width="16" height="16" rx="5" fill="#f17054"/><path d="M24 30h12m-6-6v12" stroke="#f8f5ef" stroke-width="3" stroke-linecap="round"/></svg>
+                    <span>Operations<span class="console-brand-caption">THE CONSOLE</span></span>
+                </a>
+                <div class="console-header-side">
+                    <span class="console-header-note">The story behind the state.</span>
+                    <a href="/login" data-enhance-nav="false" class="console-account-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-2a7 7 0 0 1 14 0v2"/></svg>
+                        <span>Account / sign out</span>
+                    </a>
                 </div>
-                <p class="max-w-xs text-sm leading-6 text-slate-500">Event history and projection recovery</p>
             </div>
-            <nav aria-label="Operator tools" class="flex flex-wrap gap-x-2 gap-y-1 pb-2">
-                <NavLink href="/" Match="NavLinkMatch.All" class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" ActiveClass="bg-teal-50 font-bold underline decoration-2 underline-offset-4">Overview</NavLink>
-                <NavLink href="/streams" class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" ActiveClass="bg-teal-50 font-bold underline decoration-2 underline-offset-4">Event streams</NavLink>
-                <NavLink href="/correlations" class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" ActiveClass="bg-teal-50 font-bold underline decoration-2 underline-offset-4">Correlation trace</NavLink>
-                <NavLink href="/projections" class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" ActiveClass="bg-teal-50 font-bold underline decoration-2 underline-offset-4">Projection status</NavLink>
-                <NavLink href="/replay" class="rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600" ActiveClass="bg-teal-50 font-bold underline decoration-2 underline-offset-4">Rebuild a view</NavLink>
+            <nav aria-label="Operator tools" class="console-nav">
+                <NavLink href="/" Match="NavLinkMatch.All" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/></svg><span>Overview</span></NavLink>
+                <NavLink href="/audit" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 21H5V3h14v9M8 7h8M8 11h5"/><circle cx="17" cy="17" r="4"/><path d="m20 20 2 2"/></svg><span>Audit explorer</span></NavLink>
+                <NavLink href="/streams" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h14M7 12h14M7 19h14"/><circle cx="3" cy="5" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="19" r="1"/></svg><span>Event streams</span></NavLink>
+                <NavLink href="/correlations" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="9" width="6" height="6" rx="2"/><rect x="16" y="2" width="6" height="6" rx="2"/><rect x="16" y="16" width="6" height="6" rx="2"/><path d="M8 12h4V5h4m-4 7v7h4"/></svg><span>Correlation trace</span></NavLink>
+                <NavLink href="/order-history" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2"/></svg><span>Order replay lab</span></NavLink>
+                <NavLink href="/projections" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M6 17v-6m6 6V3m6 14V7"/></svg><span>Projection status</span></NavLink>
+                <NavLink href="/replay" class="console-nav-link" ActiveClass="is-current"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8a9 9 0 0 0-15-3L2 8m0-6v6h6m-4 8a9 9 0 0 0 15 3l3-3m0 6v-6h-6"/></svg><span>Rebuild a view</span></NavLink>
             </nav>
         </div>
     </header>
-    <main id="main-content" tabindex="-1" class="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-8 focus:outline-none sm:px-6 lg:px-8">
+    <main id="main-content" tabindex="-1" class="console-main">
         @Body
     </main>
-    <footer class="border-t border-slate-200 bg-white">
-        <div class="mx-auto max-w-7xl px-4 py-5 text-xs leading-5 text-slate-500 sm:px-6 lg:px-8">Operations console</div>
+    <footer class="console-footer">
+        <div><span class="console-footer-brand">Operations console</span><span>Recorded facts. Useful context.</span></div>
+        <span class="console-footer-reference">Event Sourcing &amp; CQRS · Reference application</span>
     </footer>
 </div>

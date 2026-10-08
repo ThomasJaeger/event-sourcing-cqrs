@@ -38,6 +38,17 @@ public class WorkspaceNavigationTests : BunitContext
     }
 
     [Fact]
+    public void Home_guides_a_real_order_workflow_without_hardcoded_order_links()
+    {
+        var cut = Render<Home>();
+        var guide = cut.Find("section#order-walkthrough");
+        guide.QuerySelectorAll("ol li").Should().HaveCount(4);
+        guide.TextContent.Should().Contain("Place").And.Contain("Cancel").And.Contain("history");
+        guide.QuerySelectorAll("a").Select(a => a.GetAttribute("href"))
+            .Should().OnlyContain(href => href == "/orders/new" || href == "/orders");
+    }
+
+    [Fact]
     public void Home_tasks_lead_to_existing_workspace_pages()
     {
         var cut = Render<Home>();

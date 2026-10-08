@@ -5,6 +5,7 @@ using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Fulfillment.ReadModels;
 using EventSourcingCqrs.Domain.Sales;
+using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Domain.SharedKernel;
 using FluentAssertions;
@@ -36,6 +37,7 @@ internal static class CrossTenantQueryCases
         {
             [typeof(ListOrders)] = () => ListOrdersIsolatesAsync(fixture),
             [typeof(GetOrderDetail)] = () => GetOrderDetailIsolatesAsync(fixture),
+            [typeof(GetOrderHistory)] = () => GetOrderHistoryIsolatesAsync(fixture),
             [typeof(GetCustomerSummary)] = () => GetCustomerSummaryIsolatesAsync(fixture),
             [typeof(GetAllInventoryDashboard)] = () => GetAllInventoryDashboardIsolatesAsync(fixture),
             [typeof(GetInventoryDashboardBySku)] = () => GetInventoryDashboardBySkuIsolatesAsync(fixture),
@@ -78,6 +80,35 @@ internal static class CrossTenantQueryCases
             .PostQueryAsync("GetOrderDetail", new { orderId });
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private static async Task GetOrderHistoryIsolatesAsync(ApiFixture fixture)
+    {
+        var orderId = Guid.NewGuid();
+        var otherCustomer = Guid.NewGuid();
+        var store = fixture.Factory.Services.GetRequiredService<IEventStore>();
+        async Task DraftAsync(TenantId tenant, Guid customer)
+        {
+            var stream = StreamId.ForAggregate<Order>(tenant, orderId);
+            var id = Guid.NewGuid();
+            var metadata = new EventMetadata(id, Guid.NewGuid(), Guid.NewGuid(), customer, "test", SeededAt, tenant);
+            await store.AppendAsync(stream, 0,
+                [new EventEnvelope(stream, 1, id, nameof(OrderDrafted), 2,
+                    new OrderDrafted(orderId, customer, SeededAt, "web"), metadata, SeededAt, 0)], default);
+        }
+        await DraftAsync(TenantId.From(OtherTenant), otherCustomer);
+        var client = fixture.Factory.CreateClient();
+        (await client.PostQueryAsync("GetOrderHistory", new { orderId })).StatusCode
+            .Should().Be(HttpStatusCode.NotFound);
+
+        // The same order ID can independently exist in this tenant. Its history must stay distinct.
+        var defaultCustomer = Guid.NewGuid();
+        await DraftAsync(WellKnownTenants.Default, defaultCustomer);
+        var response = await client.PostQueryAsync("GetOrderHistory", new { orderId });
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var history = await response.Content.ReadFromJsonAsync<OrderHistoryView>();
+        history!.Steps.Should().ContainSingle().Which.Snapshot.CustomerId.Should().Be(defaultCustomer);
+        history.Steps.Should().NotContain(step => step.Snapshot.CustomerId == otherCustomer);
     }
 
     private static async Task GetCustomerSummaryIsolatesAsync(ApiFixture fixture)

@@ -16,7 +16,7 @@ public class OperatorNavigationTests : BunitContext
         Services.AddSingleton(CorrelationTracerAvailability.Available);
         var cut = Render<Home>();
         cut.FindAll("a").Select(a => a.GetAttribute("href"))
-            .Should().BeEquivalentTo(new[] { "/streams", "/correlations", "/projections", "/replay" });
+            .Should().BeEquivalentTo(new[] { "/audit", "/order-history", "/streams", "/correlations", "/projections", "/replay" });
     }
 
     [Fact]
@@ -26,9 +26,10 @@ public class OperatorNavigationTests : BunitContext
         var cut = Render<Routes>();
         var navigation = cut.Find("nav[aria-label='Operator tools']");
         navigation.QuerySelectorAll("a").Select(a => a.GetAttribute("href"))
-            .Should().BeEquivalentTo(new[] { "/", "/streams", "/correlations", "/projections", "/replay" });
+            .Should().BeEquivalentTo(new[] { "/", "/audit", "/order-history", "/streams", "/correlations", "/projections", "/replay" });
         cut.Find("a[href='#main-content']").TextContent.Should().Contain("Skip to content");
         cut.Find("main#main-content").GetAttribute("tabindex").Should().Be("-1");
+        cut.Find("header a[href='/login']").TextContent.Should().Contain("Account");
         navigation.QuerySelectorAll("a[aria-current='page']").Should().ContainSingle()
             .Which.GetAttribute("href").Should().Be("/");
     }

@@ -1,0 +1,228 @@
+@page "/orders/{OrderId:guid}/history"
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Hosts.Web.Authentication
+@using EventSourcingCqrs.Hosts.Web.Components.History
+@inject IApiClient ApiClient
+@implements IDisposable
+
+<PageTitle>Order history</PageTitle>
+
+<div class="order-story story-history">
+<nav aria-label="Breadcrumb" class="story-breadcrumb">
+    <a href="/orders">Orders</a><span aria-hidden="true">/</span>
+    <a href="@($"/orders/{OrderId}")">Current order</a><span aria-hidden="true">/</span><span>History</span>
+</nav>
+<header class="story-history-hero">
+    <div class="story-history-intro">
+        <p class="story-eyebrow">A little time travel</p>
+        <h1 class="focus:outline-none">Order history</h1>
+        <p class="story-order-id">@OrderId</p>
+        <p class="story-intro">Revisit a moment. See what changed.</p>
+    </div>
+    <div class="story-history-orbit" aria-hidden="true">
+        <svg viewBox="0 0 120 120" fill="none" focusable="false"><circle cx="60" cy="60" r="44" stroke="currentColor" stroke-width="2" stroke-dasharray="2 8" /><path d="M29 45a35 35 0 1 1-1 28M19 29l6 20 20-6M60 37v24l17 10" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </div>
+    <button type="button" @onclick="RefreshAsync" disabled="@loading" class="story-refresh">Refresh history</button>
+</header>
+<p class="story-scope">Compare order details at two steps in their history. Payment and delivery updates are separate; you can find them in the current order's activity.</p>
+
+@if (loading)
+{
+    <p role="status" class="story-empty">Loading order history...</p>
+}
+else if (signInRequired)
+{
+    <div role="status" class="story-empty">
+        <p class="font-semibold">Sign in to view order history.</p>
+        <a href="@($"/login?ReturnUrl={Uri.EscapeDataString($"/orders/{OrderId}/history")}")" data-enhance-nav="false" class="story-primary-link">Sign in</a>
+    </div>
+}
+else if (denied)
+{
+    <p role="alert" class="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800">You do not have permission to view this order history.</p>
+}
+else if (error is not null)
+{
+    <div role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm leading-6 text-amber-900">
+        <p>@error</p>
+        <p class="mt-2">You can return to the current order or use Refresh history to try again.</p>
+    </div>
+}
+else if (history is null)
+{
+    <p class="story-empty">Order not found.</p>
+}
+else if (history.Steps.Count == 0)
+{
+    <p role="status" class="story-empty">No recorded changes are available for this order.</p>
+}
+else
+{
+    <section aria-labelledby="compare-heading" class="story-compare">
+        <div class="story-section-heading">
+            <h2 id="compare-heading">Compare two steps</h2>
+            <span class="story-count">@history.Steps.Count recorded @(history.Steps.Count == 1 ? "change" : "changes")</span>
+        </div>
+        <p class="story-help">Refresh to include later changes. Viewing a step does not change the order.</p>
+        <div class="story-selectors">
+            <div class="story-selector story-selector-earlier">
+                <label for="earlier-step"><span class="story-step-marker" aria-hidden="true">@Earlier.Version</span>Earlier step</label>
+                <select id="earlier-step" @bind="EarlierVersion">
+                    @foreach (var step in history.Steps.Take(laterIndex + 1))
+                    {
+                        <option value="@step.Version">@step.Version. @step.Description</option>
+                    }
+                </select>
+            </div>
+            <div class="story-selector-bridge" aria-hidden="true">→</div>
+            <div class="story-selector story-selector-later">
+                <label for="later-step"><span class="story-step-marker" aria-hidden="true">@Later.Version</span>Later step</label>
+                <select id="later-step" @bind="LaterVersion">
+                    @foreach (var step in history.Steps.Skip(earlierIndex))
+                    {
+                        <option value="@step.Version">@step.Version. @step.Description</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </section>
+    var differences = OrderHistoryComparison.Describe(Earlier, Later);
+    <section aria-label="Changes between steps" aria-live="polite" class="story-differences">
+        <div class="story-differences-icon" aria-hidden="true">↔</div>
+        <div>
+            <p class="story-eyebrow">Step @Earlier.Version → Step @Later.Version</p>
+            <h2>What changed</h2>
+            @if (differences.Count == 0)
+            {
+                <p class="story-help">No order details changed between these steps.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var difference in differences)
+                    {
+                        <li>@difference</li>
+                    }
+                </ul>
+            }
+        </div>
+    </section>
+    <div class="story-state-pair">
+        <RecordedOrderState Label="Earlier" Step="Earlier" />
+        <RecordedOrderState Label="Later" Step="Later" />
+    </div>
+}
+</div>
+
+@code {
+    [Parameter] public Guid OrderId { get; set; }
+    private OrderHistoryView? history;
+    private Guid? requestedOrderId;
+    private CancellationTokenSource? request;
+    private int generation;
+    private int earlierIndex;
+    private int laterIndex;
+    private bool loading;
+    private bool denied;
+    private bool signInRequired;
+    private bool disposed;
+    private string? error;
+    private OrderHistoryStep Earlier => history!.Steps[earlierIndex];
+    private OrderHistoryStep Later => history!.Steps[laterIndex];
+
+    private int EarlierVersion
+    {
+        get => Earlier.Version;
+        set
+        {
+            var index = FindStep(value);
+            if (index >= 0 && index <= laterIndex) earlierIndex = index;
+        }
+    }
+    private int LaterVersion
+    {
+        get => Later.Version;
+        set
+        {
+            var index = FindStep(value);
+            if (index >= earlierIndex) laterIndex = index;
+        }
+    }
+    private int FindStep(int version)
+    {
+        for (var i = 0; i < history!.Steps.Count; i++)
+            if (history.Steps[i].Version == version) return i;
+        return -1;
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        if (requestedOrderId == OrderId) return Task.CompletedTask;
+        requestedOrderId = OrderId;
+        return LoadAsync();
+    }
+    private Task RefreshAsync() => loading || disposed ? Task.CompletedTask : LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        request?.Cancel();
+        request?.Dispose();
+        request = new CancellationTokenSource();
+        var token = request.Token;
+        var currentGeneration = ++generation;
+        loading = true;
+        denied = false;
+        signInRequired = false;
+        error = null;
+        history = null;
+        try
+        {
+            var captured = await ApiClient.QueryAsync(new GetOrderHistory(OrderId), token);
+            if (disposed || currentGeneration != generation) return;
+            history = captured;
+            laterIndex = Math.Max(0, (history?.Steps.Count ?? 0) - 1);
+            earlierIndex = Math.Max(0, laterIndex - 1);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (ForwardedIdentityUnavailableException)
+        {
+            if (!disposed && currentGeneration == generation) signInRequired = true;
+        }
+        catch (ApiAuthorizationException)
+        {
+            if (!disposed && currentGeneration == generation) denied = true;
+        }
+        catch (Exception exception)
+        {
+            if (!disposed && currentGeneration == generation) error = ExplainFailure(exception);
+        }
+        finally
+        {
+            if (!disposed && currentGeneration == generation) loading = false;
+        }
+    }
+
+    private static string ExplainFailure(Exception exception)
+    {
+        var code = exception switch
+        {
+            ApiInfrastructureException infrastructure => infrastructure.Code,
+            ApiBusinessRuleException business => business.Code,
+            _ => null,
+        };
+        return code switch
+        {
+            "HISTORY_UNAVAILABLE" => "Order history is not available on this deployment.",
+            "HISTORY_TOO_LONG" => "This order has too many recorded changes for this history view. Ask an operator to inspect its full history.",
+            "HISTORY_INCOMPLETE" => "This order's history cannot be reconstructed completely. Ask an operator to investigate before relying on a past state.",
+            _ => "Unable to load order history. Please try again.",
+        };
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+        request?.Cancel();
+        request?.Dispose();
+    }
+}

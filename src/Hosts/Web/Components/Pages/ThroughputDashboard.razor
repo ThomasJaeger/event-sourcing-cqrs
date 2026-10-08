@@ -15,7 +15,7 @@
     <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Order activity</h1>
     <LiveBadge State="@liveness" />
 </div>
-<p class="mb-7 text-sm leading-6 text-slate-600">Orders per minute, with the time of the latest reported reading.</p>
+<p class="mb-7 text-sm leading-6 text-slate-600">Order updates per minute, with the time of the latest reported reading.</p>
 
 @if (denied)
 {
@@ -36,7 +36,7 @@ else
         var ageSeconds = (int)(TimeProvider.GetUtcNow().UtcDateTime - reading.AsOfUtc).TotalSeconds;
 
         <div class="max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p class="mb-4 text-3xl font-semibold tracking-tight text-slate-950">@(ratePerMinute.ToString("0.#")) orders/min</p>
+        <p class="mb-4 text-3xl font-semibold tracking-tight text-slate-950">@(ratePerMinute.ToString("0.#")) order updates/min</p>
         <p class="text-sm text-slate-600">As of @(reading.AsOfUtc.ToString("u"))</p>
         <p class="mt-1 text-sm text-slate-600">Updated @ageSeconds seconds ago</p>
         </div>

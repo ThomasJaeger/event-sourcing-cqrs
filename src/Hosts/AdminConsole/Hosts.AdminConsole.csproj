@@ -13,4 +13,8 @@
     <ProjectReference Include="..\..\Infrastructure\ReadModels.Postgres\ReadModels.Postgres.csproj" />
     <ProjectReference Include="..\..\Projections\Projections.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- One password verifier source, compiled independently into both HTTP hosts. -->
+    <Compile Include="..\Shared\OperatorPassword.cs" Link="Authentication\OperatorPassword.cs" />
+  </ItemGroup>
 </Project>

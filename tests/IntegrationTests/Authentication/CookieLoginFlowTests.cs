@@ -35,6 +35,21 @@ public class CookieLoginFlowTests : IClassFixture<CookieLoginFlowTests.WebHostFa
     public CookieLoginFlowTests(WebHostFactory factory) => _factory = factory;
 
     [Fact]
+    public async Task The_framework_script_required_by_the_workspace_is_served()
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+        });
+        using var response = await client.GetAsync("/_framework/blazor.web.js");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("Blazor");
+        response.Content.Headers.ContentType.Should().NotBeNull();
+        response.Content.Headers.ContentType!.MediaType.Should().Contain("javascript");
+    }
+
+    [Fact]
     public async Task A_valid_login_post_issues_the_auth_cookie()
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -157,12 +172,131 @@ public class CookieLoginFlowTests : IClassFixture<CookieLoginFlowTests.WebHostFa
         html.Should().NotContain("Signed in as");
     }
 
+    [Fact]
+    public async Task Account_get_is_static_and_does_not_start_an_interactive_circuit()
+    {
+        await using var factory = new WebHostFactory();
+        using var client = AccountClient(factory);
+        using var response = await client.GetAsync("/login?ReturnUrl=%2Forders");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("name=\"password\"").And.Contain("value=\"/orders\"")
+            .And.NotContain("blazor.web.js").And.NotContain("<!--Blazor:");
+        html.Should().Contain("data-enhance-nav=\"false\"");
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        TokenFromHtml(html).Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task A_stale_anonymous_login_token_returns_the_current_signed_in_account_without_signing_in_again()
+    {
+        await using var factory = new WebHostFactory();
+        using var client = AccountClient(factory);
+        var oldToken = await GetAntiforgeryTokenAsync(client);
+        using var signedIn = await PostLoginAsync(client, oldToken);
+        signedIn.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        using var rejected = await PostLoginAsync(client, oldToken, "https://untrusted.invalid/stale");
+
+        rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        AssertNoAuthCookie(rejected);
+        rejected.Headers.Location.Should().BeNull();
+        var html = await rejected.Content.ReadAsStringAsync();
+        html.Should().Contain(ExpiredFormMessage).And.Contain("Signed in as")
+            .And.Contain(ConfiguredActor.ToString()).And.Contain("Continue to orders")
+            .And.Contain("/account/logout").And.NotContain("untrusted.invalid");
+        rejected.Headers.CacheControl.Should().NotBeNull();
+        rejected.Headers.CacheControl!.NoStore.Should().BeTrue();
+        var freshToken = TokenFromHtml(html);
+        freshToken.Should().NotBe(oldToken);
+        using var signedOut = await client.PostAsync("/account/logout", new FormUrlEncodedContent(
+            new Dictionary<string, string> { ["__RequestVerificationToken"] = freshToken }));
+        signedOut.StatusCode.Should().Be(HttpStatusCode.Redirect);
+    }
+
+    [Fact]
+    public async Task A_stale_logout_token_returns_a_fresh_sign_in_form_that_can_be_submitted()
+    {
+        await using var factory = new WebHostFactory();
+        using var client = AccountClient(factory);
+        using var signedIn = await PostLoginAsync(client, await GetAntiforgeryTokenAsync(client));
+        signedIn.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var oldToken = await GetAntiforgeryTokenAsync(client);
+        using var signedOut = await client.PostAsync("/account/logout", new FormUrlEncodedContent(
+            new Dictionary<string, string> { ["__RequestVerificationToken"] = oldToken }));
+        signedOut.StatusCode.Should().Be(HttpStatusCode.Redirect);
+
+        using var rejected = await client.PostAsync("/account/logout", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = oldToken,
+                ["returnUrl"] = "https://untrusted.invalid/stale",
+            }));
+
+        rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        AssertNoAuthCookie(rejected);
+        var html = await rejected.Content.ReadAsStringAsync();
+        html.Should().Contain(ExpiredFormMessage).And.Contain("name=\"password\"")
+            .And.NotContain("Signed in as").And.NotContain("untrusted.invalid");
+        rejected.Headers.CacheControl.Should().NotBeNull();
+        rejected.Headers.CacheControl!.NoStore.Should().BeTrue();
+        var freshToken = TokenFromHtml(html);
+        freshToken.Should().NotBe(oldToken);
+        using var retried = await PostLoginAsync(client, freshToken);
+        retried.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        retried.Headers.Location!.OriginalString.Should().Be("/orders");
+        retried.Headers.GetValues("Set-Cookie")
+            .Should().Contain(value => value.StartsWith(".EventSourcingCqrs.Web.Auth="));
+    }
+
+    [Theory]
+    [InlineData("https://untrusted.invalid/outside")]
+    [InlineData("//untrusted.invalid/outside")]
+    public async Task An_external_return_url_is_rejected_before_any_auth_cookie_is_issued(string returnUrl)
+    {
+        await using var factory = new WebHostFactory();
+        using var client = AccountClient(factory);
+        using var response = await PostLoginAsync(client, await GetAntiforgeryTokenAsync(client), returnUrl);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Headers.Location.Should().BeNull();
+        AssertNoAuthCookie(response);
+    }
+
+    private const string ExpiredFormMessage =
+        "This form expired or could not be verified. Please use the current account form below.";
+
+    private static HttpClient AccountClient(WebHostFactory factory) => factory.CreateClient(
+        new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+        });
+
+    private static Task<HttpResponseMessage> PostLoginAsync(HttpClient client, string token,
+        string returnUrl = "/orders") => client.PostAsync("/account/login", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = token,
+                ["password"] = Password,
+                ["returnUrl"] = returnUrl,
+            }));
+
+    private static void AssertNoAuthCookie(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
+            cookies.Should().NotContain(value => value.StartsWith(".EventSourcingCqrs.Web.Auth="));
+    }
+
     private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client)
     {
-        var html = await client.GetStringAsync("/login");
+        return TokenFromHtml(await client.GetStringAsync("/login"));
+    }
+
+    private static string TokenFromHtml(string html)
+    {
         var match = Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
         match.Success.Should().BeTrue("the login page renders an antiforgery token");
-        return match.Groups[1].Value;
+        return WebUtility.HtmlDecode(match.Groups[1].Value);
     }
 
     public sealed class WebHostFactory : WebApplicationFactory<WebHost::Program>
@@ -170,6 +304,8 @@ public class CookieLoginFlowTests : IClassFixture<CookieLoginFlowTests.WebHostFa
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Production");
+            // These factories run build output, not a publish directory. Load the build asset manifest.
+            builder.UseStaticWebAssets();
             builder.UseSetting("OperatorAuthentication:PasswordHash", new PasswordHasher<string>().HashPassword("operator", Password));
             builder.UseSetting("API_BASE_URL", "https://api.localhost");
             builder.UseSetting(

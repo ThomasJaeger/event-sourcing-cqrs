@@ -14,27 +14,44 @@
 
 <PageTitle>New Order</PageTitle>
 
-<nav aria-label="Breadcrumb" class="mb-5 text-sm">
-    <a href="/orders" class="rounded text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">Orders</a>
-    <span aria-hidden="true" class="mx-2 text-slate-400">/</span><span class="text-slate-600">New order</span>
+<div class="order-story story-create">
+<nav aria-label="Breadcrumb" class="story-breadcrumb">
+    <a href="/orders">Orders</a><span aria-hidden="true">/</span><span>New order</span>
 </nav>
-<header class="mb-7">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-950">New Order</h1>
-    <p class="mt-2 text-sm leading-6 text-slate-600">Add the customer, line items, and shipping address, then review your order.</p>
+<header class="story-create-hero">
+    <div class="min-w-0">
+        <p class="story-eyebrow">Good things start here</p>
+        <h1 class="focus:outline-none">New Order</h1>
+        <p class="story-intro">Add the customer, line items, and shipping address, then review your order.</p>
+    </div>
+    <svg class="story-create-art" viewBox="0 0 160 140" fill="none" aria-hidden="true" focusable="false">
+        <circle cx="80" cy="70" r="61" fill="#f8f5ef" opacity=".55" />
+        <path d="m43 50 37-20 37 20v42l-37 20-37-20V50Z" fill="#f8f5ef" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" />
+        <path d="m43 50 37 20 37-20M80 70v42M60 41l37 20v17l-11 6V67" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" />
+        <path d="M127 23v14m-7-7h14M28 96v12m-6-6h12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+        <circle cx="32" cy="29" r="4" fill="#6946df" /><circle cx="131" cy="106" r="5" fill="#d8ee8d" />
+    </svg>
 </header>
-<div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-
-    <nav aria-label="Wizard progress" class="mb-8 border-b border-slate-200 pb-5">
-        <ol class="flex flex-wrap items-center gap-3 sm:gap-6">
+<div class="story-wizard">
+    <nav aria-label="Wizard progress" class="story-wizard-progress">
+        <ol>
             @for (var step = 1; step <= StepLabels.Length; step++)
             {
-                <li aria-current="@(step == currentStep ? "step" : null)" class="@(step == currentStep ? "rounded-md bg-teal-50 px-3 py-2 font-bold text-teal-800" : "px-3 py-2 text-slate-500")">
-                    <span class="text-sm">@step. @StepLabels[step - 1]</span>
+                <li aria-current="@(step == currentStep ? "step" : null)" class="@(step == currentStep ? "story-wizard-step is-current" : "story-wizard-step")">
+                    <span class="story-wizard-number" aria-hidden="true">@step.ToString("D2")</span>
+                    <span>@StepLabels[step - 1]</span>
                 </li>
             }
         </ol>
     </nav>
-
+    <div class="story-wizard-layout">
+        <aside class="story-wizard-note">
+            <p class="story-eyebrow">Step @currentStep of @StepLabels.Length</p>
+            <p class="story-wizard-prompt">@(currentStep switch { 1 => "Who is it for?", 2 => "What goes inside?", 3 => "Where is it going?", _ => "Give it one last look." })</p>
+            <p>@(currentStep switch { 1 => "Choose the customer to start an order draft.", 2 => "Add the items and quantities for this order.", 3 => "Save the address for this order.", _ => "Check the details before you place the order." })</p>
+            <span class="story-wizard-flourish" aria-hidden="true">↘</span>
+        </aside>
+        <div class="story-wizard-body">
     @switch (currentStep)
     {
         case 1:
@@ -81,6 +98,9 @@
             Back
         </button>
     }
+        </div>
+    </div>
+</div>
 </div>
 
 @code {

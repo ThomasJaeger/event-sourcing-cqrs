@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using EventSourcingCqrs.Domain.Abstractions;
+using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Hosts.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -101,6 +102,28 @@ public class ExceptionMappingMiddlewareTests
         raw.Should().NotContain("secret detail");
         var body = JsonSerializer.Deserialize<JsonElement>(raw);
         body.GetProperty("code").GetString().Should().Be("INTERNAL");
+    }
+
+    [Theory]
+    [InlineData("unavailable", 501, "HISTORY_UNAVAILABLE")]
+    [InlineData("too-long", 422, "HISTORY_TOO_LONG")]
+    [InlineData("incomplete", 422, "HISTORY_INCOMPLETE")]
+    public async Task History_failures_have_safe_actionable_codes(string failure, int status, string code)
+    {
+        Exception exception = failure switch
+        {
+            "unavailable" => new OrderHistoryUnavailableException(),
+            "too-long" => new OrderHistoryTooLongException(),
+            _ => new OrderHistoryIncompleteException(new Exception("private storage details"))
+        };
+        var client = await BuildClientAsync(_ => throw exception);
+        var response = await client.GetAsync("/");
+        ((int)response.StatusCode).Should().Be(status);
+        var raw = await response.Content.ReadAsStringAsync();
+        raw.Should().NotContain("private storage details");
+        var body = JsonSerializer.Deserialize<JsonElement>(raw);
+        body.GetProperty("code").GetString().Should().Be(code);
+        body.GetProperty("message").GetString().Should().Be(exception.Message);
     }
 
     [Fact]

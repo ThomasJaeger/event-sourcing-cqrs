@@ -45,7 +45,7 @@ public class AddApplicationTests
         registry.TypeFor(nameof(ListOrders)).Should().Be(typeof(ListOrders));
         registry.TypeFor(nameof(GetAllInventoryDashboard))
             .Should().Be(typeof(GetAllInventoryDashboard));
-        registry.EnumerateQueries().Should().HaveCount(6);
+        registry.EnumerateQueries().Should().HaveCount(7);
     }
 
     [Fact]

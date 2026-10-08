@@ -1,4 +1,7 @@
+using System.Threading.RateLimiting;
 using EventSourcingCqrs.Application;
+using EventSourcingCqrs.Application.Queries.Sales;
+using EventSourcingCqrs.Hosts.AdminConsole.Audit;
 using EventSourcingCqrs.Application.Context;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Access;
@@ -9,6 +12,7 @@ using EventSourcingCqrs.Domain.Sales.Events;
 using EventSourcingCqrs.Domain.Sales.ReadModels;
 using EventSourcingCqrs.Hosts.AdminConsole;
 using EventSourcingCqrs.Hosts.AdminConsole.Authorization;
+using EventSourcingCqrs.Hosts.AdminConsole.Authentication;
 using EventSourcingCqrs.Hosts.AdminConsole.Browser;
 using EventSourcingCqrs.Hosts.AdminConsole.Components;
 using EventSourcingCqrs.Hosts.AdminConsole.Replay;
@@ -19,15 +23,28 @@ using EventSourcingCqrs.Infrastructure.EventStore.Postgres;
 using EventSourcingCqrs.Infrastructure.ReadModels.Postgres;
 using EventSourcingCqrs.Infrastructure.SignalR;
 using EventSourcingCqrs.Projections.Infrastructure;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 // Chapter 17: the AdminConsole operator host. A Blazor Server host that fails closed (ADR 0040): a
 // host-level fallback policy gates every route, so an unauthenticated request is challenged with a
-// redirect to the login path. The interactive login surface is a later slice, so that path does not
-// resolve yet; the redirect is the declared fail-closed interim.
+// redirect to the static account surface. Tool routes and the interactive hub keep the permission gate.
 var builder = WebApplication.CreateBuilder(args);
+var operatorAccount = new AdminOperatorAccount(builder.Configuration);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("admin-operator-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+});
 
 // Validate the DI graph on build in every environment. The default builder validates only in
 // Development; making it unconditional fails the host closed at startup on a missing or
@@ -87,6 +104,10 @@ switch (eventStoreProvider)
         builder.Services.AddEventStoreHeadPosition(eventStoreConnectionString);
         builder.Services.AddEventStoreReplayReader();
         builder.Services.AddCorrelationTraceReader(eventStoreConnectionString);
+        builder.Services.AddSingleton<IEventCatalogReader, PostgresEventCatalogReader>();
+        builder.Services.AddSingleton(EventCatalogAvailability.Available);
+        builder.Services.AddSingleton<IAuditEventReader, PostgresAuditEventReader>();
+        builder.Services.AddSingleton(AuditExplorerAvailability.Available);
         builder.Services.AddSingleton(CorrelationTracerAvailability.Available);
         break;
     case EventStoreProvider.Kurrent:
@@ -99,6 +120,12 @@ switch (eventStoreProvider)
         // reader is the defense-in-depth throwing one, registered so the port resolves and the tracer
         // seam composes; the capability keeps the page from ever reaching it in normal operation.
         builder.Services.AddSingleton<ICorrelationTraceReader, KurrentCorrelationTraceReader>();
+        builder.Services.AddSingleton(EventCatalogAvailability.Unavailable(
+            "ID lists are not available on Kurrent. Enter a stream ID directly to inspect it."));
+        builder.Services.AddSingleton<IEventCatalogReader, UnavailableEventCatalogReader>();
+        builder.Services.AddSingleton<IAuditEventReader, UnavailableAuditEventReader>();
+        builder.Services.AddSingleton(AuditExplorerAvailability.Unavailable(
+            "Audit discovery is available on PostgreSQL. This provider needs a dedicated metadata read path."));
         builder.Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
             "The KurrentDB event store has no cross-stream correlation-id index; a correlation trace "
             + "would need a dedicated user projection, which is deferred."));
@@ -123,6 +150,12 @@ switch (eventStoreProvider)
         // registers so the port resolves and the tracer seam composes, and the capability keeps the
         // page from ever reaching it.
         builder.Services.AddSingleton<ICorrelationTraceReader, DynamoDbCorrelationTraceReader>();
+        builder.Services.AddSingleton(EventCatalogAvailability.Unavailable(
+            "ID lists are not available on DynamoDb. Enter a stream ID directly to inspect it."));
+        builder.Services.AddSingleton<IEventCatalogReader, UnavailableEventCatalogReader>();
+        builder.Services.AddSingleton<IAuditEventReader, UnavailableAuditEventReader>();
+        builder.Services.AddSingleton(AuditExplorerAvailability.Unavailable(
+            "Audit discovery is available on PostgreSQL. This provider needs a dedicated metadata read path."));
         builder.Services.AddSingleton(CorrelationTracerAvailability.Unavailable(
             "The DynamoDB event store has no cross-stream correlation-id index; a correlation trace "
             + "would scan the whole log, so it needs a dedicated read path, which is deferred."));
@@ -137,6 +170,11 @@ switch (eventStoreProvider)
         throw new InvalidOperationException(
             $"Unhandled event store provider: {eventStoreProvider}.");
 }
+
+// These readers reconstruct state in memory; they have no projection or command dependencies.
+builder.Services.TryAddSingleton<IBoundedEventStreamReader, UnavailableEventStreamReader>();
+builder.Services.AddSingleton<OrderHistoryReader>();
+builder.Services.AddSingleton<IOrderReplayLab, OrderReplayReader>();
 
 // The Projection Status Dashboard reads projection lag in process (ADR 0040): the head of the event
 // stream minus each projection's checkpoint. AddProjectionRoster adds the name-only projection set; the
@@ -171,8 +209,8 @@ builder.Services.AddSingleton<ICorrelationTracer, CorrelationTracer>();
 
 // Cookie authentication for the operator. The cookie is HttpOnly and Secure-always, so the host
 // requires an https endpoint. An unauthenticated request is challenged with a redirect to LoginPath.
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+builder.Services.AddAuthentication(AdminOperatorAccount.AuthenticationScheme)
+    .AddCookie(AdminOperatorAccount.AuthenticationScheme, options =>
     {
         options.Cookie.Name = ".EventSourcingCqrs.AdminConsole.Auth";
         options.Cookie.HttpOnly = true;
@@ -181,6 +219,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
         options.LoginPath = "/login";
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "text/html; charset=utf-8";
+            return context.Response.WriteAsync("Console access denied. <a href=\"/login\">Review your account or sign out</a>.");
+        };
     });
 
 // Deny-by-default (ADR 0040): the fallback policy gates every endpoint that carries no other
@@ -189,10 +233,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // access.
 builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
         .AddRequirements(new AdminConsoleAccessRequirement())
         .Build());
 builder.Services.AddSingleton<IAuthorizationHandler, AdminConsoleAccessHandler>();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
 
 var app = builder.Build();
 
@@ -202,8 +248,21 @@ var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
+operatorAccount.MapEndpoints(app);
+
+// The static account document uses this public stylesheet before an operator signs in.
+// Tool routes, interactive endpoints, and every other static asset keep their existing policies.
+app.MapStaticAssets().Add(endpoint =>
+{
+    if (endpoint is Microsoft.AspNetCore.Routing.RouteEndpointBuilder route
+        && route.RoutePattern.RawText?.TrimStart('/') == "console.css")
+    {
+        endpoint.Metadata.Add(new AllowAnonymousAttribute());
+    }
+});
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

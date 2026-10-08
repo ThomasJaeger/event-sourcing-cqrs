@@ -1,4 +1,5 @@
 using EventSourcingCqrs.Application.Authorization;
+using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Domain.Abstractions;
 
 namespace EventSourcingCqrs.Hosts.Api;
@@ -57,6 +58,21 @@ public sealed class ExceptionMappingMiddleware
         {
             await WriteError(context, StatusCodes.Status403Forbidden,
                 new { code = "FORBIDDEN", message = ex.Message });
+        }
+        catch (OrderHistoryUnavailableException ex)
+        {
+            await WriteError(context, StatusCodes.Status501NotImplemented,
+                new { code = "HISTORY_UNAVAILABLE", message = ex.Message });
+        }
+        catch (OrderHistoryTooLongException ex)
+        {
+            await WriteError(context, StatusCodes.Status422UnprocessableEntity,
+                new { code = "HISTORY_TOO_LONG", message = ex.Message });
+        }
+        catch (OrderHistoryIncompleteException ex)
+        {
+            await WriteError(context, StatusCodes.Status422UnprocessableEntity,
+                new { code = "HISTORY_INCOMPLETE", message = ex.Message });
         }
         catch (Exception)
         {

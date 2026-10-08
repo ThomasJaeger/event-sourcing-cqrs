@@ -11,97 +11,121 @@
 
 <PageTitle>Order @OrderId</PageTitle>
 
-<nav aria-label="Breadcrumb" class="mb-5 text-sm">
-    <a href="/orders" class="rounded text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">Orders</a>
-    <span aria-hidden="true" class="mx-2 text-slate-400">/</span><span class="text-slate-600">Order details</span>
+<div class="order-story story-detail">
+<nav aria-label="Breadcrumb" class="story-breadcrumb">
+    <a href="/orders">Orders</a>
+    <span aria-hidden="true">/</span><span>Order details</span>
 </nav>
-<header class="mb-7">
-    <div class="flex flex-wrap items-center gap-y-2">
-        <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Order details <span class="mt-2 block break-all font-mono text-sm font-normal tracking-normal text-slate-600">@OrderId</span></h1>
-        @if (!loading && detail is not null)
-        {
-            <LiveBadge State="@liveness" />
-        }
+<header class="story-heading">
+    <div class="min-w-0">
+        <p class="story-eyebrow">The whole story, in one place</p>
+        <h1 class="focus:outline-none">Order details <span class="story-order-id">@OrderId</span></h1>
     </div>
+    @if (!loading && detail is not null)
+    {
+        <LiveBadge State="@liveness" />
+    }
 </header>
 
 @if (loading)
 {
-    <p role="status" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Loading...</p>
+    <p role="status" class="story-empty">Loading...</p>
 }
 else if (detail is null)
 {
-    <p class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Order not found.</p>
+    <p class="story-empty">Order not found.</p>
 }
 else
 {
-    <div class="mb-6 grid gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-2">
-        <div>
-            <p class="text-sm text-slate-600">Customer</p>
-            <a href="@($"/customers/{detail.Header.CustomerId}")" class="break-all font-mono text-sm text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">@detail.Header.CustomerId</a>
+    <section aria-label="Order summary" class="story-summary">
+        <div class="story-summary-main">
+            <div>
+                <p class="story-eyebrow">Current status</p>
+                <p class="story-status" data-status="@detail.Header.Status">@detail.Header.Status</p>
+            </div>
+            <div class="story-total">
+                <p>Order total</p>
+                <p class="story-amount">@(detail.Header.Total?.ToString() ?? "N/A")</p>
+            </div>
+            <svg class="story-parcel" viewBox="0 0 120 120" fill="none" aria-hidden="true" focusable="false">
+                <circle cx="60" cy="60" r="57" fill="currentColor" opacity=".1" />
+                <path d="M27 44 60 26l33 18v37L60 99 27 81V44Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" />
+                <path d="m27 44 33 18 33-18M60 62v37M43 35l33 18v17l-10 6V58" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" />
+            </svg>
         </div>
-        <div>
-            <p class="text-sm text-slate-600">Status</p>
-            <p class="font-semibold">@detail.Header.Status</p>
+        <div class="story-summary-meta">
+            <div>
+                <p class="story-label">Customer</p>
+                <a href="@($"/customers/{detail.Header.CustomerId}")" class="story-customer-link">@detail.Header.CustomerId</a>
+            </div>
+            <div>
+                <p class="story-label">Last Updated</p>
+                <p class="story-timestamp">@detail.Header.LastUpdatedUtc.ToString("u")</p>
+            </div>
         </div>
-        <div>
-            <p class="text-sm text-slate-600">Total</p>
-            <p>@(detail.Header.Total?.ToString() ?? "N/A")</p>
-        </div>
-        <div>
-            <p class="text-sm text-slate-600">Last Updated</p>
-            <p>@detail.Header.LastUpdatedUtc.ToString("u")</p>
-        </div>
-    </div>
+    </section>
 
-    @if (detail.Header.Status == OrderStatus.Placed)
-    {
-        <div class="mb-6">
-            <CancelOrderButton @ref="cancelButton" OrderId="@detail.Header.OrderId" OnDispatched="OnCancelDispatched" />
-        </div>
-    }
-
-    <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">Line Items</h2>
-    @if (detail.Lines.Count == 0)
-    {
-        <p class="text-slate-600 mb-6">No line items.</p>
-    }
-    else
-    {
-        <div class="mb-6 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" role="region" aria-label="Order line items" tabindex="0">
-        <table class="min-w-full whitespace-nowrap text-sm">
-            <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <tr>
-                    <th scope="col" class="px-5 py-4 text-left">SKU</th>
-                    <th scope="col" class="px-5 py-4 text-right">Quantity</th>
-                    <th scope="col" class="px-5 py-4 text-right">Unit Price</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var line in detail.Lines)
-                {
-                    <tr class="border-t border-slate-100 hover:bg-slate-50">
-                        <td class="px-5 py-4 font-mono text-sm">@line.Sku</td>
-                        <td class="px-5 py-4 text-right">@line.Quantity</td>
-                        <td class="px-5 py-4 text-right">@line.UnitPrice</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-    }
-
-    <h2 class="mb-3 mt-8 text-lg font-semibold text-slate-950">Order activity</h2>
-    <ul class="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        @foreach (var entry in detail.Timeline)
+    <div class="story-actions">
+        <a href="@($"/orders/{OrderId}/history")" class="story-history-link">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6m3-4v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span>View order history</span><span aria-hidden="true">↗</span>
+        </a>
+        @if (detail.Header.Status == OrderStatus.Placed)
         {
-            <li class="border-l-2 border-teal-600 pl-4">
-                <p class="font-semibold">@OrderActivityLabels.For(entry.EventType)</p>
-                <p class="text-sm text-slate-600">@entry.OccurredUtc.ToString("u")</p>
-            </li>
+            <div class="story-cancel">
+                <CancelOrderButton @ref="cancelButton" OrderId="@detail.Header.OrderId" OnDispatched="OnCancelDispatched" />
+            </div>
         }
-    </ul>
+    </div>
+
+    <div class="story-detail-grid">
+        <section class="story-items">
+            <div class="story-section-heading"><h2>Line Items</h2><span class="story-count">@detail.Lines.Count @(detail.Lines.Count == 1 ? "item" : "items")</span></div>
+            @if (detail.Lines.Count == 0)
+            {
+                <p class="story-empty">No line items.</p>
+            }
+            else
+            {
+                <div class="story-table" role="region" aria-label="Order line items" tabindex="0">
+                    <table class="min-w-full whitespace-nowrap text-sm">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="text-left">SKU</th>
+                                <th scope="col" class="text-right">Quantity</th>
+                                <th scope="col" class="text-right">Unit Price</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var line in detail.Lines)
+                            {
+                                <tr>
+                                    <td class="font-mono font-semibold">@line.Sku</td>
+                                    <td class="text-right">@line.Quantity</td>
+                                    <td class="text-right">@line.UnitPrice</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+        <section class="story-activity">
+            <div class="story-section-heading"><h2>Order activity</h2><span class="story-activity-mark" aria-hidden="true">↳</span></div>
+            <ul class="story-timeline">
+                @foreach (var entry in detail.Timeline)
+                {
+                    <li>
+                        <span class="story-timeline-dot" aria-hidden="true"></span>
+                        <p class="story-event-name">@OrderActivityLabels.For(entry.EventType)</p>
+                        <p class="story-timestamp">@entry.OccurredUtc.ToString("u")</p>
+                    </li>
+                }
+            </ul>
+        </section>
+    </div>
 }
+</div>
 
 @code {
     [Parameter] public Guid OrderId { get; set; }

@@ -14,7 +14,7 @@ The replay screen also fixes one interaction problem: a rebuild in progress keep
 
 ## Boundaries
 
-The existing API and host permission checks remain in place. This change does not connect the Web and AdminConsole authentication cookies. The AdminConsole's interactive sign-in remains an existing separate implementation gap; its host-wide authorization gate is preserved. No anonymous bypass was added for visual review.
+The existing API and host permission checks remain in place. This change does not connect the Web and AdminConsole authentication cookies. The original presentation pass left AdminConsole sign-in as a separate implementation gap and preserved its host-wide authorization gate. The live-demo follow-up below closes the account-surface gap. No anonymous bypass was added for visual review.
 
 The existing cancellation retry/unknown-outcome behavior was identified during review and left outside this presentation change. Styling does not make that operation's transport recovery contract stronger.
 
@@ -42,3 +42,13 @@ These captures use synthetic fixture data and show the final reviewed components
 - [Projection status, 320px phone](ui-previews/2026-10-07/admin-projections-loaded-phone320.png)
 - [Event browser, phone](ui-previews/2026-10-07/admin-streams-loaded-phone.png)
 - [Rebuild in progress, phone](ui-previews/2026-10-07/admin-replay-running-phone.png)
+
+## Live-demo account follow-up
+
+Actual host testing found that the framework script was not mapped and that AdminConsole still had no usable sign-in surface. Both hosts now map their framework assets. AdminConsole adds a static password form, token-protected login and logout, rate limiting, and a separate secure cookie for the configured bootstrap actor. The current-role permission gate remains on tools and hub negotiation. The account page remains reachable after role revocation so the operator can sign out.
+
+The password verifier is shared as source between the two hosts; no package or executable dependency was added. This follow-up is covered by real-host HTTP tests with an owned current-roles test port. Browser and live-database verification are recorded separately after integration.
+
+## Studio visual refresh
+
+The later [visual refresh record](visual-refresh-2026-10-07.md) covers the more colorful business and Admin designs, current live screenshots, and their validation.

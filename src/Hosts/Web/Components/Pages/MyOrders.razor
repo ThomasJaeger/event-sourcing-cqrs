@@ -1,6 +1,7 @@
 @page "/my-orders"
 @using EventSourcingCqrs.Application
 @using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Domain.Sales
 @using EventSourcingCqrs.Domain.Sales.ReadModels
 @using EventSourcingCqrs.Hosts.Web.Authentication
 @using EventSourcingCqrs.Hosts.Web.Hubs
@@ -11,53 +12,86 @@
 
 <PageTitle>My Orders</PageTitle>
 
-<div class="mb-3 flex flex-wrap items-center gap-y-2">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-950">My Orders</h1>
-    <LiveBadge State="@liveness" />
-</div>
-<p class="mb-7 text-sm leading-6 text-slate-600">Open an order to review its details and latest recorded status.</p>
+<div class="ops-page">
+    <header class="ops-header">
+        <div>
+            <p class="ops-eyebrow">YOUR CORNER OF THE WORKSPACE</p>
+            <div class="ops-title-row"><h1>My Orders</h1><LiveBadge State="@liveness" /></div>
+            <p class="ops-intro">A little clarity for everything you have on the way.</p>
+        </div>
+
+    </header>
 
 @if (orders is null)
 {
-    <p role="status" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Loading...</p>
-}
-else if (orders.Count == 0)
-{
-    <div class="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-        <p class="font-semibold text-slate-800">No orders yet.</p>
-        <p class="mt-2 text-sm text-slate-600">Orders available to your account will appear here.</p>
-    </div>
+    <p role="status" class="ops-loading">Loading your orders...</p>
 }
 else
 {
-    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" role="region" aria-label="Scrollable data table" tabindex="0">
-    <table class="min-w-full whitespace-nowrap text-sm">
-        <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            <tr>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-left">Order</th>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-left">Status</th>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-right">Total</th>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-left">Placed</th>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-left">Last Updated</th>
-                <th scope="col" class="px-3 py-4 sm:px-5 text-left">Returned</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var row in orders)
-            {
-                <tr class="border-t border-slate-100 hover:bg-slate-50">
-                    <td class="px-3 py-4 sm:px-5 font-mono text-sm"><a href="@($"/orders/{row.OrderId}")" aria-label="View order @row.OrderId" title="@row.OrderId" class="block max-w-[6rem] truncate sm:max-w-[13rem] rounded text-teal-800 underline decoration-teal-300 underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">@row.OrderId</a></td>
-                    <td class="px-3 py-4 sm:px-5">@row.Status</td>
-                    <td class="px-3 py-4 sm:px-5 text-right">@row.Total</td>
-                    <td class="px-3 py-4 sm:px-5">@row.PlacedUtc.ToString("u")</td>
-                    <td class="px-3 py-4 sm:px-5">@row.LastUpdatedUtc.ToString("u")</td>
-                    <td class="px-3 py-4 sm:px-5">@(row.IsReturned ? "Yes" : "No")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-    </div>
+    <section class="ops-summary" aria-labelledby="orders-page-summary">
+        <div class="ops-section-heading">
+            <h2 id="orders-page-summary"><span class="ops-section-number">01</span> On this page</h2>
+            <p>Up to 50 orders. Counts describe this page only.</p>
+        </div>
+        <dl class="ops-metrics">
+            <div class="ops-metric ops-metric-violet"><dt>Orders shown<span class="ops-metric-symbol" aria-hidden="true">↗</span></dt><dd>@orders.Count</dd><dd class="ops-metric-caption">Your current view</dd></div>
+            <div class="ops-metric"><dt>Placed<span class="ops-metric-dot ops-dot-violet" aria-hidden="true"></span></dt><dd>@orders.Count(row => row.Status == OrderStatus.Placed)</dd><dd class="ops-metric-caption">Orders placed</dd></div>
+            <div class="ops-metric"><dt>Shipped<span class="ops-metric-dot ops-dot-coral" aria-hidden="true"></span></dt><dd>@orders.Count(row => row.Status == OrderStatus.Shipped)</dd><dd class="ops-metric-caption">Marked as shipped</dd></div>
+            <div class="ops-metric ops-metric-lime"><dt>Returned<span class="ops-metric-symbol" aria-hidden="true">↶</span></dt><dd>@orders.Count(row => row.IsReturned)</dd><dd class="ops-metric-caption">Returns recorded</dd></div>
+        </dl>
+    </section>
+
+    <section class="ops-data-section" aria-labelledby="orders-table-heading">
+        <div class="ops-section-heading">
+            <h2 id="orders-table-heading"><span class="ops-section-number">02</span> Your order list</h2>
+            <p>Open an order for the full picture.</p>
+        </div>
+        @if (orders.Count == 0)
+        {
+            <div class="ops-empty">
+                <span class="ops-empty-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h10l3 5v13H4V8l3-5Z"/><path d="M4 8h16M9 12h6M9 16h4"/></svg></span>
+                <h3>No orders yet.</h3>
+                <p>Orders available to your account will appear here.</p>
+
+            </div>
+        }
+        else
+        {
+            <div class="ops-table-card">
+                <div class="ops-table-scroll" role="region" aria-label="Scrollable data table" tabindex="0">
+                    <table class="ops-table">
+                        <caption class="ops-sr-only">Your orders, with status, totals, and recorded dates in UTC.</caption>
+                        <thead><tr>
+                            <th scope="col">Order</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="ops-align-right">Total</th>
+
+                            <th scope="col">Placed</th>
+                            <th scope="col">Last Updated</th>
+                            <th scope="col">Returned</th>
+                        </tr></thead>
+                        <tbody>
+                        @foreach (var row in orders)
+                        {
+                            <tr>
+                                <td><a href="@($"/orders/{row.OrderId}")" aria-label="View order @row.OrderId" title="@row.OrderId" class="ops-id-link"><span class="ops-row-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h10l3 5v13H4V8l3-5Z"/><path d="M4 8h16M9 12h6M9 16h4"/></svg></span><span class="ops-code">@row.OrderId</span></a></td>
+                                <td><span class="ops-status" data-status="@row.Status">@row.Status</span></td>
+                                <td class="ops-align-right ops-money">@row.Total</td>
+
+                                <td class="ops-date">@row.PlacedUtc.ToString("u")</td>
+                                <td class="ops-date">@row.LastUpdatedUtc.ToString("u")</td>
+                                <td><span class="@(row.IsReturned ? "ops-returned" : "ops-muted")">@(row.IsReturned ? "Yes" : "No")</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="ops-table-note"><span>Times shown in UTC. Full IDs are available on each link.</span><span class="ops-scroll-hint">Scroll to explore <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></p>
+            </div>
+        }
+    </section>
 }
+</div>
 
 @code {
     private IReadOnlyList<OrderListRow>? orders;

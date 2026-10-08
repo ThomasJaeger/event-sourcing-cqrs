@@ -1,32 +1,37 @@
 @inherits LayoutComponentBase
 
-<div class="min-h-screen bg-stone-50 text-slate-800">
-    <a href="#main-content" class="absolute left-4 top-4 z-50 -translate-y-24 rounded-lg bg-white px-4 py-3 font-semibold text-slate-950 shadow-lg focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-teal-500">
-        Skip to content
-    </a>
-
-    <header class="border-b border-slate-800 bg-slate-950 text-white">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-wrap items-center justify-between gap-4 py-5">
-                <a href="/" class="rounded text-lg font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-4 focus-visible:ring-offset-slate-950">
-                    <span class="mr-3 inline-block h-3 w-3 rounded-sm bg-teal-400" aria-hidden="true"></span>Orders workspace
-                </a>
-                <div class="flex flex-wrap items-center gap-2">
-                    <a href="/login" class="rounded-lg px-4 py-3 text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400">Account</a>
-                    <a href="/orders/new" class="rounded-lg bg-teal-700 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">New order</a>
-                </div>
-            </div>
-            <nav aria-label="Primary" class="flex flex-wrap gap-1 border-t border-slate-800 pb-3 pt-3 text-sm">
-                <NavLink href="/" Match="NavLinkMatch.All" class="rounded-lg border border-transparent px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400" ActiveClass="bg-slate-800 !border-slate-600 !text-white font-semibold">Overview</NavLink>
-                <NavLink href="/orders" class="rounded-lg border border-transparent px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400" ActiveClass="bg-slate-800 !border-slate-600 !text-white font-semibold">Orders</NavLink>
-                <NavLink href="/my-orders" class="rounded-lg border border-transparent px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400" ActiveClass="bg-slate-800 !border-slate-600 !text-white font-semibold">My orders</NavLink>
-                <NavLink href="/inventory" class="rounded-lg border border-transparent px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400" ActiveClass="bg-slate-800 !border-slate-600 !text-white font-semibold">Inventory</NavLink>
-                <NavLink href="/admin/throughput" class="rounded-lg border border-transparent px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400" ActiveClass="bg-slate-800 !border-slate-600 !text-white font-semibold">Order activity</NavLink>
-            </nav>
+<div class="workspace workspace-shell">
+    <a href="#main-content" class="workspace-skip">Skip to content</a>
+    <aside class="workspace-sidebar">
+        <a href="/" class="workspace-brand" aria-label="Orders workspace home">
+            <span class="workspace-brand-mark"><WorkspaceIcon Name="box" /></span>
+            <span>orders<span class="workspace-brand-sub">workspace</span></span>
+        </a>
+        <p class="workspace-nav-label">Your everyday toolkit</p>
+        <nav aria-label="Primary" class="workspace-nav">
+            <NavLink href="/" Match="NavLinkMatch.All" class="workspace-nav-link" ActiveClass="is-active font-semibold"><WorkspaceIcon Name="grid" /><span>Overview</span></NavLink>
+            <NavLink href="/orders" class="workspace-nav-link" ActiveClass="is-active font-semibold"><WorkspaceIcon Name="orders" /><span>Orders</span></NavLink>
+            <NavLink href="/my-orders" class="workspace-nav-link" ActiveClass="is-active font-semibold"><WorkspaceIcon Name="person" /><span>My orders</span></NavLink>
+            <NavLink href="/inventory" class="workspace-nav-link" ActiveClass="is-active font-semibold"><WorkspaceIcon Name="inventory" /><span>Inventory</span></NavLink>
+            <NavLink href="/admin/throughput" class="workspace-nav-link" ActiveClass="is-active font-semibold"><WorkspaceIcon Name="pulse" /><span>Order activity</span></NavLink>
+        </nav>
+        <div class="workspace-sidebar-note" aria-hidden="true">
+            <span class="workspace-note-star">✳</span>
+            <p>Good things<br /><strong>start here.</strong></p>
+            <span class="workspace-note-line"></span>
+            <small>A little space to make things happen.</small>
         </div>
-    </header>
-
-    <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-7xl px-4 py-8 focus:outline-none sm:px-6 sm:py-10 lg:px-8">
-        @Body
-    </main>
+        <p class="workspace-sidebar-footer">A place for every order.</p>
+    </aside>
+    <div class="workspace-main-column">
+        <header class="workspace-topbar">
+            <span class="workspace-topbar-note"><span aria-hidden="true">✦</span> Make room for your next idea.</span>
+            <div class="workspace-account-actions">
+                <a href="/login" data-enhance-nav="false" class="workspace-account-link"><WorkspaceIcon Name="person" /><span>Account</span></a>
+                <a href="/orders/new" class="workspace-button workspace-button-primary"><WorkspaceIcon Name="plus" /><span>New order</span></a>
+            </div>
+        </header>
+        <main id="main-content" tabindex="-1" class="workspace-content">@Body</main>
+        <footer class="workspace-footer"><span>Orders workspace</span><span>Every change has a place in the story. <span aria-hidden="true">↗</span></span></footer>
+    </div>
 </div>

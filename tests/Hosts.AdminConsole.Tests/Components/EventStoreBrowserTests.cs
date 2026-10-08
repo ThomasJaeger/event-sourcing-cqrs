@@ -21,6 +21,8 @@ namespace EventSourcingCqrs.Hosts.AdminConsole.Tests.Components;
 // rather than merely CSS-hidden.
 public class EventStoreBrowserTests : BunitContext
 {
+    public EventStoreBrowserTests() => Services.AddUnavailableCatalog();
+
     private const string AnyStreamId = "order:0f8fad5b07d04015b9d063e8e9e7d6f8";
 
     [Fact]

@@ -1,38 +1,42 @@
 @page "/"
+@using EventSourcingCqrs.Hosts.Web.Components.Layout
 
 <PageTitle>Orders workspace</PageTitle>
 
-<section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="workspace-heading">
-    <div class="border-l-4 border-teal-700 px-6 py-8 sm:px-10 sm:py-12">
-        <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-teal-800">Workspace</p>
-        <h1 id="workspace-heading" class="max-w-2xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Orders and inventory.</h1>
-        <p class="mt-4 max-w-2xl text-base leading-7 text-slate-600">Create orders, review their history, and manage stock from one place.</p>
-        <div class="mt-7 flex flex-wrap gap-3">
-            <a href="/orders/new" class="rounded-lg bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Create an order</a>
-            <a href="/orders" class="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">Browse orders</a>
+<section class="workspace-hero" aria-labelledby="workspace-heading">
+    <div class="workspace-hero-copy">
+        <p class="workspace-eyebrow"><span class="workspace-little-star" aria-hidden="true">✳</span> A fresh page for your next order</p>
+        <h1 id="workspace-heading">Every order<br />has a <em>story.</em></h1>
+        <p class="workspace-hero-description">From the first item to a change of plans. Bring your orders, stock, and all the little details together.</p>
+        <div class="workspace-hero-actions">
+            <a href="/orders/new" class="workspace-button workspace-button-ink">Create an order <WorkspaceIcon Name="arrow" /></a>
+            <a href="/orders" class="workspace-text-link">Browse orders <span aria-hidden="true">↗</span></a>
         </div>
+        <div class="workspace-hero-footnote"><span class="workspace-sticker-dot" aria-hidden="true"></span> Big plans. Small details. All in one place.</div>
+    </div>
+    <div class="workspace-hero-art" aria-hidden="true">
+        <span class="workspace-art-orbit"></span>
+        <img src="/illustrations/parcel-studio.svg?v=20261007-studio" width="500" height="420" alt="" class="workspace-parcel-art" />
+        <span class="workspace-hero-sticker">A little<br /><strong>possibility.</strong><span>↗</span></span>
     </div>
 </section>
 
-<section class="mt-10" aria-labelledby="tasks-heading">
-    <h2 id="tasks-heading" class="text-lg font-semibold text-slate-950">Start with a task</h2>
-    <p class="mt-1 text-sm text-slate-600">Choose the view you need.</p>
-    <div class="mt-5 grid gap-4 sm:grid-cols-2">
-        <a href="/orders" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
-            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Review orders <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Open an order to see its line items, status, and activity.</p>
-        </a>
-        <a href="/my-orders" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
-            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">My orders <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Review the orders available to your account.</p>
-        </a>
-        <a href="/inventory" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
-            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Manage inventory <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
-            <p class="mt-2 text-sm leading-6 text-slate-600">View stock levels, add a SKU, and record stock adjustments.</p>
-        </a>
-        <a href="/admin/throughput" class="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
-            <h3 class="font-semibold text-slate-950 group-hover:text-teal-800">Order activity <span aria-hidden="true" class="float-right text-teal-700">&rarr;</span></h3>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Check recent order activity and its last reported update.</p>
-        </a>
+<section class="workspace-task-section" aria-labelledby="tasks-heading">
+    <div class="workspace-section-heading"><div><p class="workspace-eyebrow">Pick your next move</p><h2 id="tasks-heading">Let’s get into it.</h2></div><span class="workspace-section-doodle" aria-hidden="true">↘</span></div>
+    <div class="workspace-task-grid">
+        <a href="/orders" class="workspace-task-card workspace-task-lilac"><span class="workspace-task-top"><span class="workspace-task-icon"><WorkspaceIcon Name="orders" /></span><span class="workspace-card-arrow" aria-hidden="true">↗</span></span><h3>Review orders</h3><p>The big picture, and every little detail. Open an order and follow its story.</p><span class="workspace-task-caption">THE ORDER BOOK</span></a>
+        <a href="/my-orders" class="workspace-task-card workspace-task-peach"><span class="workspace-task-top"><span class="workspace-task-icon"><WorkspaceIcon Name="person" /></span><span class="workspace-card-arrow" aria-hidden="true">↗</span></span><h3>My orders</h3><p>Your corner of the workspace. Find the orders available to your account.</p><span class="workspace-task-caption">YOUR OWN LITTLE CORNER</span></a>
+        <a href="/inventory" class="workspace-task-card workspace-task-lime"><span class="workspace-task-top"><span class="workspace-task-icon"><WorkspaceIcon Name="inventory" /></span><span class="workspace-card-arrow" aria-hidden="true">↗</span></span><h3>Manage inventory</h3><p>A home for what’s on the shelf. Check quantities and keep your stock in order.</p><span class="workspace-task-caption">ROOM ON THE SHELF</span></a>
+        <a href="/admin/throughput" class="workspace-task-card workspace-task-blue"><span class="workspace-task-top"><span class="workspace-task-icon"><WorkspaceIcon Name="pulse" /></span><span class="workspace-card-arrow" aria-hidden="true">↗</span></span><h3>Order activity</h3><p>See the pace of recent order changes and the latest reported update.</p><span class="workspace-task-caption">FEEL THE RHYTHM</span></a>
     </div>
+</section>
+
+<section id="order-walkthrough" aria-labelledby="walkthrough-heading" class="workspace-walkthrough">
+    <div class="workspace-walkthrough-heading"><span class="workspace-walkthrough-icon" aria-hidden="true"><WorkspaceIcon Name="clock" /></span><div><p class="workspace-eyebrow">Give the story a plot twist</p><h2 id="walkthrough-heading">Plans change. The history stays.</h2><p>Try an order of your own, then revisit the moments that made it.</p></div></div>
+    <ol class="workspace-walkthrough-steps">
+        <li><span class="workspace-step-number">01</span><h3>Create an order</h3><p>Add a customer, an available item, and somewhere to send it.</p><a href="/orders/new">Create an order <span aria-hidden="true">↗</span></a></li>
+        <li><span class="workspace-step-number">02</span><h3>Place it</h3><p>Check the details and place it. The order page follows what happens next.</p></li>
+        <li><span class="workspace-step-number">03</span><h3>Change your mind</h3><p>Cancel while cancellation is available. Wait for the status to update.</p></li>
+        <li><span class="workspace-step-number">04</span><h3>Revisit its history</h3><p>Open View order history. Compare the placed and cancelled steps side by side.</p><a href="/orders">Find your order <span aria-hidden="true">↗</span></a></li>
+    </ol>
 </section>

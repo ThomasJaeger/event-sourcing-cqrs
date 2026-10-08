@@ -1,0 +1,153 @@
+@page "/order-history"
+@implements IDisposable
+@using Microsoft.JSInterop
+@using EventSourcingCqrs.Application.Queries.Sales
+@using EventSourcingCqrs.Hosts.AdminConsole.Browser
+@using EventSourcingCqrs.Hosts.AdminConsole.Components.Browser
+@inject IOrderReplayLab Reader
+
+<PageTitle>Order replay lab</PageTitle>
+<div class="mb-6 max-w-3xl">
+    <p class="mb-2 text-sm font-semibold text-teal-700">Reconstruct and compare</p>
+    <h1 class="text-3xl font-bold tracking-tight text-slate-900">Order replay lab</h1>
+    <p class="mt-3 text-sm leading-6 text-slate-600">Choose two recorded versions to see how an order changed. Each state is rebuilt from the order's events using today's domain model. Payment and delivery activity belong to their own streams.</p>
+</div>
+<div class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+    <label for="replay-stream" class="block text-sm font-semibold">Order stream id</label>
+    <input id="replay-stream" @bind="streamId" disabled="@busy" placeholder="order:00000000000000000000000000000000" class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-mono text-sm focus:outline-teal-600" />
+    <div class="mt-4 flex flex-wrap items-center gap-4">
+        <button type="button" data-load-history @onclick="LoadAsync" disabled="@busy" class="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">@(history is null ? "Load order history" : "Refresh history")</button>
+        <a href="/streams" class="text-sm font-semibold text-teal-700 underline underline-offset-4">Choose an order stream</a>
+        <span class="text-xs text-slate-500">Read-only. No events or projections are changed.</span>
+    </div>
+</div>
+@if (busy)
+{
+    <p role="status" class="mt-5 text-sm text-slate-600">Reconstructing order history...</p>
+}
+else if (error)
+{
+    <p role="alert" class="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">Unable to load order history. Please try again.</p>
+}
+else if (message is not null)
+{
+    <p role="status" class="mt-5 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">@message</p>
+}
+else if (history is not null && history.Steps.Count > 0)
+{
+    <section class="mt-7" aria-labelledby="comparison-heading">
+        <h2 id="comparison-heading" @ref="comparisonHeading" tabindex="-1" class="text-xl font-semibold focus:outline-none">Compare recorded states</h2>
+        <p class="mt-2 text-sm text-slate-600"><span class="break-all">@loadedId</span> · @history.Steps.Count recorded changes · captured through version @history.Steps[^1].Version</p>
+        <div class="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
+            <a href="@($"/audit?streamId={Uri.EscapeDataString(loadedId!)}")" class="underline underline-offset-4">Audit this order</a>
+            <a href="@($"/streams?streamId={Uri.EscapeDataString(loadedId!)}")" class="underline underline-offset-4">Inspect its events</a>
+        </div>
+        <div class="mt-5 grid gap-5 md:grid-cols-2">
+            <label class="block text-sm font-semibold">First state
+                <select id="before-version" @bind="beforeVersion" class="mt-2 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal focus:outline-teal-600">
+                    @foreach (var step in history.Steps) { <option value="@step.Version">v@(step.Version): @step.Description</option> }
+                </select>
+            </label>
+            <label class="block text-sm font-semibold">Second state
+                <select id="after-version" @bind="afterVersion" class="mt-2 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal focus:outline-teal-600">
+                    @foreach (var step in history.Steps) { <option value="@step.Version">v@(step.Version): @step.Description</option> }
+                </select>
+            </label>
+        </div>
+        <div data-comparison aria-live="polite" class="mt-5 break-words rounded-xl border border-teal-200 bg-teal-50 p-5 text-sm leading-6 text-teal-950">
+            <h3 class="font-semibold">What changed between these versions</h3>
+            <ul class="mt-2 list-disc space-y-1 pl-5">
+                @foreach (var change in DescribeChanges()) { <li>@change</li> }
+            </ul>
+        </div>
+        <div class="mt-5 grid gap-5 md:grid-cols-2">
+            <OrderReplayState Step="Before" Title="First selected state" Side="before" />
+            <OrderReplayState Step="After" Title="Second selected state" Side="after" />
+        </div>
+        <p class="mt-4 text-xs leading-5 text-slate-500">Versions follow append order. Event timestamps can be backdated. Refresh to capture new changes; this comparison does not measure projection lag or verify a live read model.</p>
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "streamId")] public string? LinkedStreamId { get; set; }
+    private string streamId = "";
+    private string? lastLinkedId, loadedId, message;
+    private OrderHistoryView? history;
+    private int beforeVersion, afterVersion;
+    private bool busy, error, disposed, focusComparison;
+    private ElementReference comparisonHeading;
+    private readonly CancellationTokenSource lifetime = new();
+    private OrderHistoryStep Before => history!.Steps.Single(s => s.Version == beforeVersion);
+    private OrderHistoryStep After => history!.Steps.Single(s => s.Version == afterVersion);
+
+    private string? queuedLinkedId;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (LinkedStreamId is null || LinkedStreamId == lastLinkedId || disposed) return;
+        lastLinkedId = LinkedStreamId;
+        if (busy) { queuedLinkedId = LinkedStreamId; return; }
+        streamId = LinkedStreamId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = false; focusComparison = false; history = null; message = null; loadedId = streamId.Trim();
+        try
+        {
+            var result = await Reader.ReadAsync(loadedId, lifetime.Token);
+            if (disposed) return;
+            history = result.History;
+            message = result.Message;
+            if (history is { Steps.Count: > 0 })
+            {
+                beforeVersion = history.Steps[0].Version;
+                afterVersion = history.Steps[^1].Version;
+                focusComparison = true;
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { if (!disposed) error = true; }
+        finally { busy = false; }
+        if (!disposed && queuedLinkedId is { } nextId)
+        {
+            queuedLinkedId = null;
+            streamId = nextId;
+            await LoadAsync();
+        }
+    }
+
+    private IReadOnlyList<string> DescribeChanges()
+    {
+        if (beforeVersion == afterVersion) return ["Both selections refer to the same recorded version."];
+        var changes = new List<string>();
+        if (Before.Snapshot.Status != After.Snapshot.Status) changes.Add($"Status: {Before.Snapshot.Status} to {After.Snapshot.Status}.");
+        if (Before.Total != After.Total) changes.Add($"Order total: {Before.Total} to {After.Total}.");
+        if (Before.Snapshot.ShippingAddress != After.Snapshot.ShippingAddress) changes.Add("The shipping address changed.");
+        foreach (var line in Before.Snapshot.Lines.Where(l => After.Snapshot.Lines.All(a => a.LineId != l.LineId))) changes.Add($"Removed {line.Quantity} × {line.Sku}.");
+        foreach (var line in After.Snapshot.Lines.Where(l => Before.Snapshot.Lines.All(a => a.LineId != l.LineId))) changes.Add($"Added {line.Quantity} × {line.Sku}.");
+        foreach (var line in After.Snapshot.Lines)
+        {
+            var prior = Before.Snapshot.Lines.SingleOrDefault(l => l.LineId == line.LineId);
+            if (prior is not null && (prior.Sku != line.Sku || prior.Quantity != line.Quantity || prior.UnitPrice != line.UnitPrice))
+                changes.Add($"Item changed: {prior.Quantity} × {prior.Sku} at {prior.UnitPrice} to {line.Quantity} × {line.Sku} at {line.UnitPrice}.");
+        }
+        if (changes.Count == 0) changes.Add("The selected versions have the same order details. The events still record the intervening activity.");
+        return changes;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusComparison || busy || disposed) return;
+        focusComparison = false;
+        try { await comparisonHeading.FocusAsync(); }
+        catch (JSDisconnectedException) { }
+        catch (OperationCanceledException) when (disposed) { }
+    }
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true; lifetime.Cancel(); lifetime.Dispose();
+    }
+}

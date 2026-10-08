@@ -1,5 +1,6 @@
 using System.Reflection;
 using EventSourcingCqrs.Application.Context;
+using EventSourcingCqrs.Application.Queries.Sales;
 using EventSourcingCqrs.Application.Pipelines;
 using EventSourcingCqrs.Domain.Abstractions;
 using EventSourcingCqrs.Domain.Sales;
@@ -40,6 +41,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICommandBus>(sp => sp.GetRequiredService<CommandBus>());
         services.AddSingleton<ICausedCommandBus, CausedCommandBus>();
         services.AddSingleton<IQueryBus, QueryBus>();
+        services.TryAddSingleton<IBoundedEventStreamReader, UnavailableEventStreamReader>();
+        services.TryAddSingleton<OrderHistoryReader>();
         services.AddSingleton<ICommandContextAccessor, AsyncLocalCommandContextAccessor>();
         services.AddSingleton<IQueryContextAccessor, AsyncLocalQueryContextAccessor>();
         services.AddSingleton<ICurrentTenantAccessor, AsyncLocalCurrentTenantAccessor>();

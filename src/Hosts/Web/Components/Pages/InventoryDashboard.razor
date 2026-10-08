@@ -13,76 +13,93 @@
 
 <PageTitle>Inventory</PageTitle>
 
-<div class="mb-3 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-center">
-        <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Inventory</h1>
-        <LiveBadge State="@liveness" />
-    </div>
-    <button id="createInventoryButton"
-            type="button"
-            class="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-            @onclick="OpenCreateDialog">
-        Create Inventory
-    </button>
-</div>
-<p class="mb-7 text-sm leading-6 text-slate-600">Review on-hand and reserved stock, or record a stock adjustment.</p>
+<div class="ops-page">
+    <header class="ops-header">
+        <div>
+            <p class="ops-eyebrow">THE STOCKROOM</p>
+            <div class="ops-title-row"><h1>Inventory</h1><LiveBadge State="@liveness" /></div>
+            <p class="ops-intro">A place for everything. A clear view of what is available.</p>
+        </div>
+        <button id="createInventoryButton" type="button" class="ops-primary" @onclick="OpenCreateDialog"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Create Inventory</span></button>
+    </header>
 
 @if (opBadge != BadgeState.Idle)
 {
-    <div class="mb-4">
+    <div class="ops-operation" role="status">
         <PendingBadge State="@opBadge" Message="@opBadgeMessage" />
         @if (opBadge == BadgeState.Failed && opFailureMessage is not null)
         {
-            <p class="text-sm text-red-700 mt-1">@opFailureMessage</p>
+            <p class="ops-operation-error">@opFailureMessage</p>
         }
     </div>
 }
 
 @if (rows is null)
 {
-    <p role="status" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-600">Loading...</p>
-}
-else if (rows.Count == 0)
-{
-    <div class="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-        <p class="font-semibold text-slate-800">No inventory yet.</p>
-        <p class="mt-2 text-sm text-slate-600">Use Create Inventory to add the first SKU.</p>
-    </div>
+    <p role="status" class="ops-loading">Loading your stockroom...</p>
 }
 else
 {
-    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" role="region" aria-label="Scrollable data table" tabindex="0">
-    <table class="min-w-full whitespace-nowrap text-sm">
-        <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            <tr>
-                <th scope="col" class="px-5 py-4 text-left">SKU</th>
-                <th scope="col" class="px-5 py-4 text-right">On Hand</th>
-                <th scope="col" class="px-5 py-4 text-right">Reserved</th>
-                <th scope="col" class="px-5 py-4 text-left">Last Updated</th>
-                <th scope="col" class="px-5 py-4 text-left">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var row in rows)
-            {
-                <tr class="border-t border-slate-100 hover:bg-slate-50">
-                    <td class="px-5 py-4 font-mono text-sm">@row.Sku</td>
-                    <td class="px-5 py-4 text-right">@row.OnHandQuantity</td>
-                    <td class="px-5 py-4 text-right">@row.ReservedQuantity</td>
-                    <td class="px-5 py-4">@row.LastUpdatedUtc.ToString("u")</td>
-                    <td class="px-5 py-4">
-                        <button class="adjust-button text-teal-800 hover:text-teal-950 underline min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
-                                type="button"
-                                @onclick="() => OpenAdjustDialog(row)">
-                            Adjust
-                        </button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-    </div>
+    <section class="ops-summary" aria-labelledby="inventory-summary">
+        <div class="ops-section-heading">
+            <h2 id="inventory-summary"><span class="ops-section-number">01</span> Stock at a glance</h2>
+            <p>Totals from the inventory currently shown.</p>
+        </div>
+        <dl class="ops-metrics">
+            <div class="ops-metric ops-metric-coral"><dt>SKUs tracked<span class="ops-metric-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5"/></svg></span></dt><dd>@rows.Count</dd><dd class="ops-metric-caption">A place on the shelf</dd></div>
+            <div class="ops-metric"><dt>On hand<span class="ops-metric-dot ops-dot-violet" aria-hidden="true"></span></dt><dd>@rows.Sum(row => (long)row.OnHandQuantity)</dd><dd class="ops-metric-caption">Units recorded</dd></div>
+            <div class="ops-metric"><dt>Reserved<span class="ops-metric-dot ops-dot-coral" aria-hidden="true"></span></dt><dd>@rows.Sum(row => (long)row.ReservedQuantity)</dd><dd class="ops-metric-caption">Units held for orders</dd></div>
+            <div class="ops-metric ops-metric-lime"><dt>Unreserved<span class="ops-metric-symbol" aria-hidden="true">↗</span></dt><dd>@rows.Sum(row => (long)row.OnHandQuantity - row.ReservedQuantity)</dd><dd class="ops-metric-caption">On hand minus reserved</dd></div>
+        </dl>
+    </section>
+
+    <section class="ops-data-section" aria-labelledby="inventory-table-heading">
+        <div class="ops-section-heading">
+            <h2 id="inventory-table-heading"><span class="ops-section-number">02</span> On the shelves</h2>
+            <p>Every adjustment starts with a reason.</p>
+        </div>
+        @if (rows.Count == 0)
+        {
+            <div class="ops-empty">
+                <span class="ops-empty-icon ops-empty-coral"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5"/></svg></span>
+                <h3>No inventory yet.</h3>
+                <p>Use Create Inventory to give your first SKU a place on the shelf.</p>
+            </div>
+        }
+        else
+        {
+            <div class="ops-table-card">
+                <div class="ops-stock-key"><span><i class="ops-key-free" aria-hidden="true"></i> Unreserved</span><span><i class="ops-key-reserved" aria-hidden="true"></i> Reserved</span><span class="ops-stock-key-note">Each bar shows one SKU's on-hand stock.</span></div>
+                <div class="ops-table-scroll" role="region" aria-label="Scrollable data table" tabindex="0">
+                    <table class="ops-table ops-inventory-table">
+                        <caption class="ops-sr-only">Inventory quantities and reserved shares. Recorded update times are in UTC.</caption>
+                        <thead><tr>
+                            <th scope="col">SKU</th>
+                            <th scope="col" class="ops-align-right">On Hand</th>
+                            <th scope="col" class="ops-align-right">Reserved</th>
+                            <th scope="col">Last Updated</th>
+                            <th scope="col">Actions</th>
+                        </tr></thead>
+                        <tbody>
+                        @foreach (var row in rows)
+                        {
+                            <tr>
+                                <td><div class="ops-sku"><span class="ops-row-icon ops-row-box"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5"/></svg></span><span>@row.Sku</span></div><div class="ops-stock-track @(row.OnHandQuantity <= 0 ? "ops-stock-empty" : "")" role="img" aria-label="@($"{row.ReservedQuantity} of {row.OnHandQuantity} on-hand units reserved")"><span class="ops-stock-reserved" style="width: @((row.OnHandQuantity > 0 ? Math.Clamp(100d * row.ReservedQuantity / row.OnHandQuantity, 0d, 100d) : 0d).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%"></span></div></td>
+                                <td class="ops-align-right ops-quantity">@row.OnHandQuantity</td>
+                                <td class="ops-align-right"><span class="ops-reserved-count">@row.ReservedQuantity</span></td>
+                                <td class="ops-date">@row.LastUpdatedUtc.ToString("u")</td>
+                                <td><button class="adjust-button ops-adjust" type="button" @onclick="() => OpenAdjustDialog(row)">Adjust <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="ops-table-note"><span>Quantities reflect the last received update. Times shown in UTC.</span><span class="ops-scroll-hint">Scroll to explore <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span></p>
+            </div>
+        }
+    </section>
 }
+</div>
 
 @if (showCreateDialog)
 {

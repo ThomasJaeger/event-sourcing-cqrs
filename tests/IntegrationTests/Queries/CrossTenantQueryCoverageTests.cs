@@ -29,6 +29,10 @@ public class CrossTenantQueryCoverageTests : IClassFixture<ApiFixture>
         => CrossTenantQueryCases.For(_fixture)[typeof(GetOrderDetail)]();
 
     [Fact]
+    public Task GetOrderHistory_does_not_return_another_tenants_events()
+        => CrossTenantQueryCases.For(_fixture)[typeof(GetOrderHistory)]();
+
+    [Fact]
     public Task GetCustomerSummary_does_not_return_another_tenants_row()
         => CrossTenantQueryCases.For(_fixture)[typeof(GetCustomerSummary)]();
 

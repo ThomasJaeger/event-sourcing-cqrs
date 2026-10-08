@@ -74,7 +74,7 @@ hash. The hashing command exits without starting the host or opening database co
 
 The `/login` form requires that password in every environment. Upgrading invalidates cookies from
 the former passwordless login, requiring operators to sign in again. Login attempts are limited to ten
-per minute per remote address per Web instance. Deployments behind a proxy share the proxy's address
+per minute per remote address per host instance, in both Web and AdminConsole. Deployments behind a proxy share the proxy's address
 unless trusted forwarding is configured by the operator; the application does not trust arbitrary
 forwarded-address headers.
 
@@ -84,22 +84,35 @@ Then start the hosts, one per terminal, in this order:
 dotnet run --project src/Hosts/Workers
 ASPNETCORE_URLS='http://localhost:5000' dotnet run --project src/Hosts/Api
 ASPNETCORE_URLS='https://localhost:5101' dotnet run --project src/Hosts/Web
+ASPNETCORE_URLS='https://localhost:5102' dotnet run --project src/Hosts/AdminConsole
 ```
 
 Workers goes first because it applies the database migrations at startup, for the selected
 event store and for the read models, and because it seeds the bootstrap administrator that
 `BootstrapAdministrator__AdministratorUserId` names. Api serves the JSON endpoints the Web host
-calls. Web serves the UI. The two URLs are stated rather than left to the default because both
-hosts default to port 5000 and the second one to start would fail to bind.
+calls. Web serves the UI. The HTTP hosts use separate ports so they can run together. Web and AdminConsole require HTTPS
+for their secure cookies; configure a trusted local development certificate before starting them.
 
 Then open `https://localhost:5101/login` to sign in. The workspace at `/` links to orders,
 your orders, inventory, and throughput. Navigation stays available on each screen, and order
 and customer identifiers link to their detail views. Use Account to sign out.
 
-AdminConsole has its own navigation for stream inspection, correlation tracing, projection
-status, and replay. Its host-wide permission gate and authentication cookie are separate from
-Web. The interactive AdminConsole sign-in flow is still unfinished; signing in to Web does not
-sign you in to AdminConsole. See [ADR 0040](docs/adr/0040-adminconsole-host-authorization-posture.md)
+Open `https://localhost:5102/login` to sign in to AdminConsole separately. It reads the same
+operator password-hash and bootstrap-actor settings shown above, but issues its own cookie.
+Signing in or out of Web does not sign in or out of AdminConsole. Its static account form works
+before the protected interactive connection is established. Use Account / sign out to end that session.
+
+AdminConsole exposes audit exploration, stream inspection, correlation tracing, order-history
+comparison, projection status, and read-model rebuilds.
+On PostgreSQL, Event streams and Correlation trace offer selectable ID lists, 25 per page,
+with event counts and latest event times. Correlations also show stream and tenant counts.
+The lists cover all tenants, in ID order. Select an ID to inspect it, or enter an ID directly.
+Refresh starts again at the first page. KurrentDB and DynamoDB retain direct stream lookup;
+ID discovery is unavailable on those providers.
+Its host-wide gate resolves the signed-in actor's current roles from the read-model database and
+requires console access. Workers must have projected the bootstrap administrator's role first.
+PostgreSQL supports all six tools; KurrentDB and DynamoDB report the tracing, audit, and history-comparison limitations,
+and SQL Server remains unsupported by this host. See [ADR 0040](docs/adr/0040-adminconsole-host-authorization-posture.md)
 and the [UI revision record](docs/ui-revision-2026-10-07.md) for scope and verification.
 
 The credentials in the compose file are dev-only defaults, stated as such in its own header.
@@ -118,8 +131,8 @@ Every host reads its configuration from the environment. There are no `appsettin
 | `EVENT_STORE_DYNAMODB_TABLE_NAME` | Api, Workers, AdminConsole | DynamoDB only |
 | `API_BASE_URL` | Web | Where the Api host is listening |
 | `FORWARDED_IDENTITY_SIGNING_SECRET` | Api, Web | Signs the identity the Web host forwards to Api |
-| `BootstrapAdministrator:AdministratorUserId` | Web, Workers | The first administrator's user id |
-| `OperatorAuthentication:PasswordHash` | Web | Required salted Identity V3 password hash; generate with `--hash-operator-password` |
+| `BootstrapAdministrator:AdministratorUserId` | Web, Workers, AdminConsole | The first administrator's user id |
+| `OperatorAuthentication:PasswordHash` | Web, AdminConsole | Required salted Identity V3 password hash; generate with `--hash-operator-password` |
 
 A missing required key throws at startup with the key named. Nothing falls back silently.
 
@@ -174,6 +187,17 @@ EVENT_STORE_CONNECTION_STRING=... READ_MODEL_CONNECTION_STRING=... \
 Its usage is `Demo.Seeder <scenario>`, where the scenario is `clean`, `compensation`, `tenants`
 or `all`. With no argument it runs `all`. An unknown scenario exits 64, and a missing connection
 string exits 78 naming the one that is absent.
+
+### Demonstrating history, audit, and replay
+
+The business site includes order-history comparisons. In Admin, use **Audit explorer** to
+investigate recorded changes and **Order replay lab** to compare reconstructed order states.
+The [demo guide](docs/event-sourcing-demo-guide.md) connects these screens with correlation
+tracing, projection status, and the existing rebuild operation.
+
+The new history and audit readers currently support PostgreSQL. Other configured providers
+report their availability explicitly. See the [live demo verification record](docs/demo-testing-2026-10-07.md)
+for tested business and Admin flows and current limitations.
 
 ## Build and test
 
